@@ -17,17 +17,21 @@ BYTE_LIMIT = 32 * 1024 * 1024
 
 
 def check(watcher, paths):
-    runs, samples, seen = [], [], set()
+    runs, samples, seen = [], [], {}
     watcher.read_budget = BYTE_LIMIT
 
     def accept(payload, path, line=None):
         run = normalize_snapshot(payload)
         identity = (payload['producer'], payload['rollout_id'])
-        if identity in seen:
-            return
-        seen.add(identity)
-        runs.append(run)
-        samples.append({'path': path, 'line': line, 'status': 'valid', 'adapter': run['adapter']})
+        prior = seen.get(identity)
+        if prior is None:
+            seen[identity] = (len(runs), payload['revision'], payload['state'])
+            runs.append(run)
+        elif payload['revision'] > prior[1]:
+            runs[prior[0]] = run
+            seen[identity] = (prior[0], payload['revision'], payload['state'])
+        samples.append({'path': path, 'line': line, 'status': 'valid', 'adapter': run['adapter'],
+                        'revision': payload['revision'], 'state': payload['state']})
 
     is_export = hasattr(watcher, '_envelope')
     for path in paths[:FILE_LIMIT]:
@@ -95,9 +99,15 @@ def check(watcher, paths):
             break
         except (OSError, ValueError, TypeError) as e:
             samples.append({'path': relative, 'status': 'deferred', 'detail': str(e)})
+    coverage = preflight(runs) if runs else None
+    if coverage:
+        for index, revision, state in seen.values():
+            if index < len(coverage['runs']):
+                coverage['runs'][index]['source_preview']['delivery'] = {'revision': revision, 'state': state}
     return {'schema': 'connection-check/1', 'persisted': False, 'checked_files': len({s['path'] for s in samples}),
             'file_limit': FILE_LIMIT, 'rows_per_file': ROWS_PER_FILE, 'samples': samples,
-            'coverage': preflight(runs) if runs else None,
+            'coverage': coverage,
             'note': 'Sample only: up to 5 files, 2 JSONL records per file, within the first 20 lines and 32 MiB total. '
+                    'For repeated rollout identities, the highest sampled revision is previewed. '
                     'No records imported or model calls made. Collection validates every received record, '
                     'including revision order and previously accepted bytes.'}

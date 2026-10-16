@@ -155,6 +155,25 @@ def definitions(store):
                 for r in c.execute('SELECT * FROM data_connections ORDER BY created_at,id')]
 
 
+def recent_receipts(c, *, producer=None, limit=30):
+    """Latest revision per rollout, scoped before limiting to avoid busy-worker starvation."""
+    scope = 'rr.producer=? AND ' if producer is not None else ''
+    params = (producer, limit) if producer is not None else (limit,)
+    return [dict(row) for row in c.execute('''SELECT rr.producer,rr.rollout_id,rr.revision,
+        rr.state,rr.run_id,rr.created_at,
+        json_extract(r.document,'$.metadata.training_step') training_step,
+        json_extract(r.document,'$.metadata.experiment') experiment,
+        json_extract(r.document,'$.metadata.task_id') task_id,
+        json_extract(r.document,'$.metadata.source_export_path') export_path,
+        json_extract(r.document,'$.metadata.source_line') source_line
+        FROM (SELECT rr.*,rr.rowid receipt_order FROM rollout_revisions rr WHERE ''' + scope + '''
+            rr.revision=(SELECT max(revision) FROM rollout_revisions
+                WHERE producer=rr.producer AND rollout_id=rr.rollout_id)
+            ORDER BY rr.created_at DESC,rr.rowid DESC LIMIT ?) rr
+        JOIN runs r ON r.id=rr.run_id
+        ORDER BY rr.created_at DESC,rr.receipt_order DESC''', params)]
+
+
 class Collector:
     def __init__(self, store, row, notify):
         self.store, self.row, self.notify = store, row, notify
@@ -257,15 +276,9 @@ class Service:
             execution = digest(tuple(c.execute('SELECT count(*),max(rowid) FROM execution_records').fetchone()))
             cohort = digest(tuple(c.execute('SELECT count(*),max(rowid) FROM generation_cohorts').fetchone()))
             semantic = digest(tuple(c.execute('SELECT count(*),max(updated_at) FROM semantic_watch_jobs').fetchone())) if c.execute("SELECT 1 FROM sqlite_master WHERE name='semantic_watch_jobs'").fetchone() else None
-            latest = [dict(r) for r in c.execute('''SELECT rr.producer,rr.rollout_id,rr.revision,rr.state,rr.run_id,
-                rr.created_at, json_extract(r.document,'$.metadata.training_step') training_step,
-                json_extract(r.document,'$.metadata.experiment') experiment,
-                json_extract(r.document,'$.metadata.source_export_path') export_path,
-                json_extract(r.document,'$.metadata.source_line') source_line
-                FROM rollout_revisions rr JOIN runs r ON r.id=rr.run_id
-                WHERE rr.revision=(SELECT max(revision) FROM rollout_revisions
-                  WHERE producer=rr.producer AND rollout_id=rr.rollout_id)
-                ORDER BY rr.created_at DESC LIMIT 30''')]
+            latest = recent_receipts(c)
+            for row in rows:
+                row['recent_rollouts'] = recent_receipts(c, producer=row['producer'], limit=3)
         producers = producer_snapshot(self.store)
         received = {p['producer']: {k: p[k] for k in ('received_revisions', 'received_rollouts', 'last_receipt_at')} for p in producers}
         for row in rows:

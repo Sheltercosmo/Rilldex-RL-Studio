@@ -84,6 +84,7 @@ def check(body):
 
 def inspect(run):
     from .source_grain import describe
+    from .source_preview import preview
     events=[e for e in run['events'] if not e.get('copied_context')]
     counts=Counter(e['kind'] for e in events);bound=links(run)
     record=source_record(run);meta=run['metadata']
@@ -108,7 +109,7 @@ def inspect(run):
        'detail':f'{media} events contain media references. Text-only measurements do not inspect their contents.'},
     ]
     return {'adapter':run['adapter'],'adapter_version':run['adapter_version'],'source_id':run['id'],
-      'source_unit':describe(run),
+      'source_unit':describe(run),'source_preview':preview(run),
       'counts':dict(counts),'trajectory_count':len({e['trajectory_id'] for e in events}),
       'linked_responses':len(bound['records']),'unlinked_responses':len(bound['unlinked_ids']),
       'clocks':clocks,'warnings':run['warnings'],'metrics':metrics,'functions':functions,

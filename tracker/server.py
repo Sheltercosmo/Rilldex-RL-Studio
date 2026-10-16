@@ -524,7 +524,7 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 allowed_files['/POPULATION_READINESS.md']='population-readiness.md'
                 allowed_files.update({'/geist-sans.woff2':'geist-sans.woff2','/geist-mono.woff2':'geist-mono.woff2','/geist-LICENSE.txt':'geist-LICENSE.txt'})
                 allowed_files.update({'/code-syntax.js':'code-syntax.js','/prism-LICENSE.txt':'prism-LICENSE.txt','/choice-labels.js':'choice-labels.js','/workspace-navigation.js':'workspace-navigation.js'})
-                allowed_files.update({'/connections':'connections.html','/connections.js':'connections.js','/connections.css':'connections.css'})
+                allowed_files.update({'/connections':'connections.html','/connections.js':'connections.js','/connections.css':'connections.css','/source-preview.js':'source-preview.js'})
                 allowed_files.update({'/deployment-setup.js':'deployment-setup.js'})
                 allowed_files.update({'/source-discovery.js':'source-discovery.js'})
                 allowed_files.update({'/integration-guide':'integration-guide.html','/deployment-guide.js':'deployment-guide.js'})

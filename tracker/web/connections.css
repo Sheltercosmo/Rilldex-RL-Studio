@@ -106,3 +106,37 @@ html:has(body[data-app=connections]){scroll-padding-top:8px}
 .workspace[data-app=connections] #readiness-form .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 20px}
 @media(max-width:760px){.workspace[data-app=connections] #readiness-form .form-grid{grid-template-columns:minmax(0,1fr)}}
 body[data-app="connections"] main [id]{scroll-margin-top:90px}
+
+/* The first useful result stays beside source setup, with bounded source text. */
+.workspace[data-app=connections] .source-preview{margin:20px 0;padding-top:18px;border-top:1px solid var(--line);min-width:0}
+.workspace[data-app=connections] .source-preview h4{margin:0 0 12px;font-size:15px}
+.workspace[data-app=connections] .source-preview label{display:grid;gap:7px;font-size:12px;max-width:100%}
+.workspace[data-app=connections] .source-preview select{width:100%;min-width:0}
+.workspace[data-app=connections] .source-preview-count{font-size:12px;margin:12px 0;color:var(--muted)}
+.workspace[data-app=connections] .source-preview-events{list-style:none;padding:0;margin:0;max-height:440px;overflow:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;background:var(--surface,#fff)}
+.workspace[data-app=connections] .source-preview-event{margin:0;padding:14px 16px;border-bottom:1px solid var(--line);border-left:3px solid transparent;min-width:0}
+.workspace[data-app=connections] .source-preview-event:last-child{border-bottom:0}
+.workspace[data-app=connections] .source-preview-event[data-kind=action]{border-left-color:var(--accent)}
+.workspace[data-app=connections] .source-preview-event[data-kind=feedback]{border-left-color:#26795c}
+.workspace[data-app=connections] .source-preview-event:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--accent-soft)}
+.workspace[data-app=connections] .source-preview-event-head{display:flex;align-items:baseline;gap:8px 12px;flex-wrap:wrap;font-size:12px}
+.workspace[data-app=connections] .source-preview-event-head small{color:var(--muted)}
+.workspace[data-app=connections] .source-preview-event pre{font:13px/1.6 var(--font-sans,inherit);white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0 6px;background:transparent;color:var(--ink);padding:0;border:0;max-width:100%}
+.workspace[data-app=connections] .source-preview-event[data-kind=action] pre{font-family:var(--font-mono)}
+.workspace[data-app=connections] .source-preview-event details{margin:8px 0 0;font-size:11px}
+.workspace[data-app=connections] .source-preview-event summary{font-weight:400;color:var(--muted)}
+.workspace[data-app=connections] .source-preview-event code{overflow-wrap:anywhere;white-space:pre-wrap;font-size:11px}
+.workspace[data-app=connections] .source-preview-note{display:block;font-size:11px;line-height:1.6;color:var(--muted);margin:8px 0}
+.workspace[data-app=connections] button.source-preview-link{font-size:11px;padding:4px 8px;margin:6px 0 0;color:var(--accent);background:var(--accent-soft);border:1px solid var(--line);border-radius:5px}
+.workspace[data-app=connections] #connection-result:not([hidden]){display:grid;gap:10px;padding:20px;margin-top:20px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;background:var(--surface,#fff)}
+.workspace[data-app=connections] #connection-result h3{margin:0;font-size:17px;overflow-wrap:anywhere}
+.workspace[data-app=connections] #connection-result p{margin:0;font-size:13px;line-height:1.6}
+.workspace[data-app=connections] #connection-result>a{justify-self:start;margin-top:8px;font-size:12px}
+.workspace[data-app=connections] .connection-recheck{justify-self:start;font-size:12px;padding:7px 10px}
+.workspace[data-app=connections] .connection-progress{color:var(--accent);font-weight:600}
+.workspace[data-app=connections] .connection-evidence{display:grid;gap:12px;margin:14px 0;min-width:0}
+.workspace[data-app=connections] .connection-evidence>div{display:flex;align-items:baseline;gap:8px 20px;justify-content:space-between;flex-wrap:wrap;font-size:13px}
+.workspace[data-app=connections] .connection-evidence a{overflow-wrap:anywhere;min-width:0}
+.workspace[data-app=connections] .connection-evidence small{color:var(--muted);font-size:11px}
+.workspace[data-app=connections] .connection-overview{font-size:12px;justify-self:start}
+@media(max-width:600px){.workspace[data-app=connections] .source-preview-event{padding:12px}.workspace[data-app=connections] #connection-result:not([hidden]){padding:16px}}

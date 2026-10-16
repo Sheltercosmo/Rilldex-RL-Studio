@@ -2,7 +2,7 @@
 
 **Choose your input and output:** [continuous capture, staged batches, exports,
 Python/SQL analysis and resumable result feeds](DATA_ACCESS.md). In the app, open
-**Connections → Export & code** to preview and export saved research tables.
+**Data & workflows → Analyze** to query, preview and export saved research tables.
 
 **Choose your environment first:** [Ubuntu/Windows/macOS, Docker, remote GPU hosts, S3/GCS and Colab/notebooks](DEPLOYMENT.md). That guide covers existing + future output, stop/restart, persistent storage and recovery after runtime loss. The in-app **Connections** page links directly to each setup.
 
@@ -12,7 +12,7 @@ The same CLI is intended for Windows, Linux and macOS. The current installed-whe
 
 ## First launch
 
-After launching, use **Connections → Start here** to generate commands for your
+After launching, use **Data & workflows → Setup** to generate commands for your
 environment and training stage. For a headless machine, `python -m rilldex setup
 --case remote` prints a plan without starting anything. Restricted jobs can use
 [offline capture bundles with returned receipts](DEPLOYMENT.md#offline-workers-and-artifact-handoff).
@@ -21,6 +21,20 @@ For existing output, use **Detect output**, apply a suggested layout, then
 **Check source**. CLI: `python -m rilldex discover /path/to/outputs`. Discovery
 does not import records or start model inference; unresolved formats remain
 visible instead of being treated as ready.
+
+**Check source** also shows the decoded rollout: source text, actions and their
+recorded responses. Select a sampled rollout; use **Result for…** to locate the
+corresponding action. The preview shows up to 12 events per rollout and 700
+characters per event, with omitted content counted explicitly. For repeated
+rollout identities it uses the highest revision found in the bounded sample.
+Checking does not save data, advance collection or call a model.
+
+Choose **Connect & watch** to follow existing and new output. The connected-source
+panel updates with received rollouts and links to their source maps and recorded
+experiments. Its URL retains the source selection across refreshes; **Check this
+source** reloads its saved settings for another preview. Each connection has its
+own recent receipts, so other busy workers do not displace its links. Semantic
+maps and behavior measures still require saved observations.
 
 ```sh
 rilldex doctor --port 0
