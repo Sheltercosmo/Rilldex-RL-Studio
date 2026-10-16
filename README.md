@@ -4,7 +4,7 @@
 
 **RL observability from training curves to agent behavior.** Collect rollouts and native trainer metrics, map activities and their relationships, and inspect the evidence behind each measurement. Work through the dashboard, Python, SQL, or a combination—before, during, or after training.
 
-[Quick start](#quick-start) · [Trainer metrics](docs/TRAINER_TELEMETRY.md) · [Model setup](#model-setup) · [Python & SQL](#python--sql) · [Deployment](docs/DEPLOYMENT.md)
+[Quick start](#quick-start) · [Product tour](#product-tour) · [Trainer metrics](docs/TRAINER_TELEMETRY.md) · [Model setup](#model-setup) · [Python & SQL](#python--sql) · [Deployment](docs/DEPLOYMENT.md)
 
 ## Highlights
 
@@ -12,6 +12,22 @@
 - **Put behavior beside training signals.** Recovery, verification and unresolved work alongside loss, entropy, KL, clipping, tokens and throughput.
 - **Keep evidence within reach.** Chart values and saved investigations link to source records, relationships, coverage and definitions.
 - **Keep your own workflow.** Files, Python and HTTP input; a live SQLite workspace; code-defined monitors with optional UI.
+
+## Product tour
+
+**Unit map:** follow actions, feedback and retries through saved relationships.
+
+![Unit map showing a failed installation, feedback assessment and a changed retry command](docs/assets/demo/unit-map.svg)
+
+**Plans & attempts:** focus a branch to see its steps, repeated attempts and reported status.
+
+![A report-production branch with Markdown drafting, PDF conversion and repeated attempts](docs/assets/demo/plans-and-attempts.svg)
+
+**Training overview:** compare reward, task outcomes and recheck success for the same cohort.
+
+![Reward, task success and recheck success across a clearly labeled 64-step training simulation](docs/assets/demo/training-signals.svg)
+
+Figures use saved app content with navigation removed. Maps use a [public OpenHands trace](https://github.com/metauto-ai/agent-as-a-judge/blob/43c2fa7b84ef0c1522e8250576e6798bace29dd0/benchmark/trajectories/OpenHands/39_Drug_Response_Prediction_SVM_GDSC_ML.json); curves use simulated training.
 
 ## Core features
 
