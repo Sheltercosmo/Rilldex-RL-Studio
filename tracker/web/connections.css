@@ -1,0 +1,108 @@
+.pipeline{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0}.pipeline>div{padding:21px;background:#fff;border:1px solid var(--line);border-top:3px solid #7770dd;border-radius:10px;display:flex;flex-direction:column;gap:9px}.pipeline small{letter-spacing:1px;font-size:10px}.pipeline strong{font-size:16px}.pipeline span{color:var(--muted);font-size:12px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.form-grid .wide{grid-column:1/-1}.workspace details{margin:16px 0}.workspace summary{font-weight:600}.workspace textarea{width:100%;font-family:ui-monospace,monospace}.form-actions{display:flex;gap:10px;margin:18px 0}.connection{padding:18px 0;border-top:1px solid var(--line)}.connection:first-child{border-top:0}.connection-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.connection h3{margin:0}.connection p{margin:8px 0;font-size:12px;overflow-wrap:anywhere}.connection .health{font-size:12px;color:#247a5c}.connection .health.issue{color:#ab4c2c}.connection pre{background:#fff5eb;color:#9a481f;padding:12px;border-radius:7px}.connection .facts{display:flex;gap:24px;flex-wrap:wrap;color:var(--muted)}.workspace .code{background:#192238;color:#dce5ff;padding:20px;border-radius:9px;font:12px/1.8 ui-monospace,monospace}#stream-state{font-size:12px;color:var(--muted)}#recent td:first-child{max-width:320px;overflow-wrap:anywhere}#upload-form{display:grid;gap:14px;max-width:650px}#preview-result:empty{display:none}@media(max-width:800px){.pipeline{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}.form-grid .wide{grid-column:auto}.connection-head{align-items:start}.pipeline>div{padding:16px}.pipeline span{max-width:100%}}
+.capture-contracts,.function-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}.capture-contracts>div,.function-grid>div{border:1px solid var(--line);border-radius:9px;padding:15px;background:var(--canvas)}.capture-contracts strong,.capture-contracts small,.function-grid strong,.function-grid small{display:block}.capture-contracts small,.function-grid small{margin-top:6px}.function-grid p{font-size:12px;margin-bottom:0}.preflight-card{padding:22px 0;border-top:1px solid var(--line)}#integration-routes td:first-child{min-width:130px}#integration-routes td:nth-child(2){min-width:170px}#integration-routes td:nth-child(3){min-width:240px}#integration-routes a{font-size:11px}.preflight-card td:first-child{min-width:150px}.preflight-card td:last-child{min-width:210px}#upload-form input[type=file]{max-width:100%;min-width:0}.workspace .recipe{scroll-margin-top:90px}@media(max-width:700px){.capture-contracts,.function-grid{grid-template-columns:1fr}.form-actions{flex-wrap:wrap}.workspace .page-head{flex-wrap:wrap}}
+.capture-shortcuts{display:flex;flex-wrap:wrap;gap:10px 22px;margin:16px 0 0;font-size:12px}#snapshot-section,#directory-section{scroll-margin-top:90px}.batch-preflight h3,#import-links a{overflow-wrap:anywhere}.batch-preflight select{max-width:100%;min-width:0}
+.readiness-requirements{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:18px 0}.readiness-requirements article{border:1px solid var(--line);border-radius:10px;padding:16px;background:var(--canvas)}.readiness-requirements strong,.readiness-requirements small{display:block}.readiness-requirements small{color:var(--muted);margin:6px 0}.readiness-requirements p{font-size:12px;margin-bottom:0}.readiness-counts{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.readiness-counts span{padding:6px 10px;background:#f0f1f9;border-radius:6px;font-size:12px}.readiness-table td{min-width:140px;max-width:320px;overflow-wrap:anywhere}.readiness-table small{display:block;color:var(--muted);margin-top:5px}#readiness-form select{min-width:0;max-width:100%;width:100%}#readiness-results pre{white-space:pre-wrap;overflow-wrap:anywhere}.readiness-warning{color:#ab4c2c}#question-section{scroll-margin-top:90px}#readiness-continue{align-self:center}@media(max-width:600px){.readiness-requirements{grid-template-columns:1fr}.readiness-table td{min-width:145px}#readiness-form .form-grid{grid-template-columns:minmax(0,1fr)}}
+.producer-card{padding:18px 0;border-top:1px solid var(--line)}.producer-card h3{font-size:14px;margin:0;overflow-wrap:anywhere}.producer-card .health{font-size:12px;color:#247a5c}.producer-card .health.issue,.producer-help{color:#ab4c2c}.producer-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:16px 0}.producer-facts strong,.producer-facts small{display:block}.producer-facts strong{font-size:22px}.producer-facts small{font-size:11px;color:var(--muted);margin-top:4px}.producer-card p{font-size:12px;overflow-wrap:anywhere}.producer-card progress{width:100%;height:7px;accent-color:#7770dd}.producer-card .connection-head{align-items:start}#worker-section{scroll-margin-top:90px}@media(max-width:650px){.producer-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.producer-card .connection-head{flex-direction:column}}
+#readiness-form[hidden],#readiness-filter-label[hidden],#readiness-continue[hidden],#export-pattern-label[hidden]{display:none}
+
+body[data-capture-mode="watch"] #worker-section[data-empty="true"]{display:none}
+.connection-location input{display:block;width:100%;max-width:100%;margin-top:7px}.connection-location label{display:block;margin-top:12px}.connection-location{max-width:760px}#workspace-transfer{margin:12px 0 20px;padding:16px 20px;border:1px solid var(--line);border-radius:10px;background:var(--surface,#fff)}#workspace-transfer p{font-size:12px;line-height:1.6}#workspace-transfer .form-actions{flex-wrap:wrap}
+#workspace-transfer a.primary{display:inline-flex;align-items:center;border-radius:8px;text-decoration:none}
+
+#preview-result:not(:empty){margin-top:22px;padding:20px;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff);overflow-wrap:anywhere}
+#preview-result h3{margin:0 0 8px;font-size:17px}#preview-result p{font-size:13px;line-height:1.6}
+.intake-coverage{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin:22px 0}
+.intake-coverage>div{min-width:0}.intake-coverage span,.intake-coverage strong,.intake-coverage small{display:block}
+.intake-coverage span{font-size:12px;color:var(--muted)}.intake-coverage strong{font-size:23px;margin:7px 0}.intake-coverage small{font-size:11px;color:var(--muted);line-height:1.5}
+.intake-boundary{padding-top:14px;border-top:1px solid var(--line);color:var(--muted)}.intake-next{border-left:3px solid var(--accent,#7770dd);padding-left:12px}
+.intake-sample{display:grid;gap:5px;padding:12px 0;border-top:1px solid var(--line);font-size:12px}.intake-sample span{color:var(--muted)}.intake-sample[data-status=deferred] span{color:#ab4c2c}
+@media(max-width:1100px){.intake-coverage{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){#preview-result:not(:empty){padding:14px}.intake-coverage{gap:18px 12px}.intake-coverage strong{font-size:20px}}
+#deployment details{margin:12px 0;scroll-margin-top:88px}#deployment summary{padding:10px 0;font-weight:600}#deployment pre{overflow:auto}#deployment .capture-tabs{flex-wrap:wrap}
+
+.connection .health.pending{color:var(--warning)}.connection .health.paused{color:var(--muted)}
+.source-detect{min-width:0}.source-detect>span{font-size:12px;margin-left:10px}.source-detect h3{font-size:15px;margin:16px 0 6px}.source-detect p,.source-detect small{font-size:12px;line-height:1.6;overflow-wrap:anywhere}.source-detect small{display:block}.discovery-route{padding:16px;margin:12px 0;border:1px solid var(--line);border-radius:10px;background:var(--surface-subtle)}.discovery-route strong{font-size:13px}.discovery-route button{margin-top:10px}#deploy-discovery[hidden]{display:none}
+
+#setup-section{scroll-margin-top:88px}#setup-section .form-grid{margin:18px 0}#deployment-form select,#deployment-form input{width:100%;min-width:0;max-width:100%}#deployment-form label[hidden]{display:none}#deploy-status{font-size:12px;color:var(--muted);flex:1;min-width:180px}
+#deployment-result:empty{display:none}#deployment-result{margin-top:28px;border-top:1px solid var(--line);padding-top:24px}#deployment-result h3{font-size:20px}#deployment-result h4{margin:6px 0;font-size:14px}.deployment-step{margin-top:22px;min-width:0}.deployment-step small{font-size:11px;color:var(--muted)}.deployment-step pre.code{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;margin-top:10px;max-width:100%;min-width:0}.deployment-step .section-top{align-items:center;gap:12px}.deployment-step button{flex-shrink:0}.deployment-resume,.deployment-next{border-top:1px solid var(--line);margin-top:24px;padding-top:16px}.deployment-next a{display:block;padding:7px 0;font-size:13px}.deployment-resume p,#deployment-result details p{font-size:13px;line-height:1.65;overflow-wrap:anywhere}#capture-bundle-receive{margin-top:26px;border-top:1px solid var(--line);padding-top:16px}#capture-bundle-receive input{max-width:100%;margin:12px 0}#capture-bundle-status{font-size:12px;overflow-wrap:anywhere}
+.data-routes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:16px;margin:24px 0 32px}.data-routes article{border:1px solid var(--line);border-radius:10px;padding:18px;background:var(--surface-subtle);min-width:0}.data-routes h3{margin:0 0 10px;font-size:15px}.data-routes p{font-size:13px;line-height:1.6}.data-routes small{display:block;line-height:1.6;color:var(--muted)}.data-routes a{display:block;margin-top:14px;font-size:12px}.analysis-table-scroll{overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:8px}.analysis-table-scroll table{margin:0;min-width:600px}.analysis-table-scroll td{max-width:260px;overflow-wrap:anywhere}.analysis-table-scroll th{position:sticky;top:0;background:var(--surface-subtle)}#analysis-data-preview small{display:block;margin-top:12px;color:var(--muted)}#analysis-code{scroll-margin-top:90px}#analysis-code pre.code{white-space:pre;overflow-wrap:normal}#analysis-data-status{font-size:12px;line-height:1.7;overflow-wrap:anywhere}#data-access-section{scroll-margin-top:88px}
+.workspace .analysis-table-scroll table{width:max-content;min-width:100%}.workspace .analysis-table-scroll td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}.analysis-table-scroll{max-width:100%;min-width:0}.data-route-help>summary{font-size:12px;color:var(--muted)}
+.analysis-options{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:14px;color:var(--muted);font-size:12px}.analysis-options span{flex:1;min-width:200px}.analysis-options button{font-size:11px}#analysis-export-status{font-size:12px;line-height:1.6;overflow-wrap:anywhere}#analysis-export-status:empty{display:none}
+
+/* Compact task navigation and one primary work area. */
+.workspace[data-app=connections] .page-head h1{font-size:28px;letter-spacing:-.7px}
+.workspace[data-app=connections] .page-head p{font-size:13px;max-width:660px}
+.workspace[data-app=connections] :is(#data-access-title,#setup-title){font-size:21px;letter-spacing:-.3px;line-height:1.3}
+.workspace[data-app=connections] #data-access-section>.section-top p{font-size:13px;line-height:1.6;margin-bottom:4px}
+.workspace[data-app=connections] .workflow-nav{display:flex;gap:24px;margin:18px 0 22px;padding:5px 0 0;position:sticky;top:61px;z-index:12;background:var(--canvas);border-bottom:1px solid var(--line)}
+.workspace[data-app=connections] .workflow-nav a{padding:11px 6px;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent}
+.workspace[data-app=connections] .workflow-nav a:hover{color:var(--ink)}
+.workspace[data-app=connections] .workflow-nav a[aria-current=page]{color:var(--accent);border-bottom-color:var(--accent)}
+.workspace[data-app=connections] .workflow-nav strong{font-size:13px;font-weight:600}
+.workspace[data-app=connections] .workflow-subnav{margin:0 0 20px;gap:8px;flex-wrap:wrap}
+.workspace[data-app=connections] .workflow-subnav a{padding:6px 10px;font-size:12px;border:0;border-radius:5px;background:transparent;color:var(--muted)}
+.workspace[data-app=connections] .workflow-subnav a[aria-current=page]{background:var(--accent-soft);color:var(--accent)}
+.workspace[data-app=connections] .analysis-context{display:grid;grid-template-columns:1.2fr 1.2fr 1fr;gap:14px;padding:16px 0 4px}
+.workspace[data-app=connections] .analysis-context label,.workspace[data-app=connections] #native-analysis-form label{min-width:0;font-size:12px}
+.workspace[data-app=connections] .analysis-context :is(input,select){width:100%;min-width:0}
+.workspace[data-app=connections] .analysis-options{margin:8px 0 20px;gap:12px}
+.workspace[data-app=connections] .analysis-options button{padding:5px 10px;font-size:11px}
+.workspace[data-app=connections] .native-analysis{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:28px;padding:24px 0;border-block:1px solid var(--line)}
+.workspace[data-app=connections] .native-analysis h3{margin:6px 0 16px;font-size:18px}
+.workspace[data-app=connections] #native-analysis-form{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.workspace[data-app=connections] #native-analysis-form label{flex:1;min-width:min(100%,180px)}
+.workspace[data-app=connections] #native-analysis-form select{width:100%}
+.workspace[data-app=connections] .native-code{min-width:0}
+.workspace[data-app=connections] .native-code .section-top{margin:0 0 8px}
+.workspace[data-app=connections] .native-code strong{font-size:12px}
+.workspace[data-app=connections] .native-code button{font-size:11px;padding:5px 10px}
+.workspace[data-app=connections] .native-code small{font-size:11px;color:var(--muted);line-height:1.6}
+.workspace[data-app=connections] pre.code{font:400 13px/1.7 var(--font-mono);letter-spacing:0;white-space:pre;word-break:normal;overflow-wrap:normal;overflow:auto;max-width:100%;min-width:0;background:var(--surface-subtle);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:10px 0;scrollbar-width:thin}
+.workspace[data-app=connections] .native-result{padding:16px 0}
+.workspace[data-app=connections] #native-analysis-status{font-size:12px;margin:0 0 12px}
+.workspace[data-app=connections] #native-analysis-coverage{display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-bottom:14px}
+.workspace[data-app=connections] #native-analysis-coverage strong{color:var(--ink)}
+.workspace[data-app=connections] .native-examples{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:18px}
+.workspace[data-app=connections] .native-examples>div{min-width:0}
+.workspace[data-app=connections] .native-examples h3{font-size:13px}
+.workspace[data-app=connections] #analysis-data-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:18px 0}
+.workspace[data-app=connections] #analysis-data-form label{flex:1;min-width:180px}
+.workspace[data-app=connections] #analysis-custom-results{overflow-wrap:anywhere}
+.workspace[data-app=connections] details>p{font-size:12px;line-height:1.7}
+.workspace[data-app=connections] #data-access-section>details{border-top:1px solid var(--line);padding-top:16px;margin:16px 0 0}
+.workspace[data-app=connections] #data-access-section>details>summary{font-size:13px}
+.workspace[data-app=connections] .minimal-setup{border-block:1px solid var(--line);padding:16px 0;margin:20px 0 26px}
+.workspace[data-app=connections] .workflow-package{display:grid;grid-template-columns:1fr 1fr;gap:18px 28px;padding:20px 0;border-block:1px solid var(--line);margin:22px 0}
+.workspace[data-app=connections] .workflow-package h3{font-size:17px;margin:6px 0}
+.workspace[data-app=connections] .workflow-package p{font-size:12px;line-height:1.65;margin:8px 0}
+.workspace[data-app=connections] .workflow-run{min-width:0;align-self:center}
+.workspace[data-app=connections] .workflow-run label{display:grid;gap:6px;font-size:12px;margin-bottom:12px}
+.workspace[data-app=connections] .workflow-run button{width:100%;white-space:normal}
+.workspace[data-app=connections] .workflow-run small{font-size:11px;color:var(--muted);line-height:1.6}
+.workspace[data-app=connections] .workflow-footnote{grid-column:1/-1;color:var(--muted);overflow-wrap:anywhere}
+.workspace[data-app=connections] .workflow-footnote:empty{display:none}
+.workspace[data-app=connections] .workflow-operations{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.workspace[data-app=connections] .workflow-operations>div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.workspace[data-app=connections] .workflow-operations strong{font-size:12px}
+.workspace[data-app=connections] .workflow-operations :is(code,small){font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.workspace[data-app=connections] .workflow-operations small{color:var(--muted)}
+.workspace[data-app=connections] section[id]{scroll-margin-top:125px}
+.workspace[data-app=connections] :is(input,select,button,summary){scroll-margin-top:130px}
+html:has(body[data-app=connections]){scroll-padding-top:8px}
+@media(max-width:1100px){.workspace[data-app=connections] .native-analysis{grid-template-columns:1fr;gap:18px}}
+@media(max-width:760px){
+ .workspace[data-app=connections] .workflow-nav{top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+ .workspace[data-app=connections] .workflow-nav a{text-align:center;padding:10px 0}
+ .workspace[data-app=connections] .workflow-nav strong{font-size:12px}
+ .workspace[data-app=connections] .analysis-context{grid-template-columns:1fr 1fr}
+ .workspace[data-app=connections] .analysis-context label:first-child{grid-column:1/-1}
+ .workspace[data-app=connections] .native-examples,.workspace[data-app=connections] .workflow-package{grid-template-columns:1fr}
+ .workspace[data-app=connections] .workflow-operations{grid-template-columns:1fr}
+ .workspace[data-app=connections] section[id]{scroll-margin-top:65px}
+ .workspace[data-app=connections] :is(input,select,button,summary){scroll-margin-top:65px}
+}
+@media(max-width:420px){.workspace[data-app=connections] .analysis-context{grid-template-columns:1fr}}
+
+/* Field labels and long choices stay aligned without narrowing the question. */
+.workspace[data-app=connections] #readiness-form .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 20px}
+@media(max-width:760px){.workspace[data-app=connections] #readiness-form .form-grid{grid-template-columns:minmax(0,1fr)}}
+body[data-app="connections"] main [id]{scroll-margin-top:90px}

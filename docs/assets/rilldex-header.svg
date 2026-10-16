@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Rilldex — RL Studio</title>
+  <desc id="desc">Understand how your RL agents learn. Behavior maps, training signals, and evidence you can query.</desc>
+  <rect width="1280" height="480" rx="24" fill="#F7F9FC"/>
+  <rect x="1" y="1" width="1278" height="478" rx="23" stroke="#E3E8F1"/>
+  <path d="M944 0V480M1104 0V480M1280 160H896M1280 320H896" stroke="#E9EEF7"/>
+  <g transform="translate(64 65)">
+    <rect width="80" height="80" rx="23" fill="#19212F"/>
+    <path d="M25 58V23H40C50 23 55 28 55 35S50 48 40 48H25" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M40 48L55 58" stroke="#75E2CA" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <g font-family="Segoe UI, Inter, Arial, sans-serif">
+    <text x="168" y="124" fill="#19212F" font-size="64" font-weight="700" letter-spacing="-2.5">Rilldex</text>
+    <rect x="396" y="91" width="118" height="34" rx="17" fill="#E8EDFF"/>
+    <text x="455" y="113" text-anchor="middle" fill="#3659E3" font-size="15" font-weight="600" letter-spacing="1">RL STUDIO</text>
+    <text x="64" y="205" fill="#19212F" font-size="35" font-weight="600" letter-spacing="-.8">Understand how your RL agents learn.</text>
+    <text x="64" y="247" fill="#5E697B" font-size="20">From training curves to actions, plans, and the evidence behind them.</text>
+    <g transform="translate(64 313)">
+      <rect width="352" height="105" rx="16" fill="white" stroke="#DCE3EF"/>
+      <path d="M27 34H45V55H65M45 34V75H65" stroke="#3659E3" stroke-width="2" stroke-linejoin="round"/>
+      <rect x="21" y="27" width="12" height="12" rx="3" fill="#3659E3"/>
+      <rect x="62" y="48" width="12" height="12" rx="3" fill="#7C89CD"/>
+      <rect x="62" y="68" width="12" height="12" rx="3" fill="#159981"/>
+      <text x="94" y="46" fill="#19212F" font-size="20" font-weight="600">Behavior maps</text>
+      <text x="94" y="74" fill="#5E697B" font-size="15">Units, relationships, plans &amp; retries</text>
+    </g>
+    <g transform="translate(440 313)">
+      <rect width="352" height="105" rx="16" fill="white" stroke="#DCE3EF"/>
+      <path d="M25 28V77H77" stroke="#CFD7E6" stroke-width="2"/>
+      <path d="M26 65L37 55L46 61L57 39L66 45L77 28" stroke="#3659E3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="94" y="46" fill="#19212F" font-size="20" font-weight="600">Training signals</text>
+      <text x="94" y="74" fill="#5E697B" font-size="15">Native metrics beside behavior</text>
+    </g>
+    <g transform="translate(816 313)">
+      <rect width="400" height="105" rx="16" fill="white" stroke="#DCE3EF"/>
+      <path d="M39 36L25 53L39 70M62 36L76 53L62 70M55 32L47 74" stroke="#3659E3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="96" y="46" fill="#19212F" font-size="20" font-weight="600">Evidence you can query</text>
+      <text x="96" y="74" fill="#5E697B" font-size="15">Python, SQL &amp; custom monitors</text>
+    </g>
+  </g>
+</svg>

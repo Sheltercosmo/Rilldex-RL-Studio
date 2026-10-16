@@ -1,0 +1,59 @@
+{
+  "repository": "sierra-research/tau2-bench",
+  "commit": "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699",
+  "projection": "Exact simulation, matching task and original info; no generated messages",
+  "fixtures": [
+    {
+      "file": "airline-0.json",
+      "sha256": "3708265c396d5132987d3c4c98d98ff77dcac60b217be6dd272551c50f4be6e7",
+      "simulation_index": 0,
+      "simulation_id": "631cbceb-764b-4267-ac09-5f59985af29d",
+      "source": {
+        "url": "https://github.com/sierra-research/tau2-bench/blob/4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699/data/tau2/results/final/gpt-4.1-2025-04-14_airline_default_gpt-4.1-2025-04-14_4trials.json",
+        "blob_url": "https://api.github.com/repos/sierra-research/tau2-bench/git/blobs/f4847076cbf6e509098d22fbf26ff26a7f2b4603",
+        "file": ".tracker\\upstream-audit-2026-10-11\\gpt-4.1-2025-04-14_airline_default_gpt-4.1-2025-04-14_4trials.json",
+        "sha256": "31d19e79b8ddc5934a60701f913ff5fefb41dee5e68f7b813c26254ab2e2d5c8",
+        "bytes": 8790399
+      }
+    },
+    {
+      "file": "airline-3.json",
+      "sha256": "11bdd413b4b1ad56f76b4ec0b52de24d5527a09ce66f134c3eabd1140ec56328",
+      "simulation_index": 3,
+      "simulation_id": "7b6f70f0-fda5-46a9-9cfa-60de828632f3",
+      "source": {
+        "url": "https://github.com/sierra-research/tau2-bench/blob/4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699/data/tau2/results/final/gpt-4.1-2025-04-14_airline_default_gpt-4.1-2025-04-14_4trials.json",
+        "blob_url": "https://api.github.com/repos/sierra-research/tau2-bench/git/blobs/f4847076cbf6e509098d22fbf26ff26a7f2b4603",
+        "file": ".tracker\\upstream-audit-2026-10-11\\gpt-4.1-2025-04-14_airline_default_gpt-4.1-2025-04-14_4trials.json",
+        "sha256": "31d19e79b8ddc5934a60701f913ff5fefb41dee5e68f7b813c26254ab2e2d5c8",
+        "bytes": 8790399
+      }
+    },
+    {
+      "file": "telecom-0.json",
+      "sha256": "2f6243653020e985017d33267dc53b570f23c1b5b36637877e0cce94017699f1",
+      "simulation_index": 0,
+      "simulation_id": "26f41c9b-fa8f-4ea6-9677-f83c31826b9b",
+      "source": {
+        "url": "https://github.com/sierra-research/tau2-bench/blob/4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699/data/tau2/results/final/gpt-4.1-2025-04-14_telecom_default_gpt-4.1-2025-04-14_4trials.json",
+        "blob_url": "https://api.github.com/repos/sierra-research/tau2-bench/git/blobs/bce33ce98057cb58d22815d328396d41bf9ef1ba",
+        "file": ".tracker\\upstream-audit-2026-10-11\\gpt-4.1-2025-04-14_telecom_default_gpt-4.1-2025-04-14_4trials.json",
+        "sha256": "8e1793f57a9e216514dbce1f93b44b0592d5904f1c5b97ab711906782107a1f2",
+        "bytes": 37463627
+      }
+    },
+    {
+      "file": "telecom-4.json",
+      "sha256": "268f9d7e0b8dc9a191f4dae1128ffea3b6b5148d7a250410362a1f7642392879",
+      "simulation_index": 4,
+      "simulation_id": "df1b2cf8-2516-40b9-b0dd-073bc1472f6d",
+      "source": {
+        "url": "https://github.com/sierra-research/tau2-bench/blob/4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699/data/tau2/results/final/gpt-4.1-2025-04-14_telecom_default_gpt-4.1-2025-04-14_4trials.json",
+        "blob_url": "https://api.github.com/repos/sierra-research/tau2-bench/git/blobs/bce33ce98057cb58d22815d328396d41bf9ef1ba",
+        "file": ".tracker\\upstream-audit-2026-10-11\\gpt-4.1-2025-04-14_telecom_default_gpt-4.1-2025-04-14_4trials.json",
+        "sha256": "8e1793f57a9e216514dbce1f93b44b0592d5904f1c5b97ab711906782107a1f2",
+        "bytes": 37463627
+      }
+    }
+  ]
+}

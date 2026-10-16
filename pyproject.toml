@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rilldex"
+version = "0.1.0"
+description = "Rilldex — RL Behavior Inspector: evidence-linked maps, monitoring and analysis"
+readme = "README.md"
+keywords = ["reinforcement-learning", "llm", "rl-observability", "rollouts", "agent-behavior", "training-monitoring", "grpo", "ppo"]
+requires-python = ">=3.11"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Sheltercosmo/Rilldex-RL-Studio"
+Documentation = "https://github.com/Sheltercosmo/Rilldex-RL-Studio#readme"
+Issues = "https://github.com/Sheltercosmo/Rilldex-RL-Studio/issues"
+
+[project.optional-dependencies]
+contracts = ["jsonschema==4.26.0"]
+s3 = ["s3fs>=2024.6.0"]
+gcs = ["gcsfs>=2024.6.0"]
+
+[project.scripts]
+rilldex = "tracker.cli:main"
+jev-track = "tracker.cli:main"
+
+[tool.setuptools.package-data]
+tracker = ["web/*"]
+
+[tool.setuptools.packages.find]
+include = ["tracker*", "rilldex*"]

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rilldex · Behavior map</title><link rel="stylesheet" href="/semantic-map.css"></head>
+<body>
+<header><a href="/rollouts" class="brand">j <span>Rilldex · Behavior map</span></a><a href="/rollouts">Training curves</a><a href="/relations">Relation lab</a><a href="/studies">Checkpoint investigations</a><a id="raw-link" href="/">Trajectory inspector</a><button id="export">Export map</button></header>
+<main>
+  <div class="intro"><div><p class="eyebrow">BEHAVIOR MAP</p><h1>Follow the work through the trace</h1><p class="lede">Units, changing requests, actions and their evidence in one timeline.</p></div><label>Trace and observer<select id="run" aria-label="Trace and observer"><option>Loading saved passes…</option></select></label></div>
+  <details class="reference-notice"><summary>Source and annotation provenance</summary><p id="provenance-notice">Loading source and observer provenance…</p></details>
+  <p id="error" role="alert" hidden></p>
+  <p id="catalog-status" class="muted" role="status" hidden></p>
+  <section id="overview"><h2 id="title"></h2><details><summary>Recorded task instructions</summary><p id="objective"></p><div id="instruction-history"></div></details><div id="target-track"></div><p id="coverage" class="muted"></p><div id="scope-exclusions"></div><p id="plan-status" class="muted"></p></section>
+  <details id="work-overview" class="work-overview" hidden aria-label="Work over time"><summary>Work summaries and recurring patterns</summary>
+    <h2>Work over time</h2><div id="declared-work-overview" hidden></div><div id="work-context-overview" hidden></div><div id="work-sequences" hidden></div><p id="work-history-summary"></p>
+    <p class="muted">Repeated immediate targets across dispatched operations. Positions show source order within each actor’s trajectory. This overview covers the whole selected trace; focus changes the detailed map below.</p>
+    <label class="history-toggle"><input id="history-singletons" type="checkbox"> Include groups with only one operation</label>
+    <p class="muted">Filled markers match earlier work in their group. Dashed markers have unresolved or uninspected identity.</p>
+    <div id="work-history-lanes"></div>
+    <p class="muted">Groups follow saved target-identity selections. Missing links do not prove new work; recurrence does not establish a failed retry, progress or strategy. Choose a target to follow its work, or a numbered operation to inspect its connections.</p>
+  </details>
+  <div class="workbench"><section class="map-area">
+    <div class="map-toolbar" role="group" aria-label="Map focus">
+      <label>Layout<select id="map-layout"><option value="blueprint">Cards and connections</option><option value="timeline">Detailed timeline</option></select></label>
+      <label>Show<select id="unit-filter"><option value="all">All units</option><option value="actions">Agent actions</option></select></label>
+      <label>Focus<select id="work-focus"><option value="all">Whole trace</option></select></label>
+      <button id="reset-focus" type="button">Reset focus</button>
+    </div>
+    <section id="work-lineage-focus" class="work-lineage-focus" hidden aria-label="Requested work history"></section>
+    <section id="declared-work-focus" class="work-lineage-focus" hidden aria-label="Stated work history"></section>
+    <section id="work-return-focus" class="work-lineage-focus" hidden aria-label="Returning sequence and intervening work"></section>
+    <section id="connection-focus" class="connection-focus" hidden aria-label="Connections around the focus unit">
+      <h3 id="connection-title"></h3><p id="connection-summary"></p>
+      <div class="connection-controls"><label>Connection type<select id="relation-filter"><option value="all">All connection types</option></select></label><button id="inspect-anchor" type="button">Open focus unit</button></div>
+      <p class="muted">Only direct connections to this unit are included. Filters retain the focus unit as a reference point. Link direction describes the recorded relationship, not the order of events.</p>
+    </section>
+    <div class="map-search"><label for="map-search">Find extracted meanings and targets<input id="map-search" type="search" placeholder="e.g. report, payment, passenger"></label><button id="clear-search" type="button">Clear</button></div>
+    <label class="context-toggle"><input id="include-connected" type="checkbox" checked> Include directly connected units</label>
+    <p id="search-status" class="muted" role="status" aria-live="polite"></p>
+    <p id="view-explanation" class="muted"></p><div id="map"></div>
+  </section><aside id="inspector" aria-label="Selected unit and evidence"><p>Select a unit to inspect its meaning and source.</p></aside></div>
+  <section class="review"><p class="eyebrow">READ THE RESULTS AGAINST THE TRACE</p><h2>What this representation makes inspectable</h2><div id="notes"></div></section>
+</main><script src="/behavior-blueprint.js"></script><script src="/semantic-map.js"></script></body></html>

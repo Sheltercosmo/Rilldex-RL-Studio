@@ -1,0 +1,50 @@
+body.workspace dialog.window-comparison{width:min(1120px,calc(100vw - 40px));max-width:none;max-height:90vh;overflow:auto;padding:24px;color:var(--ink,#19212f);border:1px solid #dce2ed;border-radius:16px;background:#fff}
+.window-comparison .dialog-head{align-items:center}.window-comparison h3{margin:12px 0 6px}.window-comparison h4{margin:0 0 12px}
+.comparison-controls,.comparison-ranges{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}.comparison-controls label{min-width:0}.comparison-controls select{width:100%}
+.comparison-ranges fieldset{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:0;padding:12px;border:1px solid #dce2ed;border-radius:10px}.comparison-ranges legend{font-size:13px;font-weight:650;padding:0 6px}.comparison-ranges input{width:100%;min-width:0}
+.comparison-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.comparison-actions select{flex:1;min-width:180px;max-width:100%}
+.comparison-result-head{margin-top:24px;padding-top:16px;border-top:1px solid #e2e6ef}.comparison-mix{padding:18px;border:1px solid #dbe4f9;background:#f7f9fe;border-radius:12px;margin:16px 0}
+.comparison-figures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.comparison-figures span{display:block;font-size:13px;color:#55637a}.comparison-figures strong{display:block;font-size:24px;line-height:1.6;font-variant-numeric:tabular-nums}
+.comparison-table{max-width:100%;overflow:auto;margin-bottom:16px}.comparison-table table{width:100%;border-collapse:collapse}.comparison-table th,.comparison-table td{text-align:left;padding:12px 10px;border-bottom:1px solid #e2e6ef;vertical-align:top;min-width:130px}.comparison-table th{font-size:12px;color:#59667b}.comparison-table td:first-child{min-width:190px;max-width:300px}.comparison-table small,.comparison-case-list small{display:block;line-height:1.5;color:#59667b}.comparison-table details{margin-top:8px;font-size:12px;overflow-wrap:anywhere}.comparison-table button{display:block;margin-bottom:6px;white-space:nowrap;font-size:12px}
+.comparison-evidence:not(:empty){border:1px solid #dce2ed;border-radius:12px;padding:16px;margin:16px 0}.comparison-case-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.comparison-case-list>div{padding:10px;background:#f7f8fb;border-radius:6px}.comparison-error{color:#a92d45}.window-comparison>details{font-size:13px}
+@media(max-width:650px){body.workspace dialog.window-comparison{width:calc(100vw - 20px);padding:16px}.comparison-controls,.comparison-ranges,.comparison-case-list{grid-template-columns:1fr}.comparison-figures{grid-template-columns:1fr}.comparison-figures>div{display:flex;justify-content:space-between;align-items:center;gap:12px}.comparison-figures strong{font-size:21px}}
+
+.comparison-result-head{margin-top:8px}
+.population-evidence{padding:16px 18px;margin:12px 0 20px;border:1px solid #dce2ed;border-radius:12px;background:#fff;min-width:0}
+.population-evidence>summary{font-weight:600;cursor:pointer;color:#263958}.population-evidence p{font-size:13px;line-height:1.55;color:#52627b;max-width:95ch}.population-evidence h4{margin:0 0 8px}.population-evidence details{padding:10px 0;border-top:1px solid #e8ecf3}.population-evidence details summary{font-size:14px;cursor:pointer}.population-evidence .comparison-actions{margin-top:12px}
+.population-table{max-width:100%;overflow:auto}.population-table table{border-collapse:collapse;width:100%;font-size:12px}.population-table th,.population-table td{text-align:left;padding:10px;border-bottom:1px solid #e8ecf3;vertical-align:top;min-width:130px}.population-table td:first-child{min-width:190px}
+.declared-cohorts small{display:block;margin-top:5px;color:#52627b;line-height:1.5;overflow-wrap:anywhere}.declared-cohorts strong{color:#20304a;font-size:13px}.declared-cohorts th{color:#4c5d78;font-weight:600;background:#f7f9fc}.declared-cohorts td{max-width:300px;overflow-wrap:anywhere}.declared-cohorts button{margin-top:8px;font-size:12px}.declared-cohorts .pager{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}.declared-members:not(:empty){margin-top:18px;padding-top:16px;border-top:1px solid #dce2ed}.declared-members a{font-weight:600}.declared-cohorts details{border-top:0;padding:0 0 6px}.declared-cohorts details summary{font-size:12px}
+.population-chart-controls{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;margin-top:10px}.population-chart-controls button{font-size:12px}
+
+@media(max-width:650px){
+ .comparison-table table,.comparison-table tbody{display:block}.comparison-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .comparison-table tbody tr{display:grid;grid-template-columns:1fr 1fr;border:1px solid #dce2ed;border-radius:10px;margin-bottom:12px;padding:6px}
+ .comparison-table td{display:block;min-width:0;padding:10px;border:0}.comparison-table td:first-child{min-width:0;max-width:none;grid-column:1/-1;border-bottom:1px solid #e2e6ef}
+ .comparison-table td:not(:first-child)::before{content:attr(data-label);display:block;font-size:12px;color:#59667b;margin-bottom:6px}
+ .comparison-table td:last-child{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center}.comparison-table td:last-child::before{flex-basis:100%}.comparison-table td:last-child button{margin:0}
+}
+
+.comparison-figures small{color:#59667b}@media(max-width:650px){.comparison-figures>div{flex-wrap:wrap}.comparison-figures small{flex-basis:100%;text-align:right;margin-top:-10px}}
+.comparison-training{padding:14px 16px;border:1px solid var(--line,#dce2ed);border-radius:10px;margin:14px 0;background:var(--surface-subtle,#f7f9fc)}
+.comparison-training>summary{font-weight:600;font-size:13px;cursor:pointer;line-height:1.6}
+.comparison-case-list pre{max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}
+@media(max-width:650px){.comparison-training .comparison-table table{display:table;min-width:430px}.comparison-training .comparison-table thead{position:static;width:auto;height:auto;clip-path:none}.comparison-training .comparison-table tbody{display:table-row-group}.comparison-training .comparison-table tr{display:table-row}.comparison-training .comparison-table td{display:table-cell}.comparison-training .comparison-table td::before{display:none}}
+.outcome-readiness{margin:16px 0;padding:20px;border:1px solid #dce2ec;border-radius:14px;background:#fff;min-width:0}
+.outcome-readiness h3{margin:0 0 6px;font-size:18px;color:#18243b}
+.outcome-readiness p,.outcome-readiness small{color:#526079;line-height:1.5}
+.outcome-controls{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}
+.outcome-controls label{display:grid;gap:5px;flex:1;min-width:190px;font-size:12px;font-weight:600;color:#526079}
+.outcome-controls select{width:100%;min-width:0;max-width:100%;font:inherit;font-size:13px}
+.outcome-chart svg{display:block;width:100%;max-height:240px;overflow:visible}
+.outcome-chart circle[role=button]{cursor:pointer}
+.outcome-chart circle:focus{outline:2px solid #365eed;outline-offset:3px}
+.outcome-chart>small{display:block;font-size:12px;margin-top:6px}
+.outcome-detail h4{font-size:14px;margin:18px 0 10px}
+.outcome-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.outcome-stats>div{display:grid;align-content:start;gap:4px;border-left:3px solid #dfe6f5;padding:4px 12px;min-width:0}
+.outcome-stats span{font-size:12px;color:#526079}
+.outcome-stats strong{font-size:23px;color:#17243c;font-variant-numeric:tabular-nums}
+.outcome-stats small{font-size:11px}
+.outcome-detail .population-table{margin:12px 0;max-width:100%;overflow-x:auto}
+.outcome-detail .population-table table{width:100%;font-size:12px}
+@media(max-width:650px){.outcome-readiness{padding:14px}.outcome-stats{grid-template-columns:1fr}.outcome-controls label{flex-basis:100%}.outcome-chart svg{min-height:150px}.outcome-chart svg text{font-size:22px}}

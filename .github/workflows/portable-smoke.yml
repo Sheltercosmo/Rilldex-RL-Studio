@@ -1,0 +1,155 @@
+name: Portable collector
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  regression-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install ".[contracts]"
+      - run: python scripts/run_tests.py
+        env:
+          PYTHONUTF8: '1'
+      - run: python scripts/run_tests.py --javascript
+  installed-wheel:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.11', '3.12', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip wheel --no-deps --wheel-dir dist .
+      - name: Install built wheel without optional trainer dependencies
+        run: python -c "import glob,subprocess,sys; subprocess.check_call([sys.executable,'-m','pip','install','--no-deps',*glob.glob('dist/*.whl')])"
+      - run: python scripts/portable_smoke.py
+      - name: Installed offline capture and shell setup
+        run: python scripts/offline_capture_smoke.py
+      - name: Installed source discovery and replay
+        run: python scripts/source_discovery_smoke.py
+      - name: Installed reusable launch and restart
+        run: python scripts/launch_smoke.py
+      - name: Launch profile contracts
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_launch.py"
+      - name: Installed research input and output interfaces
+        run: python scripts/analysis_smoke.py
+      - name: Installed headless analysis and crash recovery
+        run: python scripts/research_smoke.py
+      - name: Installed live workspace analysis without optional dependencies
+        run: python scripts/workspace_analysis_smoke.py
+      - name: Simulated training lifecycle with known diagnostic outcomes
+        env:
+          PYTHONUTF8: '1'
+        run: python scripts/rl_lifecycle_simulation.py --output .tracker/rl-simulation
+      - name: Unicode CLI pipe contracts
+        run: python -m unittest discover -s tests -p "test_cli_encoding.py"
+      - name: Mixed asynchronous execution reporting
+        run: python scripts/execution_smoke.py
+      - name: Execution identity and population contracts
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_execution_records.py"
+      - name: Custom research and portable SQL dataset contracts
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_research.py"
+      - name: Read-only analysis contracts
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_analytics.py"
+      - name: Source discovery and follow-through
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_source_discovery.py"
+      - name: Durable result consumption and restart
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_analysis_mirror.py"
+      - name: Capture and recovery contracts
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_export_watch.py"
+      - name: Portable inspection snapshot contracts
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_workspace_snapshot.py"
+      - name: JSON snapshot lifecycle and connection checks
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_snapshot_watch.py"
+      - name: Cloud transport and notebook lifecycle contracts
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_cloud_watch.py"
+      - run: python -m unittest discover -s tests -p "test_notebook.py"
+      - name: Producer ownership, slow shutdown and crash recovery
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_collector_lifecycle.py"
+      - name: Retain simulation evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rl-simulation-${{ matrix.os }}-py${{ matrix.python }}
+          path: .tracker/rl-simulation
+          if-no-files-found: ignore
+  longitudinal-observations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install .
+      - name: Long-run observation and diagnosis acceptance
+        run: python scripts/rl_longitudinal_simulation.py --steps 64 --output .tracker/longitudinal
+        env:
+          PYTHONUTF8: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: longitudinal-observation-evidence
+          path: .tracker/longitudinal
+  optional-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install . pandas polars networkx
+      - run: python scripts/workspace_analysis_smoke.py --with-dataframes
+  docker-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/docker_smoke.py
+  s3-client:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install . -r scripts/s3-smoke-requirements.txt
+      - name: Installed client against local S3 HTTP service
+        run: python scripts/s3_client_smoke.py

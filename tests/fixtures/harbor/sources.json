@@ -1,0 +1,36 @@
+{
+  "repository": "https://github.com/harbor-framework/harbor",
+  "revision": "c803185a8b7c88c163abe48a22e9cea0bbd95e90",
+  "files": [
+    {
+      "source": "https://raw.githubusercontent.com/harbor-framework/harbor/c803185a8b7c88c163abe48a22e9cea0bbd95e90/rfcs/0001-trajectory-format/mini-swe-agent-trajectory.json",
+      "file": "mini-swe-agent-trajectory.json",
+      "sha256": "05899f4778171aee16582f0dba33c4c227a423b05f847aeff413923a4358b150",
+      "bytes": 15173
+    },
+    {
+      "source": "https://raw.githubusercontent.com/harbor-framework/harbor/c803185a8b7c88c163abe48a22e9cea0bbd95e90/tests/golden/terminus_2/hello-world-context-summarization-linear-history.trajectory.json",
+      "file": "hello-world-context-summarization-linear-history.trajectory.json",
+      "sha256": "34e36cde7596e6a4cc65c0306b890760e287e703bea831d0ad83aad03e69b7af",
+      "bytes": 7063
+    },
+    {
+      "source": "https://raw.githubusercontent.com/harbor-framework/harbor/c803185a8b7c88c163abe48a22e9cea0bbd95e90/tests/golden/terminus_2/hello-world-context-summarization-linear-history.trajectory.cont-1.json",
+      "file": "hello-world-context-summarization-linear-history.trajectory.cont-1.json",
+      "sha256": "8ff5e98130283a1223b164f6b5a2fa9e195d9fec244df933f970154de4d97b71",
+      "bytes": 8990
+    },
+    {
+      "source": "https://raw.githubusercontent.com/harbor-framework/harbor/c803185a8b7c88c163abe48a22e9cea0bbd95e90/tests/golden/terminus_2/hello-world-timeout.trajectory.json",
+      "file": "hello-world-timeout.trajectory.json",
+      "sha256": "a6d31e9669efbb6b852484c232dda80f8fd08cf164be99b62d06a81933014e91",
+      "bytes": 12965
+    },
+    {
+      "source": "https://raw.githubusercontent.com/harbor-framework/harbor/c803185a8b7c88c163abe48a22e9cea0bbd95e90/LICENSE",
+      "file": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "bytes": 11357
+    }
+  ]
+}

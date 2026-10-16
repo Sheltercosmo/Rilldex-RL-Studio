@@ -1,0 +1,12 @@
+{
+  "source_url": "https://datasets-server.huggingface.co/rows?dataset=nebius%2FSWE-rebench-openhands-trajectories&config=default&split=train&offset=0&length=20",
+  "dataset": "https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories",
+  "license": "CC-BY-4.0",
+  "source_response_sha256": "220a583c2f1219f4cc41badd72525cbe5e364701911bd499b8d8f84d79561df7",
+  "row_index": 14,
+  "trajectory_id": "chatcmpl-fcd4c8df4ef79ef67d1638af0704a836",
+  "fixture_sha256": "1a5574a5563f7ac0e876669a40ddb3d8b8aa60785b368f4ef29aa74f6672cd46",
+  "retrieved_on": "2026-10-11",
+  "reported_repository_revision": "35455389ab51bf5e2306bfd436ef72d0f98bf882",
+  "revision_boundary": "The dataset server returned no row revision field. The response content is frozen; repository metadata revision is separate provenance, not proof of row alignment."
+}

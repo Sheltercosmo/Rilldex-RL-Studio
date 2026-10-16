@@ -1,0 +1,26 @@
+services:
+  tracker:
+    build: .
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${RILLDEX_PORT:-${JEV_PORT:-8765}}:${RILLDEX_PORT:-${JEV_PORT:-8765}}"
+    environment:
+      RILLDEX_PORT: "${RILLDEX_PORT:-${JEV_PORT:-8765}}"
+    volumes:
+      # Stable volume key: preserve existing Compose workspaces across the rename.
+      - jev-data:/data
+      - type: bind
+        source: ${RILLDEX_OUTPUT_DIR:-${JEV_OUTPUT_DIR:-./outputs}}
+        target: /outputs
+        read_only: true
+    command: ["--db", "/data/workspace.sqlite", "start", "--container", "--port", "${RILLDEX_PORT:-${JEV_PORT:-8765}}", "--watch", "/outputs", "--mode", "${RILLDEX_INPUT_MODE:-${JEV_INPUT_MODE:-exports}}", "--experiment", "${RILLDEX_EXPERIMENT:-${JEV_EXPERIMENT:-training}}", "--producer", "${RILLDEX_PRODUCER:-${JEV_PRODUCER:-training/exports}}"]
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ['RILLDEX_PORT']+'/api/health',timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+volumes:
+  jev-data:

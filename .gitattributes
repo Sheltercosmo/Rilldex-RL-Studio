@@ -1,0 +1,6 @@
+* text=auto eol=lf
+# Public trace fragments and receipts have byte-level provenance checks.
+tests/fixtures/** -text
+*.png -text
+*.jpg -text
+*.woff2 -text

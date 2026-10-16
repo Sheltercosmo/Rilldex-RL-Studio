@@ -1,0 +1,11 @@
+**
+!Dockerfile
+!pyproject.toml
+!README.md
+!rilldex/
+!rilldex/**
+!tracker/
+!tracker/**
+**/__pycache__/
+**/*.pyc
+**/.env*

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="80" viewBox="0 0 260 80" role="img" aria-labelledby="title desc">
+  <title id="title">Rilldex</title>
+  <desc id="desc">Rilldex — RL Behavior Inspector. A branching path forms an R.</desc>
+  <g transform="translate(8 8)">
+    <rect width="64" height="64" rx="18" fill="#19212f"/>
+    <path d="M20 46V18h12c8 0 12 4 12 10s-4 10-12 10H20" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="m32 38 12 8" fill="none" stroke="#75e2ca" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <text x="92" y="47" fill="#19212f" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="42" font-weight="650" letter-spacing="-1.4">Rilldex</text>
+  <text x="94" y="66" fill="#626d7f" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="500">RL Behavior Inspector</text>
+</svg>

@@ -1,0 +1,15 @@
+# Copy to ~/.config/systemd/user/rilldex.service after replacing paths.
+[Unit]
+Description=Rilldex RL inspection workspace
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/REPLACE/rilldex
+ExecStart=/home/REPLACE/rilldex/.venv/bin/rilldex --db /home/REPLACE/rilldex/workspace/tracker.sqlite start
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+
+[Install]
+WantedBy=default.target

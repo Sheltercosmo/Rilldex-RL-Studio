@@ -1,0 +1,342 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rilldex · Integration guide</title><link rel="stylesheet" href="/connections.css"><link rel="stylesheet" href="/workspace.css"><link rel="icon" type="image/svg+xml" href="/rilldex-mark.svg"><meta name="theme-color" content="#19212f"><meta name="description" content="Rilldex — RL Behavior Inspector. Monitor training, explore behavior maps and inspect rollout evidence."></head>
+<body class="workspace" data-app="connections"><header class="workspace-bar"><div><a class="breadcrumb" href="/connections">Connections /</a><strong>Integration guide</strong></div><div class="bar-actions"><a href="/connections">Back to connections</a></div></header><main>
+<div class="page-head"><div><h1>Capture once, inspect across frameworks</h1><p>Choose the richest record your rollout code actually exposes. The tracker SDK does not import a trainer or run an inference model.</p></div></div>
+<section id="deployment"><h2>Run where your training data lives</h2><p>One saved connection reads existing rollouts, then follows new output. You can attach halfway through training without changing or restarting the trainer.</p><nav class="capture-tabs" aria-label="Deployment setup"><a href="#deployment-local">Local OS</a><a href="#deployment-docker">Docker</a><a href="#deployment-remote">Remote GPU host</a><a href="#deployment-cloud">S3 / GCS</a><a href="#deployment-notebook">Colab / notebook</a><a href="#deployment-restart">Stop &amp; restart</a></nav>
+<details id="deployment-local"><summary>Ubuntu, Windows or macOS · separate collector environment</summary><p>Use Python 3.11+ independently of your trainer. No GPU, Node or model key is needed. From this checkout:</p><pre class="code">python -m venv .venv
+# Ubuntu / macOS
+.venv/bin/python -m pip install .
+.venv/bin/rilldex --db ./workspace/tracker.sqlite start --open
+# Windows PowerShell
+.venv\Scripts\python.exe -m pip install .
+.venv\Scripts\rilldex.exe --db ./workspace/tracker.sqlite start --open</pre><p>On Ubuntu use python3 if needed and install python3-venv if venv is missing. Offline machines can install the built wheel with pip --no-index --no-deps. This development package is not assumed to be on PyPI. Pin the database path so a different working directory does not create a new workspace.</p></details>
+<details id="deployment-docker"><summary>Docker · persistent volume, read-only job output</summary><p>Create outputs/ beside compose.yaml, or set RILLDEX_OUTPUT_DIR to an existing absolute output directory in a .env file. Set RILLDEX_INPUT_MODE to exports (JSONL), native (Harbor/SWE-agent) or snapshots (one JSON per rollout). Keep RILLDEX_PRODUCER and RILLDEX_EXPERIMENT stable.</p><pre class="code">docker compose up --build -d --wait
+# Open http://127.0.0.1:8765
+
+docker compose stop
+docker compose start</pre><p>The non-root container keeps the workspace in jev-data and reads /outputs. Existing files are collected, then new files and appended rows. Stop/start and container recreation retain that volume; do not use down --volumes for a normal stop. RILLDEX_PORT changes both the internal and localhost-published port. The base image does not include cloud SDKs.</p></details>
+<details id="deployment-remote"><summary>Remote Ubuntu / GPU host · inspect over SSH</summary><p>Run the collector beside accessible output in a persistent CPU session or service, independently of training:</p><pre class="code">rilldex --db /local-disk/jev/workspace.sqlite start --watch /jobs/run-a/outputs --mode exports --experiment run-a --producer run-a/exports
+# On your workstation, use the same port on both ends:
+ssh -N -L 8765:127.0.0.1:8765 training-host</pre><p>Open localhost:8765 on your workstation. Closing the tunnel does not stop a separately running collector. A sample systemd user service is in deploy/rilldex.service; replace its absolute paths. Keep SQLite on local persistent disk, not NFS or object mounts. Cluster scheduling and file permissions are site-specific.</p></details>
+<details id="deployment-cloud"><summary>S3 or Google Cloud Storage · existing objects and future output</summary><p>Install the storage extra in the collector, then use the cloud prefix directly in Watch a job or the CLI:</p><pre class="code">python -m pip install '.[s3]'
+rilldex --db ./workspace/tracker.sqlite start --watch s3://bucket/run-a/outputs --mode exports --experiment run-a --producer run-a/cloud
+# GCS: install '.[gcs]' and use gs://bucket/run-a/outputs
+# Check without importing: rilldex watch PREFIX ... --check
+# Drain completed output: rilldex watch PREFIX ... --once</pre><p>Use the host's SDK credentials/profile/workload identity. Never put keys or signed URLs in this form. The source is read-only. Changed objects are cached beside the database before normal ingestion; interrupted downloads retain the previous copy. Restart resumes the cache and cursors. A cloud outage shows Using cached output: already downloaded records continue, while new remote output is unknown. The last complete cloud sync is separate from receipt time. One-off replay exits unsuccessfully until cloud access returns. Deleting an object does not erase saved evidence.</p><p>For S3-compatible storage, set the standard endpoint before starting the collector; keep credentials in its SDK environment/profile:</p><pre class="code"># Ubuntu / macOS
+export FSSPEC_S3_ENDPOINT_URL=https://your-object-storage.example
+# Windows PowerShell
+$env:FSSPEC_S3_ENDPOINT_URL='https://your-object-storage.example'</pre><p>The source remains s3://bucket/prefix. This route was checked with the real s3fs client and a local Moto HTTP service using authored data. Real account permissions and production endpoints still need validation. Run the collector separately from training that forks worker processes; s3fs requires spawn or forkserver when sharing a process.</p><p>Preview downloads at most five objects and 32 MiB into temporary storage. Collection accepts objects up to 1 GiB, at most 100 changed objects per pass. Prefer narrow prefixes and bounded immutable shards: this polls storage and can re-download growing objects. Overwritten intermediate snapshots cannot be recovered. Azure or other cloud CLIs can mirror to a local watched directory; native Azure integration is not included.</p></details>
+<details id="deployment-notebook"><summary>Colab / notebooks · capture without a persistent web server</summary><p>Install the wheel in the runtime and keep the active database on runtime-local disk. Rerunning the setup cell reuses the session; no public tunnel or model call is required.</p><pre class="code">from pathlib import Path
+from tracker.notebook import open_workspace
+Path('/content/outputs').mkdir(parents=True, exist_ok=True)
+inspection = open_workspace('/content/rilldex/workspace.sqlite')
+inspection.watch('/content/outputs', producer='run-a/exports',
+                 experiment='run-a', mode='exports')
+inspection.start()
+inspection.status()
+inspection.rollouts(10)
+
+inspection.stop()  # returns stopped or stopping
+inspection.status()['state']  # wait for stopped before starting again
+inspection.snapshot('/content/inspection-001.rilldex.zip')
+from google.colab import files
+files.download('/content/inspection-001.rilldex.zip')</pre><p>Save the archive and source outputs outside the runtime before it is deleted. Copy a finished archive to Drive, not a live SQLite database. Restore the archive locally to use the full map and investigation UI. Restored connections are paused; change the output location and resume. The helper cannot recover unsaved runtime data or keep Colab alive. A hosted notebook web UI is not implemented.</p></details>
+<details id="deployment-restart"><summary>What survives each stop?</summary><div class="table-wrap"><table><tr><th>Event</th><th>Recovery</th></tr><tr><td>Browser or SSH tunnel closes</td><td>Reopen it; a separately running collector continues.</td></tr><tr><td>Collector stops / host reboots</td><td>Start the same database. Enabled connections read the backlog then follow new output.</td></tr><tr><td>Training stops / resumes</td><td>Keep producer and relative paths; use new IDs/files for new samples.</td></tr><tr><td>Cloud/network outage</td><td>Accepted evidence remains; restore access and retries continue.</td></tr><tr><td>Container removed</td><td>Recreate with the same named volume, or restore an exported workspace.</td></tr><tr><td>Notebook runtime deleted</td><td>Restore an externally saved archive or replay retained output.</td></tr></table></div><p>Pause waits for the current storage read to finish; other sources continue. A slow read stays visibly <strong>Pausing</strong>, and Resume waits for its reader to exit. Change output location only after collection stops. Another collector using this workspace and producer waits for ownership; CLI watch reports the conflict. Closing or crashing the owner releases the OS lock. Do not delete marker files in <code>.jev-capture-locks</code>.</p><p>Use one watched directory/prefix for history and future input. Repeatedly uploading a growing file uses a different frozen-artifact identity. Explicit revision envelopes retain producer/rollout/revision identity across file and HTTP delivery.</p></details>
+<p class="muted">Validation: Windows installed-package checks, cloud protocol controls and notebook lifecycle tests are local. Ubuntu/macOS and real Docker lifecycle jobs are configured in CI but have not run on this host. Real S3/GCS credentials, Colab runtimes and GPU clusters still require runtime validation.</p></section>
+
+<section id="start"><h2>1. Start before, during or after training</h2><pre class="code"># In this project, or install its wheel in a separate collector environment:
+python -m pip install .
+rilldex start --open</pre><p>Use <a href="/connections#directory-section">Watch a job</a> for an empty directory, a running job or completed output. Native collection reads Harbor / SWE-agent files and late results. JSONL collection replays existing records, then follows appended rows from any supported single-rollout adapter.</p><pre class="code">rilldex start --watch ./outputs --mode exports --experiment run-a --producer run-a/worker-0
+
+# Replay a completed export directory without starting a server:
+rilldex watch ./outputs --mode exports --experiment run-a --producer run-a/worker-0 --once
+
+# Check local installation and storage; select a free port:
+rilldex doctor --port 0
+rilldex start --port 0</pre><p>Keep the same database, producer, experiment and relative filenames when resuming. Every JSONL row must end with a newline. Raw records mean a complete exported rollout; use explicit revision envelopes for ongoing work. An accepted row cannot be rewritten. Import files is for frozen artifacts, not repeated uploads of a growing file.</p><p>The default database is <code>.tracker/tracker.sqlite</code> under the working directory; pin it with <code>rilldex --db /local-disk/tracker.sqlite start</code>. Windows, Linux and macOS use the same CLI. Keep SQLite on local disk. On a training host, omit <code>--open</code> and forward the port with <code>ssh -L 8765:127.0.0.1:8765 training-host</code>. Public multi-tenant deployment is not implemented.</p><h3>Check a directory, then follow it</h3><p>For portable conversations, episodes or generations, choose <strong>JSON — one file per rollout</strong> in Connections. Updating the same relative filename creates a revision. Use the Harbor / SWE-agent route when native sidecars and continuations matter.</p><pre class="code">rilldex watch ./outputs --mode snapshots --experiment run-a --producer run-a/worker-0 --check
+rilldex start --watch ./outputs --mode snapshots --experiment run-a --producer run-a/worker-0</pre><p>The check decodes up to five files and reports usable evidence, missing training coordinates and invalid or incomplete input. It makes no model calls and imports no records. For completed output, use the same <code>rilldex watch</code> command with <code>--once --snapshot-state complete</code>. Keep the same database, producer and relative filenames to resume without duplicates.</p><p>Raw JSON defaults to work in progress. Explicit envelopes supply their own identity, revision and state. Polling sees saved snapshots; use the outbox or append-only JSONL when every intermediate revision must survive. Prefer atomic file replacement when writing snapshots. Frozen file import uses separate artifact identities.</p></section>
+<section id="workspace-transfer"><h2>Move the inspection workspace</h2><p>Use <strong>Connections → Import files → Move or back up this workspace</strong> to download a portable snapshot while collection continues. The CLI supports the same export and a verified restore into a new database:</p><pre class="code">rilldex --db ./current.sqlite workspace snapshot experiment.rilldex.zip
+rilldex workspace inspect experiment.rilldex.zip
+rilldex --db ./restored.sqlite workspace restore experiment.rilldex.zip
+rilldex --db ./restored.sqlite start --open</pre><p>Restoration refuses to overwrite an existing file. Sources, graphs, measurements, investigations and review notes retain their identities. Available observer results are frozen with their audit receipts, so inspecting them does not require the original absolute paths. Read the manifest for unavailable observer results. This preserves an earlier structural audit; it does not rerun or independently validate it.</p><p>Collection and pending inference are paused in the copy. Reconnect the intended output directories before resuming. External worker outboxes, training data and original candidate-generation/audit workspace files are not included; keep those when continuing extraction development. The archive contains your recorded source data and is saved locally.</p></section>
+<section><h2>2. Identify the rollout and the clock</h2><pre class="code">from tracker.capture import Outbox
+
+tracker = Outbox("worker-0.sqlite", producer="experiment-a/worker-0").start()
+metadata = {
+    "experiment": "experiment-a", "task_id": task_id,
+    "sample_id": sample_id, "rollout_n": repeat, "split": "train",
+    "training_step": generation_iteration,
+    "training_step_basis": "generation_iteration",
+    "generation_step": generation_iteration, "learner_step": learner_iteration,
+    "policy_version": generating_policy_version,
+    "environment": environment_name, "environment_version": environment_version,
+    "sampling": "all rollout completions", "training_inclusion": "pending",
+    "reward_definition": "my-reward-v1"
+}</pre><p>These variables must come from your producer. Omit unknown fields. Do not reuse the learner step as the generating policy identity in asynchronous training. Preserve per-call policy versions in native trajectory records when a rollout spans a weight change.</p><p>One outbox belongs to one producer/worker. Keep its file across restarts. Keep the same rollout ID across snapshots and distinct IDs for repeats; do not substitute a prompt hash for a repeated sample's identity.</p></section>
+<section class="recipe"><h2>3A. Chat and tool workflows</h2><pre class="code">from tracker.portable import chat_document
+
+document = chat_document(
+    messages=agent_visible_messages, tools=tool_definitions,
+    metadata=metadata, reward=explicit_final_reward,
+)
+tracker.log(rollout_id, document, state="complete")</pre><p>Supply recorded system/developer/user/assistant/tool messages. Calls and results bind by native IDs, including parallel calls. Missing IDs stay unlinked. Invalid generated argument strings remain observable attempts. Do not concatenate private user-simulator tools or independent subagent histories into the assistant's context.</p><p>ART exposes a materialized message history; TRL, slime, OpenRLHF and AReaL expose rollout/agent hooks. Those are candidate bridge locations, not adapters tested inside each trainer. Check the <a href="/connections#integration-catalog">framework evidence matrix</a> before choosing one.</p></section>
+<section class="recipe"><h2>3B. Environment steps</h2><pre class="code">from tracker.portable import Episode
+
+episode = Episode(metadata=metadata, goal=explicit_agent_task,
+                  episode_id=rollout_id)
+observation, info = env.reset()
+episode.reset(observation, info)
+while True:
+    # Use your existing policy and action parser; capture does not call a model.
+    model_response = policy_response(observation)
+    saved_response = str(model_response)  # Preserve before a mutating parser.
+    action = parse_action(model_response)
+    result = env.step(action)  # Gymnasium's five-value result
+    episode.gym_step(action, result, model_response=saved_response)
+    observation, reward, terminated, truncated, info = result
+    done = terminated or truncated
+    # For long trajectories, batch intermediate snapshots to a chosen cadence.
+    tracker.log(rollout_id, episode.snapshot(),
+                state="complete" if done else "in_progress")
+    if done:
+        break</pre><p>Supplying <code>episode_id</code> enables version 2: each turn preserves model text, the dispatched action and returned observation as separate linked records. Optional <code>turn_id</code> and <code>response_id</code> retain native identity; otherwise turn IDs use the captured episode sequence. Omit <code>model_response</code> when unavailable. <strong>Turns with model text</strong> reports coverage; it does not measure semantic accuracy. Capture text before a parser changes it in place. One response dispatching several actions needs the conversation/batch contract, not duplicated text across turns.</p><p>NumPy scalars are converted. Project state arrays explicitly with <code>tolist()</code>; store screenshots/audio as typed media references. <code>Episode(..., visible_context=...)</code> can preserve action meanings and observation instructions that the agent actually received. Never put hidden evaluator state there.</p><p>OpenEnv has a different contract: use <code>episode.openenv_step(action, observation_object)</code>. Its native <code>done</code> does not say whether termination or truncation occurred. Environment <code>info</code>, step reward and ending flags remain separate from agent-visible observations. Additional histories and multi-agent state require their own trajectories.</p></section>
+<section class="recipe"><h2>3C. Verifiable reasoning / flat generations</h2><pre class="code">from tracker.portable import generation_document
+
+document = generation_document(prompt_text, completion_text,
+    metadata=metadata, reward=explicit_final_reward)
+tracker.log(rollout_id, document, state="complete")</pre><p>Text length, explicit score and supplied training coordinates are measurable. Internal actions and action/result relationships are unavailable. Decode token IDs with the matching tokenizer before capture; the tracker does not guess one. Existing verl JSONL exports use <code>python -m rilldex import output.jsonl --format verl-generation --metadata experiment.json</code>, with at least <code>{"experiment":"your-run"}</code> in the metadata file. The browser accepts the same file through its Experiment name field. Original bytes and physical line numbers distinguish repeated samples; no step is inferred from the filename.</p></section>
+<section class="recipe"><h2>3D. Native τ-bench text results and batch files</h2><pre class="code"># A native Results JSON can contain many simulations:
+python -m rilldex check results.json
+python -m rilldex import results.json
+
+# Explicit experiment identity for JSONL:
+python -m rilldex check generations.jsonl --metadata experiment.json
+python -m rilldex import generations.jsonl --metadata experiment.json</pre><p>Native text Results bundles and single SimulationRun records are detected automatically. Each rollout preserves its simulation, matching task, shared config and original collection location. Assistant and user-side tools remain distinct; private simulator state stays outside agent context. Native tool errors, scalar reward and episode ending are separate facts. Current voice, chunk and tick streams need a dedicated adapter.</p><p>In <a href="/connections#snapshot-section">Data connections</a>, check an entire file before saving, review aggregate coverage and open individual previews. Every record validates before a per-file transaction: a bad final line saves nothing from that file. Separate files are separate transactions. Unchanged bytes with the same metadata reimport without duplicate records.</p><p>Browser uploads allow 14 MiB of source bytes. Use the CLI for files up to 100,000,000 bytes, including the published 37 MB telecom results. The native replay covers 656 published simulations; it does not claim execution of the simulator or training-time semantic accuracy.</p></section>
+<section class="recipe" id="trl-grpo"><h2>3E. TRL GRPO reward callback</h2><pre class="code">import trl
+from tracker.trl_capture import GRPOCapture
+
+# `tracker` is the started Outbox above, unique to this worker/component.
+capture = GRPOCapture(
+    tracker, experiment="experiment-a",
+    reward_definition="my-reward-component/v1",
+    trainer_version=trl.__version__, on_error="warn",
+    context=lambda: {
+        "split": "train" if trainer.model.training else "evaluation",
+        "worker_rank": trainer.accelerator.process_index,
+        # Supply actual sampler policy identity if known.
+    },
+)
+trainer = trl.GRPOTrainer(
+    model=model, args=training_args, processing_class=tokenizer,
+    train_dataset=dataset,
+    reward_funcs=capture.wrap_reward(my_reward_function),
+)
+trainer.train()
+print(capture.status())</pre><p>Put <code>tracking_task_id</code> and <code>tracking_sample_id</code> into dataset columns when available. Repeated completions remain distinct. This callback records one reward component and the trainer global-step counter at scoring time; a generation batch reused for multiple optimizer steps is captured once. It does not prove which samples entered the loss. Train and evaluation curves stay separate.</p><p>Explicitly choose <code>on_error="warn"</code> to continue the reward function with a warning and missing capture, or <code>"raise"</code> to stop on capture failure. A reward exception is retained as a failed scoring source when possible and then re-raised. Every callback batch commits atomically to the local queue; HTTP delivery remains per rollout. Use separate queues for workers and separately captured reward components.</p><p>Verified: actual TRL 1.13.0 CPU training/evaluation, 16 completions, identical capture-on/off model results, lost-acknowledgment recovery and source-linked charts. TRL 1.15.0 failed on this Windows CPU in its required Triton path. GPU, distributed workers, vLLM and live tools need separate validation. Capture occurs after generation; use an execution hook for intermediate steps or tool identities missing from reward inputs.</p></section>
+<section class="recipe" id="trl-a2po"><h2>3F. TRL A*-PO training capture</h2>
+<p>Capture cached-baseline RL through its native reference-sampling and on-policy regression stages. Effective settings select the relevant training-health view automatically.</p>
+<pre class="code">from trl.experimental.a2po import A2POTrainer
+from tracker.trl_a2po_capture import A2POCaptureMixin
+
+class ObservedA2PO(A2POCaptureMixin, A2POTrainer):
+    pass
+
+# `tracker` is the started Outbox above.
+trainer = ObservedA2PO(
+    training_outbox=tracker, experiment="a2po-run",
+    reward_definition="my-combined-reward/v1",
+    model=model, args=training_args,
+    processing_class=tokenizer, train_dataset=dataset,
+    reward_funcs=reward_function,
+)
+trainer.train()
+print(trainer.capture_counts)</pre>
+<p><strong>Validated:</strong> TRL 1.13.0, Transformers 5.19.0, Accelerate 1.15.0, Torch 2.14.1; single-process FP32 CPU, native AdamW and plain-text prompts. Version and execution-mode gates reject unsupported runtimes. GPU/distributed use, resume, conversational inputs and custom trainer extensions remain unvalidated.</p>
+<p>Open <a href="/?view=health">Training health</a>, choose the experiment and leave <strong>View → Automatic</strong>. Prediction error, target, reward and cached baseline link to exact samples. Backward completion and optimizer completion are separate record streams. The displayed per-use MSE is not automatically the scaled total trainer loss. Reference completions are retained separately without invented training membership.</p>
+<p>The strict opt-in hook stops on capture errors and invokes no extra model or reward calls. Native capture-on/off CPU controls produced identical model updates. See <code>docs/TRL_A2PO_CAPTURE.md</code> and <code>research/a2po-native-2026-10-12/README.md</code> in the workspace for the full audit and limits.</p></section>
+<section><h2>4. Check evidence, then monitor</h2><p>Use <a href="/connections#snapshot-section">Check evidence</a> before connecting a producer, or run <code>python -m rilldex check snapshot.json</code> without a server or database. POST <code>{"document": ..., "format": "auto", "metadata": {...}}</code> to <code>/api/integrations/check</code> for the same check through HTTP. The response lists available measurements, missing clocks, unlinked results and uninspected media; no data is saved.</p><p>After ingestion, open <a href="/">Monitor</a> → Add monitor → Recorded source. Environment records add episode return, steps, termination and truncation alongside the existing reward and action measures. Values link to immutable source evidence. Completed rollouts enter population trends; intermediate revisions remain inspectable. Semantic failure/revision, plan and strategy metrics require a suitable saved observer and domain validation.</p><details><summary>HTTP ingestion without the Python SDK</summary><p>The SDK requires Python 3.11+. Any language can POST a JSON envelope like this to <code>/api/ingest</code>. Revisions start at zero, increase consecutively, and retries must repeat exactly the same payload. Persist queued requests before sending.</p><pre class="code">{
+  "producer": "experiment-a/worker-0", "rollout_id": "8/sample-2/0",
+  "revision": 0, "state": "complete", "format": "auto",
+  "document": {
+    "trajectory_format": "generation/1", "prompt": "Question", "completion": "Answer",
+    "outcome": {"reward": 1},
+    "metadata": {"experiment": "experiment-a", "training_step": 8,
+                 "training_step_basis": "generation_iteration"}
+  }
+}</pre></details></section>
+<section id="worker-delivery"><h2>5. Follow each worker's delivery</h2><pre class="code">tracker = Outbox(
+    "worker-0.sqlite", producer="experiment-a/worker-0"
+).start(report_status=True, report_interval=5)
+
+print(tracker.status())  # includes delivery_report_error, if reporting failed</pre><p><a href="/connections#worker-section">Worker delivery</a> shows the last reported pending/blocked snapshot counts, queue capacity and oldest queued age alongside collector-confirmed revisions and rollouts. Reports contain counters and queue identity, not source text, local paths or raw error messages. They do not establish capture completeness or model/training health.</p><p>Reporting runs independently of delivery. A slow ingestion request does not prevent a queue report. A report becomes overdue after the larger of 15 seconds or three report intervals. No report means unknown queue state; an overdue report is not proof of a dead worker. Graceful close attempts a final sender-stopped report. An offline shutdown may leave the last report overdue instead.</p><p>Keep the same outbox file across restarts: its identity and monotonically increasing report sequence survive. Delayed or duplicated reports cannot refresh stale status, and replacing a queue under an existing producer is rejected. Reporting is opt-in and requires an updated collector; a report failure is recorded locally and never blocks source delivery. Reading an outbox with the CLI does not send a report.</p></section>
+<section><h2>6. Delivery and operating limits</h2><pre class="code">print(tracker.status())  # pending, blocked, oldest pending age, errors
+tracker.close()          # stops delivery; does not discard or flush pending data
+
+# Resume delivery after a restart:
+python -m rilldex outbox worker-0.sqlite --producer experiment-a/worker-0 --send</pre><p>Local logging serializes and commits to disk; it is not zero overhead. HTTP delivery retries exact revisions. Each request is limited to 20 MiB and pending storage defaults to 256 MiB; full queues raise an error. Catch that error in your integration, retain the native record, and record any deliberately reduced sampling. Full snapshots grow with trajectory length: use bounded sampling/cadence and inspect queue age. S3/GCS files can use the cloud collection route above. Delta ingestion, distributed throughput validation, OTLP and automatic Responses-event translation are not implemented.</p><p>Capture and source metrics require no model tokens. Semantic analysis cost is separate. This release has a real Gymnasium runtime audit and contract tests, not a distributed RL throughput benchmark.</p></section>
+<section class="recipe" id="inspection-budgets"><h2>7. Bound semantic inspection work</h2><p>Source capture and source metrics do not require inference. Coherent semantic units need proposed boundaries, activities and readable contents before Jev selects among them. A general candidate generator is not bundled: supply candidate files or configure a JSON candidate command. Dashboard reads do not run this workflow.</p><p>For long-running rollouts, add <code>--live-prefixes</code> when creating a <code>semantic watch-init</code> worker. It observes received snapshots before completion, reuses exact earlier requests and preserves lifetime spending limits. Streaming rows link the behavior map only when it covers the current snapshot. Unfinished rollouts stay out of completed-rollout monitor values. A failed earlier prefix still requires an explicit retry when the source grows. See <code>docs/SEMANTIC_WORKSPACES.md</code> for the command contract and operating limits.</p><pre class="code"># Freeze one imported rollout and queue initial requests (no inference):
+python -m rilldex semantic prepare inspection --run-id YOUR_RUN_ID
+
+# Inspect queue, coverage and any recorded usage:
+python -m rilldex semantic status inspection
+
+# Resume supplied candidates with an explicit per-execution allowance:
+python -m rilldex semantic run inspection --prompt-key --max-new-calls 20 --max-candidate-calls 0 --max-input-bytes 500000
+
+# Validate source bindings and saved selections without inference:
+python -m rilldex semantic audit inspection</pre><p>Defaults allow up to 50 new Jev request invocations, 50 candidate process invocations and 1,000,000 combined UTF-8 request bytes per execution. Resume starts a new allowance; cached work does not consume it. Set all three limits to zero for cache-only execution. Limits do not change Jev's maximum-probability selection.</p><p>A budget stop saves the current incomplete pass and preserves the last completed map. Status reports eligible, visited and unvisited source windows, selected source-byte coverage, stage attempts and provider-reported token usage. Coverage measures annotation progress, not semantic accuracy. Calls without token reports remain unknown. Limits count request invocations and payload bytes, not billed tokens or money: Jev may retry internally, and a candidate command may make several model calls. Keep its own provider-side limits and metering.</p><p>Collect and compare inspection coverage alongside behavior rates. Inspecting only failures or short rollouts changes the sample population; those rates cannot be presented as whole-training prevalence. Keep sampling choices explicit and compare compatible observer protocols.</p></section>
+<section class="recipe" id="work-state"><h2>8. Connect checks to the state they tested</h2><p>Use <code>WorkStateRecorder</code> beside the tool loop to connect actual input versions, edits, check results and deliveries to source events. It enriches an existing trajectory for the same outbox/import route. This supplies the state graph behind recorded-criterion recovery and verification-at-delivery monitors.</p><pre class="code">from tracker.state_capture import WorkStateRecorder, source_ref, file_versions
+
+state = WorkStateRecorder(environment=actual_environment_version)
+action = source_ref("/trajectory/0/action")
+result = source_ref("/trajectory/0/observation")
+snapshot = state.snapshot(action, file_versions(workspace, input_paths))
+state.check(action, result, snapshot=snapshot,
+    criterion_id="acceptance", criterion_version=actual_criterion_version,
+    required_objects=input_paths, outcome=recorded_outcome,
+    state_stable=None)
+
+enriched = state.attach(native_trajectory, format="swe-agent")
+outbox.log(rollout_id, enriched, format="swe-agent", state="complete")</pre><p>Record the inputs at dispatch and the outcome after the actual result arrives. Supply the criterion and dependency scope explicitly. <code>state_stable=True</code> requires producer evidence that the scoped inputs stayed fixed, such as execution over captured immutable inputs. Equal before/after hashes alone are insufficient. Unknown stability leaves recovery and final applicability unknown.</p><p>Use <code>state.edit(..., before=..., after=...)</code> for actual state changes and <code>state.deliver(..., snapshot=..., requirements=[...])</code> for explicit delivery requirements. JSON business/browser objects can use <code>object_version(value)</code>. The recorder resolves source pointers or exact call IDs, rejects missing or ambiguous bindings, and never rewrites source messages or overwrites existing state evidence. File hashes do not retain file contents.</p><p>In <a href="/monitors">Monitors</a>, add an analysis measure for checks bound to state, recovery of the recorded criterion, or verification applicable at delivery. These describe recorded work and evidence, not inferred strategy or whole-task success. The executed audit covers eight controlled software/business cases across SWE-agent, Harbor/ATIF and chat encodings; it is not a live agent-framework evaluation.</p></section>
+<section class="recipe" id="mini-agent"><h2>9. Connect mini-SWE-agent v2</h2><p>Use the public save hook in the producer environment. This integration was executed with upstream 2.4.6 using its default agent, local environment and deterministic models. Text, tool-call and Responses API records retain parsed actions, actual outputs and interruption reasons.</p><pre class="code">from minisweagent.agents.default import DefaultAgent
+from tracker.capture import Outbox
+from tracker.mini_capture import CaptureMixin, MiniCapture
+
+class ObservedAgent(CaptureMixin, DefaultAgent):
+    pass
+
+outbox = Outbox("worker-0.sqlite", producer="run-a/worker-0").start(report_status=True)
+capture = MiniCapture(outbox, rollout_id=actual_rollout_id,
+    context=lambda: actual_rollout_metadata, on_error="warn")
+agent = ObservedAgent(model, environment, capture=capture, **agent_config)
+try:
+    result = agent.run(task)
+finally:
+    print(capture.counts, capture.last_error, outbox.status())
+    outbox.close()</pre><p>The original native file is saved first. Logging queues a full snapshot locally; the background worker delivers it. <code>warn</code> preserves execution and reports capture failures; choose <code>raise</code> to stop on capture failure. Closing does not guarantee delivery: preserve the outbox and replay pending revisions. Use a new rollout identity for every new run.</p><p>A recorded step limit or repeated format-error stop is a complete trace, not task success. Unexpected exception exits remain failed/partial. No training step is inferred from model-call counts. To add state-aware measures, supply <code>enrich=lambda doc: state.attach(doc, format="mini-swe-agent")</code> using versions captured in the actual environment hook. Capture uses no model tokens; semantic processing is separate. Full snapshots grow with trajectory length: watch backlog and storage. The native audit uses authored outputs and does not validate policy quality, containers or distributed training.</p></section>
+<section id="training-samples"><h2>Join behavior to training samples</h2><p>The <a href="/?view=training">Training samples view</a> compares existing behavior monitors across explicitly recorded populations. Sample declarations, scores, filter decisions and individual training uses arrive independently. A reward callback alone does not prove optimizer use.</p><pre>from tracker.capture import Outbox
+
+outbox = Outbox("training-worker.sqlite", producer="experiment-a/worker-0")
+sample = {"producer": "experiment-a/worker-0", "rollout_id": actual_rollout_id}
+outbox.log_training("experiment-a", [{
+    "id": "sample/" + actual_rollout_id, "revision": 0, "kind": "sample",
+    "sample": sample,
+    "evidence": {"basis": "native generator record", "source_revision": 0},
+    "data": {"split": "train", "group_id": actual_native_group_id}
+}])
+# Source revision 0 is delivered through outbox.log(...).
+# Additional score, selection and use records refer to the same sample.
+# Start delivery or replay with the existing `outbox --send` command.</pre><p>Stable record identities make retries idempotent. Score/selection corrections increment their own revision; they do not rewrite the rollout. Missing facts remain unknown. Retain the producer and rollout identities across delivery restarts and use a fresh identity for each genuinely new rollout.</p><details><summary>Opt-in TRL training-use adapter</summary><pre>from trl import GRPOTrainer
+from tracker.trl_lineage import GRPOTrainingLineageMixin
+
+class ObservedTrainer(GRPOTrainingLineageMixin, GRPOTrainer):
+    pass
+
+# capture is the GRPOCapture instance from the reward-function recipe.
+trainer = ObservedTrainer(
+    training_capture=capture,
+    confirm_optimizer_steps=True,  # optional, additional runtime pins apply
+    reward_funcs=capture.wrap_reward(my_reward_function),
+    model=model, args=training_args,
+    train_dataset=dataset, processing_class=tokenizer,
+)</pre><p>This private-hook adapter is version-gated to TRL 1.13.0, single-process CPU, one wrapped reward function, no tools/custom rollout, and at most 256 local completions. It retains identities through native shuffle, splitting and reuse. Backward completion and a positive native completion mask are recorded separately. Optimizer confirmation additionally requires Transformers 5.19.0, Accelerate 1.15.0, Torch 2.14.1 and native adamw_torch. It follows accumulated sample identities to a non-skipped optimizer callback, with a 1,000-use window cap. Its records establish update membership, not nonzero loss, gradient or per-sample parameter effect. Without this opt-in, capture remains backward-only. Other trainers can emit the same generic record contract without adopting this mixin. No GPU/distributed compatibility is claimed.</p></details></section>
+<section id="training-unit-coverage"><h2>Connect training use to behavior units</h2><p>Training health → Inspect recorded derivatives → Inspect training coverage opens the existing behavior map. Its activity breakdown counts eligible source tokens and observed zero/nonzero policy-loss derivatives; select a unit to keep its target and relationships beside those counts.</p><p>The optional <code>training-token-source/1</code> object in <code>data.policy_gradient.source_alignment</code> pins the source hash and one Unicode code-point span (or null) per native target token. The validated TRL capture path attempts an exact tokenizer round trip automatically. Unmapped tokens, crossed unit boundaries and unavailable annotations remain outside unit totals. This is a source-membership observation, not causal behavior credit. Existing immutable uses cannot be retroactively enriched.</p></section>
+<section id="recovery-attempts"><h2>Follow recovery across complete rollouts</h2><p>Record executed attempts with <code>data.attempt</code> in sample records, and the verifier’s explicit <code>data.attempt_outcome</code> in score records. The automatic Training health view then shows first-attempt success, first-retry success, cumulative success within budget and paths into each rollout. Existing saved behavior measures can be compared by attempt position.</p><pre class="code">sample_data["attempt"] = {
+    "schema": "recovery-attempt/1", "producer": "controller",
+    "chain_id": chain_id, "attempt_id": attempt_id,
+    "position": 2, "budget": 3, "previous_attempt_id": previous_id,
+    "protocol": "feedback-reset/v1", "context": "failure_feedback",
+    "reset": "original_state"
+}
+score_data["attempt_outcome"] = {
+    "schema": "attempt-outcome/1", "attempt_id": attempt_id,
+    "result": "passed"  # the native verifier's result, not shaped reward
+}</pre><p>Require a sample task ID. Initial attempts use position 1, null predecessor and initial context. Other retry contexts are fresh_retry, other or unrecorded; reset can be continued_state or unrecorded. Send via your existing <code>Outbox.log_training</code> records. Repeat the same attempt declaration when it produces several samples. Do not send unexecuted padding. Missing retries remain unresolved; native reward values are never converted to success. Trends require an explicit initial generation coordinate. This portable contract has executed local controls; native recovery-trainer integration is still pending.</p></section>
+<section id="policy-age"><h2>Track policy age and behavior</h2><p>On the validated TRL CPU path, <code>confirm_optimizer_steps=True</code> records generation and learner policy counters automatically. Training health shows policy-age curves, coverage and saved behavior comparisons. No token-derivative capture or model annotation is needed for the counters.</p><p>Other trainers can include <code>generation-policy-history/1</code> as a sample's <code>policy_history</code> and <code>policy-clock/1</code> as a use's <code>learner_policy</code>. Both clocks must share the producer-declared identity, origin and unit (<code>optimizer_update</code> or <code>policy_publication</code>). Segment bounds refer to generated target tokens. Keep partial and mixed-policy rollouts explicit; do not infer indexes from checkpoint names or arrival times.</p><p>Age counts all recorded generated targets, including masked ones. Backward and optimizer stages stay separate. Saved behavior measures describe source-rollout context and are deduplicated within each age group. Click a curve point or group to inspect and export exact use records. Native asynchronous and other-framework capture still require validation.</p></section><section id="policy-gradients"><h2>Observe native policy update signals</h2><p>On the validated single-process CPU TRL path, add <code>capture_policy_gradients=True</code> to the lineage mixin. Training health → Inspect training use then shows zero-derivative fractions, zero despite nonzero advantage, and absolute derivative curves. Saved behavior measures can be compared across these use groups without new model calls.</p><p>This option defaults off. The native tensor hook reads the existing backward derivative and returns no replacement. Current scope requires TRL 1.13.0 / Torch 2.14.1 / Transformers 5.19.0 / Accelerate 1.15.0, native loss methods, no KL/entropy/router auxiliary objective, no Liger kernel or mixed precision, and text-only source alignment. Token observations are bounded to 131072 positions per batch and optimizer window.</p><p>The portable <code>policy-gradient-observation/1</code> object goes in a use record's <code>data.policy_gradient</code>, with an actual use recipe, component, definition, tokenizer, input digest, probability/reduction semantics, target IDs, binary mask and <code>d_loss_d_logp</code>. Missing observations remain unknown. Backward and optimizer stages are not added together. These derivatives include loss reduction and backward scaling; they are not parameter-gradient norms, optimizer changes or semantic-unit causal credit. Token storage and capture overhead have not been validated at production scale.</p></section>
+<section id="training-setup"><h2>Choose monitoring from your RL settings</h2><p>The validated TRL 1.13.0 CPU adapter automatically records selected effective settings at generation and backward boundaries. A changed setting creates a new immutable context; it does not relabel earlier samples. No configuration file or manual metric selection is needed on that path.</p><p>For verl and AReaL, use the resolved configuration from the training process. For NeMo RL, use the validated native MasterConfig and its model_dump(mode="json") result, so native defaults are included. This reader does not execute Hydra defaults, YAML expressions or launch scripts. Config recognition is separate from native sample delivery.</p><pre>from omegaconf import OmegaConf
+import json
+
+# Run after your framework has composed defaults and applied CLI overrides.
+from tracker.training_setup import prepare
+request = prepare("verl", OmegaConf.to_container(config, resolve=True),
+                  version=framework_commit, resolved=True)
+# prepare keeps only recognized RL settings; model paths/credentials are omitted.
+# Preview in-process; only recognized RL settings appear in the report.
+from tracker.training_setup import inspect
+report = inspect(request)
+print(report["label"], report["issues"])
+
+# Or save request as JSON, then open Connections → Training setup.
+# The local collector checks it without model calls or training changes.</pre><p>For the pinned verl-agent GiGPO path, use <code>prepare("verl_agent", OmegaConf.to_container(config, resolve=True), version=framework_commit, resolved=True)</code>. Episode and anchor-state groups are separate from prompt groups. The reader selects guidance for episode length weighting, state-group coverage and the two advantage terms. It reads <code>env.rollout.n</code> as the environment group size. A decoded input/output dump supports response inspection but cannot establish complete episodes or native group membership; capture trajectory/turn IDs and the actual advantage components in the trainer. No Jev call is needed to read these settings.</p><p>NeMo RL configuration export (reading settings does not install a trainer hook):</p><pre>from tracker.training_setup import prepare
+
+# master_config is the trainer's already validated native MasterConfig.
+request = prepare(
+    "nemo_rl", master_config.model_dump(mode="json"),
+    version="a5fba40266a2d696d4fb63c8b6e1278104840f90", resolved=True,
+)
+# Pass request to record(...) below, or save it as resolved-config.json.</pre><p>The reader separates reward baselines and GAE from the policy objective. It checks NeMo RL's incompatible CISPO and sequence-loss combinations, recognizes asynchronous scheduling and separate actor/critic passes, and reads verl rollout correction from <code>algorithm.rollout_correction</code>. Unknown or missing settings require review. It does not validate your entire trainer configuration or infer observed training from configuration alone.</p><p>CLI: <code>python -m rilldex training-setup resolved-config.json</code>. HTTP: <code>POST /api/training-setup</code>. Unknown versions, unrecognized objectives, unresolved fields and incompatible combinations remain explicit. No thresholds are invented. Supported objective families include clipped, capped and smooth weights; estimator, ratio unit and loss reduction remain separate.</p><pre>from tracker.training_setup import record
+reference = record(outbox, experiment, request)
+# At the native boundary, attach reference as data["recipe"] on each
+# sample or completed use record. Re-read settings when they change.</pre><p>The exported report contains only selected fields. Avoid including credentials in configuration exports. The declaration is partial: custom reward functions, auxiliary losses and runtime execution are not certified by configuration inspection. Metrics needing uncaptured native values, ratios or effective weights stay marked as pending.</p></section>
+<section id="native-rl-settings"><h2>OpenRLHF and slime settings</h2><p>Export after native argument validation and runtime overrides. The reader accepts flat argparse keys, nested namespaces or dictionaries. It copies recognized settings only; it does not execute callback paths. No manual monitor thresholds are required.</p><pre>from tracker.training_setup import prepare, record
+
+# OpenRLHF: pass the resolved native args object, including hierarchical namespaces.
+request = prepare("openrlhf", args,
+    version="dc2a7ad326f619fc5a47737ea47d1920ce2c0b53", resolved=True)
+# slime: same export API, with its independently reviewed revision.
+# request = prepare("slime", args,
+#     version="05e3b017fed9e02de418c2fbac9d75602a534be5", resolved=True)
+
+reference = record(outbox, experiment, request)
+# Attach this reference at the corresponding sample/use boundary.
+# Export again when effective settings change.</pre><p>OpenRLHF reading covers GAE, prompt and batch baselines, PPO/GSPO objectives, correction masks or caps, and asynchronous/partial rollouts. slime reading separates its estimator aliases from the policy objective, recognizes score-centered REINFORCE, and preserves reward-normalization and custom-processing boundaries. These are configuration readers, not installed distributed trainer hooks. Unknown revisions and custom credit/reduction/correction need review; no callback is executed or guessed.</p><p><a href="/connections?setup_example=openrlhf-flash#code-section">Preview single-rollout monitoring</a> · <a href="/connections?setup_example=slime-score#code-section">Preview score-centering monitoring</a></p></section>
+<section id="retained-batch-signals"><h2>Inspect learning signals from Slime dumps</h2><p>The existing paired Slime import now feeds <strong>Training health → Retained batch signals</strong> automatically. Choose Advantages, Values and returns, Values or Returns. Curves use native rollout-batch numbers and exported response masks; point selection opens exact source arrays. No additional import flags or annotation calls are required.</p><p>These are retained fields, not individual backward or optimizer receipts. The native file lacks effective estimator settings and value-model versions. Keep them separate from the confirmed-use value observations below.</p></section>
+<section id="value-observations"><h2>Value predictions and returns</h2><p>For critic-based RL, attach a <code>value-observation/1</code> object to the sample’s completed training-use record. <a href="/?view=health">Training health</a> selects the view automatically. This generic contract is available across frameworks; native hooks still need validation.</p><p>Export the exact detached value predictions and return targets, with native position indexes and the observation’s own binary mask. Declare token, turn or state units, the value model/version, input digest and target definition. Keep <code>value_fit</code> separate from <code>advantage_baseline</code>. The dashboard separates incompatible definitions automatically; no metric thresholds are required.</p><pre>from tracker.value_observations import observation
+# captured = observation(... exact detached per-sample native inputs ...)
+# Publish after native backward succeeds:
+use_record["data"]["value_observation"] = captured
+use_record["data"]["recipe"] = actual_use_recipe_reference
+outbox.log_training(experiment, [use_record])</pre><p>Available checks: prediction MSE, signed bias, explained return variance and within-sample value variation. Constant-target variance stays unavailable. These are observations against recorded targets, not true state-value accuracy or the clipped/scaled trainer loss. Masks are not inferred from actor loss masks. A new value definition or role becomes a separate series.</p></section>
+<section id="training-recipes"><h2>Capture the actual training recipe</h2><p>Record versioned objective components independently of the framework name. A generation sample and each later training use can reference different recipes. <a href="/?view=health">Training health</a> uses these declarations to distinguish applicable, missing and unsupported measurements. Teacher-only and token-critic recipes do not default to group contrast or scalar-advantage diagnostics.</p><pre>outbox.log_recipes(experiment, [native_recipe_manifest])
+recipe_ref = {"producer": outbox.producer, "id": native_recipe_id,
+              "revision": native_recipe_revision}
+# Put recipe_ref in data["recipe"] on the sample declaration.
+# Put the actual update recipe in data["recipe"] on each use receipt.
+# Missing use context is never inherited from the sample.
+outbox.start()</pre><p>A manifest declares its ID/revision, label, implementation name/revision, configuration digest, evidence basis, complete/partial component list and stage context. Every component declares its ID/label, supervision, credit kind/unit and objective definition/unit/weighting/reduction. <code>POST /api/training-recipes</code> accepts <code>training-recipes/1</code> with producer, experiment and recipes. <code>GET /api/training-recipes?experiment=...</code> returns retained revisions. CLI: <code>training-recipes import manifest.json</code> or <code>training-recipes view --experiment ...</code>.</p><p>Exact revisions are immutable and may arrive after their references. A newer revision cannot replace a missing older one. Declarations establish intended recipe context, not independently verified execution. Prepared sampled-teacher signals can be captured as immutable <code>supervision</code> records in <code>training-records/2</code>, with stage <code>prepared</code>, recipe/component, boundary, native step/step_basis, and a <code>sampled-teacher-signal/1</code> payload. It retains teacher identity, probability/context definitions, target-aligned masks/log probabilities and native advantage deltas. Inspect them in Training health → Inspect prepared teacher signal. Preparation does not prove training use. Full-distribution teacher, critic and behavior-aligned objective weights still need additional capture support. Existing records remain valid with unknown recipe context; do not rewrite historical sample or use records to add a guess.</p></section>
+<section class="recipe" id="slime-dumps"><h2>Import Slime rollout and training dumps</h2><p>Use the native debug files from one RL batch to inspect sample joins, token changes and exported loss masks. The reader pairs records by native rollout position, with a unique sample-index fallback. It does not guess from file order.</p><pre class="code"># In the native Slime job:
+--save-debug-rollout-data /logs/rollout_{rollout_id}.pt
+--save-debug-train-data /logs/train_{rollout_id}.pt
+
+# Check and queue a paired batch. Use the actual job and tokenizer identities.
+python -m rilldex slime-dump /logs/rollout_8.pt --train /logs/train_8.pt --experiment my-rl-job --session my-job-branch --producer slime-worker --tokenizer my-model-tokenizer-revision --upstream-commit 05e3b017fed9e02de418c2fbac9d75602a534be5 --output /logs/inspection-8 --outbox /logs/tracker.sqlite
+
+# Send the durable queue to your running collector:
+python -m rilldex outbox /logs/tracker.sqlite --producer slime-worker --endpoint http://127.0.0.1:8765 --send</pre><p>Omit <code>--outbox</code> to check and export evidence only. Native <code>.pt</code> files need Torch; primitive JSON exports work without it. Loading uses <code>weights_only=True</code> and never falls back to arbitrary pickle execution. Repeat with the same session, producer and outbox for idempotent retry. Changed input evidence needs a new output directory.</p><p>After delivery, open <a href="/?view=training">Overview → Training samples</a> and choose the experiment. Token context shows the exact generation/export comparison; source records retain both native sample views. The local report retains join coverage, token differences and rollout log-probability differences. Missing training rows are unknown, not rejected samples. Batch IDs are rollout coordinates, not policy versions or optimizer steps.</p><p>The tested scope is the pinned format-2 writer on CPU controls. It is not a distributed training validation. Flattened response ownership and internal tool turns remain unestablished. No semantic annotations, policy ages, backward receipts or successful optimizer updates are inferred from these dumps.</p></section>
+<section class="recipe" id="continuation-experiments"><h2>Compare continuations around a reasoning span</h2><p>Open <a href="/?view=health&amp;health_mode=continuations">Training health → Continuation experiments</a> to inspect experiments run by your sampler. The collector records the design and joins native samples; it does not generate continuations or change training weights.</p><pre class="code">outbox.log_continuation_studies(experiment, [study_design])
+outbox.log_training(experiment, sample_and_score_records,
+                    schema="training-records/2")
+outbox.start()</pre><p>The immutable study identifies a master sample, exact before/after token prefixes, fixed planned sample IDs, sampling policy/settings/budget, environment snapshots where relevant, and the binary verifier definition. Every child sample records its study/arm/draw identity and native token context. Scores can arrive later. Missing results remain unknown; a partial group cannot establish the before/after difference.</p><p>For file-based producers, use <code>continuation-studies import study.json</code> and <code>training-records import samples-and-scores.json</code>. The repository guide <code>docs/CONTINUATION_STUDIES.md</code> defines every field. The HTTP design envelope is <code>{schema: "continuation-studies/1", producer, experiment, studies: [...]}</code> at <code>POST /api/continuation-studies</code>.</p><p>Retrospective discovery is labelled separately from prospective confirmation. Confirmation preserves the selected design and checks for reused sample/draw identities. Intervals are conditional on the window and producer-declared independent sampling; they do not establish causal token credit or optimizer effectiveness.</p></section>
+<section id="data-access" class="recipe"><h2>Continuous input, staged batches and research output</h2>
+<p><strong>Code-first research:</strong> <code>tracker.research.Analyzer</code> executes built-in projections without a UI. <code>Research</code> runs your Python callbacks on SQL-selected evidence, preserving exact input batches and restartable results in a separate SQLite database. <a href="/connections#analysis-code">Examples →</a></p>
+<pre class="code">rilldex analysis operations
+rilldex --db workspace.sqlite analysis run retry_outcomes --run-id RUN_ID --graph-id GRAPH_ID --check
+rilldex --db workspace.sqlite analysis database run-a.sqlite --experiment run-a</pre>
+<p>The exported database has physical indexed <code>rl_*</code> tables readable independently of this app. Custom results can be joined to source/graph IDs from code; they are not automatically published as dashboard monitors. Full workflow: <code>docs/CODE_FIRST_ANALYSIS.md</code>.</p>
+<p><strong>Continuous:</strong> watch existing and future files, append newline-committed JSONL, or use the durable Outbox / HTTP revision contract. File polling only sees saved output; use explicit snapshots when every emitted revision matters.</p>
+<p><strong>Staged:</strong> publish immutable step / worker shards under the same directory. Replay with <code>watch --once</code>, or leave the watcher running. Retain producer, relative paths and database. A set of shards is not an atomic multi-file transaction. Use offline capture bundles when workers cannot reach the collector; use frozen imports for completed standalone artifacts.</p>
+<pre class="code">rilldex --db workspace.sqlite watch ./shards --mode exports --producer run-a/worker-0 --experiment run-a --once
+rilldex --db workspace.sqlite start --watch ./shards --mode exports --producer run-a/worker-0 --experiment run-a</pre>
+<p><strong>Output:</strong> <a href="/connections#data-access-section">Export &amp; code</a> provides saved table previews, consistent JSONL/CSV ZIP exports and Python examples. Tables retain source/graph/observer identities, missingness and ratio denominators. SQL is local and read-only; no model runs are triggered.</p>
+<pre class="code">from tracker.analytics import Analysis
+data = Analysis("workspace.sqlite")
+data.catalog()
+result = data.table("measurements", experiment="run-a")
+assert not result["truncated"]
+data.export("run-a.zip", experiment="run-a")
+
+# Follow lifecycle changes, including completion without changed trace text.
+page = data.changes("revisions", cursor=None)
+# Process idempotently; save page["next_cursor"] after success.</pre>
+<p>Follow sources, revision receipts, graph headers, measurements, monitor results and trainer facts through separate cursors. Analysis can arrive after source capture. The browser event stream is a refresh signal; it is not a durable receipt feed. Use workspace archives when you need to restore the whole application, rather than export analysis tables.</p>
+<p>CLI: <code>analysis catalog</code>, <code>analysis table</code>, <code>analysis sql --file query.sql</code>, <code>analysis export</code>, <code>analysis changes</code>. Repository reference: <code>docs/DATA_ACCESS.md</code>. No Kafka / OTLP receiver or public authenticated service is implemented.</p>
+</section></main><script src="/choice-labels.js"></script><script src="/workspace-navigation.js"></script><script src="/workspace.js"></script><script src="/deployment-guide.js"></script></body></html>

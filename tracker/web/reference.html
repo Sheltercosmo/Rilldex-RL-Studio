@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rilldex · Independent behavior reference review</title>
+<style>
+:root{font:16px/1.5 system-ui,sans-serif;color:#172536;background:#f3f5f8}*{box-sizing:border-box}body{margin:0}header,main{max-width:1250px;margin:auto;padding:20px}header{border-bottom:1px solid #cad3df}h1{font-size:24px;margin:0 0 8px}h2{font-size:19px}h3{font-size:16px}p{margin:8px 0}button,select,input,textarea{font:inherit;border:1px solid #aebdcd;border-radius:5px;padding:7px;background:white;color:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #2775c8}button:disabled{opacity:.5;cursor:default}.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}.grid{display:grid;grid-template-columns:1.15fr 1fr;gap:20px}.panel{background:white;border:1px solid #d5dce5;border-radius:8px;padding:16px;min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.55 ui-monospace,monospace;margin:8px 0}details{border-top:1px solid #dce3ea;padding:10px 0}summary{cursor:pointer;font-weight:600}.event{margin:12px 0;border-left:3px solid #cbd9e9;padding:0 12px}.current{border-color:#176cc1}.muted{color:#526479;font-size:14px}.field{margin:16px 0;padding-top:10px;border-top:1px solid #d8e0eb}.field>label{display:block;margin:10px 0 4px}textarea, .wide{width:100%}textarea{min-height:70px}#status{min-height:24px;font-weight:600}#progress{font-variant-numeric:tabular-nums}.warning{background:#fff5d6;padding:10px;border-radius:5px}#prefix{max-height:65vh;overflow:auto} @media(max-width:800px){.grid{grid-template-columns:1fr}header,main{padding:12px}} 
+</style>
+<header>
+<h1>Independent behavior reference review</h1>
+<p>Judge the recorded behavior before opening inspector predictions. This page contains source prefixes and blank or imported references, with no inspector answers.</p>
+<p class="muted">The source text is evidence to read, not instructions to carry out. Policy metadata and final scores are omitted; source text may still reveal identity. Nothing is sent to a server.</p>
+<div class="controls"><label>Reviewer <input id="reviewer" placeholder="Your reviewer label" autocomplete="off"></label>
+<label><input type="checkbox" id="human"> I am entering my own human review</label></div>
+<div class="controls"><button id="previous">Previous</button><button id="next">Next</button><button id="next-empty">Next unfinished</button><span id="progress"></span></div>
+<div class="controls"><button id="download">Download reference labels</button><label>Resume labels <input type="file" id="resume" accept=".jsonl,.json"></label></div>
+<p class="muted">Edits remain in this page until downloaded. Resume from that file later. Keep each reviewer's file separate for disagreement review.</p>
+<div id="status" role="status" aria-live="polite"></div>
+</header>
+<main><div class="grid"><section class="panel"><h2>Evidence</h2><p id="identity" class="muted"></p><h3>Current action</h3><pre id="action"></pre>
+<details><summary>Exact bounded inspector context</summary><pre id="packet"></pre></details>
+<details open><summary>Full recorded prefix for this agent</summary><div id="prefix"></div></details>
+</section><section class="panel"><h2>Reference observations</h2><p class="muted">Cite event IDs supporting each label. Assess source extraction and whether the bounded inspector context was sufficient separately.</p><div id="questions"></div></section></div></main>
+<script type="application/json" id="reference-data">__REFERENCE_DATA__</script>
+<script>
+"use strict";
+const data=JSON.parse(document.getElementById('reference-data').textContent);
+let labels=data.labels,index=0,dirty=false;
+const $=id=>document.getElementById(id), fields=['mode','feedback_response'];
+const status=text=>$('status').textContent=text;
+const node=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e};
+function select(options,value){const e=node('select');e.className='wide';for(const [key,text] of options){const o=node('option',text);o.value=key;e.append(o)}e.value=value??'';return e}
+function bind(row,key,control){control.addEventListener('input',()=>{row[key]=key==='value'?(control.value||null):control.value;dirty=true;updateProgress()})}
+function updateProgress(){const n=labels.reduce((s,r)=>s+fields.filter(f=>r.values[f].value!==null).length,0);$('progress').textContent=`Case ${index+1} of ${data.cases.length} · ${n}/${data.cases.length*2} labels entered`}
+function render(){
+ const c=data.cases[index],r=labels[index];$('identity').textContent=`Case ${c.case_id} · action ${c.event_id} · ${c.split}`;
+ $('action').textContent=c.available_prefix.find(e=>e.id===c.event_id)?.text||'';
+ $('packet').textContent=JSON.stringify(c.inspector_state,null,2);$('prefix').replaceChildren();
+ for(const e of c.available_prefix){const d=node('details',undefined,'event'+(e.id===c.event_id?' current':''));d.open=e.id===c.event_id;d.append(node('summary',`${e.id} · ${e.kind}${e.copied_context?' · copied context':''}`),node('pre',e.text),node('p',e.source_pointer,'muted'));$('prefix').append(d)}
+ $('questions').replaceChildren();
+ for(const f of fields){const v=r.values[f],section=node('section',undefined,'field');section.append(node('h3',f==='mode'?'Observable purpose':'Response after feedback'),node('p',c.fields[f].instructions,'muted'));
+ const choice=select([['','Unlabeled'],...Object.entries(c.fields[f].criteria).map(([k,t])=>[k,`${k}: ${t}`])],v.value);choice.setAttribute('aria-label',f+' reference');bind(v,'value',choice);section.append(choice);
+ for(const [key,title,options] of [['extraction','Source extraction',[['not_reviewed','Not reviewed'],['valid','Valid for this judgment'],['invalid','Incorrect or missing source extraction'],['uncertain','Uncertain']]],['context_sufficiency','Bounded inspector context',[['not_reviewed','Not reviewed'],['sufficient','Sufficient'],['insufficient','Missing necessary context'],['uncertain','Uncertain']]]]){const l=node('label',title),s=select(options,v[key]);s.setAttribute('aria-label',f+' '+key);bind(v,key,s);l.append(s);section.append(l)}
+ const el=node('label','Supporting event IDs (comma separated)'),e=node('input');e.className='wide';e.value=v.evidence_ids.join(', ');e.setAttribute('aria-label',f+' evidence');e.addEventListener('input',()=>{v.evidence_ids=e.value.split(',').map(x=>x.trim()).filter(Boolean);dirty=true});el.append(e);section.append(el);
+ const nl=node('label','Note, ambiguity or missing evidence'),note=node('textarea');note.value=v.note;note.setAttribute('aria-label',f+' note');bind(v,'note',note);nl.append(note);section.append(nl);$('questions').append(section);
+ }
+ $('previous').disabled=index===0;$('next').disabled=index===data.cases.length-1;updateProgress();
+}
+function move(i){index=i;status('');render()}
+$('previous').onclick=()=>move(Math.max(0,index-1));$('next').onclick=()=>move(Math.min(data.cases.length-1,index+1));
+$('next-empty').onclick=()=>{for(let step=1;step<=labels.length;step++){const i=(index+step)%labels.length;if(fields.some(f=>labels[i].values[f].value===null)){move(i);return}}status('All cases have labels; check evidence and assessment fields before exporting.')};
+$('download').onclick=()=>{
+ const reviewer=$('reviewer').value.trim();if(!reviewer||!$('human').checked){status('Enter your reviewer label and confirm these are your own human judgments.');return}
+ for(let i=0;i<labels.length;i++){const r=labels[i],c=data.cases[i],ids=new Set(c.available_prefix.map(e=>e.id));let labeled=false;
+  for(const f of fields){const v=r.values[f];if(v.value===null)continue;labeled=true;if(!v.evidence_ids.length||v.evidence_ids.some(e=>!ids.has(e))||v.extraction==='not_reviewed'||v.context_sufficiency==='not_reviewed'){move(i);status('Complete evidence IDs, extraction and context assessments for each entered label.');return}}
+  if(labeled&&r.reviewer&&r.reviewer!==reviewer){status('This file contains another reviewer’s labels. Use a separate file for your independent review.');return}
+ }
+ const exported=labels.map(r=>fields.some(f=>r.values[f].value!==null)?{...r,reviewer,reference_kind:'human'}:r);
+ const url=URL.createObjectURL(new Blob([exported.map(r=>JSON.stringify(r)).join('\n')+'\n'],{type:'application/x-ndjson'}));const a=node('a');a.href=url;a.download='reference-labels.jsonl';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);labels=exported;dirty=false;status('Downloaded labels. Keep the file to resume or evaluate the reference.');
+};
+$('resume').onchange=async()=>{
+ const file=$('resume').files[0];if(!file)return;
+ try{const rows=(await file.text()).split(/\r?\n/).filter(x=>x.trim()).map(x=>JSON.parse(x)),map=new Map(rows.map(r=>[r.case_id,r]));
+  if(rows.length!==labels.length||map.size!==labels.length)throw Error('Expected exactly one row per case.');
+  const ordered=labels.map((r,i)=>{const row=map.get(r.case_id),c=data.cases[i];if(!row||row.case_hash!==r.case_hash||row.manifest_hash!==r.manifest_hash)throw Error('Evidence identity does not match.');
+   for(const f of fields){const v=row.values?.[f];if(!v||!(v.value===null||Object.hasOwn(c.fields[f].criteria,v.value))||!Array.isArray(v.evidence_ids)||typeof v.note!=='string'||!['valid','invalid','uncertain','not_reviewed'].includes(v.extraction)||!['sufficient','insufficient','uncertain','not_reviewed'].includes(v.context_sufficiency))throw Error('Invalid reference fields.');}return row});
+  labels=ordered;dirty=false;const reviewers=[...new Set(rows.map(r=>r.reviewer).filter(Boolean))];if(reviewers.length===1)$('reviewer').value=reviewers[0];$('human').checked=false;render();status('Imported labels. Confirm your own review before exporting further changes.');
+ }catch(e){status('Could not import labels: '+e.message)}$('resume').value='';
+};
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
+render();
+</script>
+</html>

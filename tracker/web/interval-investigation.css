@@ -1,0 +1,38 @@
+.ii-dialog{width:min(860px,calc(100vw - 32px));max-height:90vh;padding:24px;border:1px solid #dce3ef;border-radius:16px;overflow:auto;color:#172338;background:#fff}
+.ii-head,.ii-actions,.ii-pinned{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.ii-head h2{margin:0}.ii-form{display:grid;gap:16px;margin-top:20px}.ii-form label{display:grid;gap:6px;min-width:0}.ii-form input,.ii-form select,.ii-question select{width:100%;min-width:0;box-sizing:border-box}.ii-ranges,.ii-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.ii-ranges fieldset{min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:12px;border:1px solid #dce3ef;border-radius:10px;padding:14px}.ii-ranges legend{font-weight:600}.ii-monitors{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 0}.ii-monitors label{display:flex;align-items:start;gap:8px}.ii-monitors input{width:auto}.ii-panel{min-width:0;margin-top:20px}.ii-table{overflow:auto;max-width:100%}.ii-table table{width:100%;border-collapse:collapse;font-size:13px}.ii-table th,.ii-table td{text-align:left;vertical-align:top;border-bottom:1px solid #e3e8f0;padding:10px 12px;min-width:110px}.ii-table th{color:#53647b;background:#f7f9fc;font-weight:600}.ii-table td{background:#fff}.ii-pinned{border:1px solid #d6e2f7;border-left:3px solid #3864d9;background:#f8faff;padding:16px;border-radius:10px}.ii-pinned span,.ii-version,.ii-cohort{font-size:12px;color:#526078;overflow-wrap:anywhere}.ii-measure{padding:20px 0;border-top:1px solid #e1e6ee}.ii-measure h3{margin:0 0 10px}.ii-measure details,.ii-panel details{margin:12px 0}.ii-measure pre,.ii-panel pre,.ii-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}.ii-chart{width:100%;height:auto;min-height:110px;max-height:220px}.ii-chart text{font:11px system-ui;fill:#516077}.ii-warning{font-size:13px;color:#76531d;background:#fffbef;border-left:2px solid #b88a36;padding:8px 12px}.ii-error{color:#b33232}.ii-question-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin:18px 0 28px}.ii-question{padding:16px;border:1px solid #dce3ef;border-radius:12px;background:#fff;min-width:0}.ii-question summary{font-weight:600;line-height:1.5;cursor:pointer}.ii-question p,.ii-question li{font-size:13px;line-height:1.55}.ii-question h3{font-size:13px}.ii-question a{display:block;margin:8px 0}.ii-question button,.ii-question select{margin-top:10px}.ii-brush-note{font-size:12px;color:#53647b;margin:6px 0}.ii-chart-selection{fill:#3864d9;opacity:.15;pointer-events:none}
+@media(max-width:760px){.ii-ranges,.ii-grid,.ii-monitors{grid-template-columns:1fr}.ii-dialog{padding:16px}.ii-pinned{align-items:flex-start}.ii-table table,.ii-table thead,.ii-table tbody{display:table}.ii-table thead{display:table-header-group}.ii-table tbody{display:table-row-group}.ii-table tr{display:table-row}.ii-table th,.ii-table td{display:table-cell;float:none}.ii-table td:before{content:none}}
+
+.ii-question-grid{align-items:start}.ii-jumps{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.ii-jumps a{padding:6px 10px;border:1px solid #dbe3ef;border-radius:7px;text-decoration:none;font-size:13px;background:#f7faff}.ii-panel{scroll-margin-top:82px}.ii-panel>h2{font-size:18px}.ii-panel>h3{font-size:14px}
+
+.ii-witness{border-left:2px solid #7693d1;padding:12px;margin:12px 0;background:#f8faff}.ii-witness small{display:block;color:#59687d;margin-top:6px}
+
+/* Presets are an optional setup tool; the registry remains the primary view. */
+.workspace .monitor-preset-library{margin:0 0 18px;padding:0;border:1px solid var(--line,#dce3ef);border-radius:10px;background:#fff}
+.workspace .monitor-preset-library>summary{padding:12px 16px;font-size:13px;color:var(--ink,#172338)}
+.workspace .monitor-preset-library>summary>span{margin-left:12px;color:var(--muted,#53647b);font-weight:400}
+.workspace #monitor-questions{padding:0 16px 16px;margin:0;border:0;border-radius:0;box-shadow:none;background:transparent}
+.workspace #monitor-questions>.field-note{margin:0 0 12px}
+.workspace .ii-question-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:0;margin:0;border-top:1px solid var(--line,#dce3ef)}
+.workspace .ii-question{padding:0;border:0;border-bottom:1px solid var(--line,#dce3ef);border-radius:0;background:transparent}
+.workspace .ii-question:last-child{border-bottom:0}
+.workspace .ii-question>summary{display:flex;align-items:center;gap:12px;list-style:none;padding:12px 0;font-size:13px;cursor:pointer}
+.workspace .ii-question>summary::-webkit-details-marker{display:none}
+.workspace .ii-question>summary:before{content:'›';font-size:20px;line-height:1;color:var(--muted,#53647b);flex:0 0 12px;text-align:center;transform:rotate(0)}
+.workspace .ii-question[open]>summary:before{transform:rotate(90deg)}
+.workspace .ii-preset-name{flex:1;min-width:0;display:grid;gap:3px}
+.workspace .ii-preset-name>strong{font-size:13px;font-weight:600;color:var(--ink,#172338)}
+.workspace .ii-preset-name>span,.workspace .ii-preset-count{font-size:12px;font-weight:400;color:var(--muted,#53647b)}
+.workspace .ii-preset-count{white-space:nowrap;font-variant-numeric:tabular-nums}
+.workspace .ii-preset-body{padding:0 0 16px 24px}
+.workspace .ii-preset-controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;max-width:680px}
+.workspace .ii-preset-controls>label{display:grid;gap:5px;flex:1 1 240px;min-width:0;font-size:12px;color:var(--muted,#53647b)}
+.workspace .ii-preset-controls select,.workspace .ii-preset-controls button{margin:0;min-height:38px;font-size:13px}
+.workspace .ii-preset-extra{border:0;border-radius:0;margin:14px 0 0;padding:0;background:transparent}
+.workspace .ii-preset-extra>summary{font-size:12px;font-weight:500;color:var(--muted,#53647b)}
+.workspace .ii-preset-extra[open]>summary{margin-bottom:12px}
+.workspace .ii-preset-status{font-size:12px;line-height:1.5;margin:10px 0 0;color:var(--ink,#172338)}
+.workspace .ii-preset-status:empty{display:none}
+.workspace .ii-preset-monitors{margin:14px 0;padding-top:12px;border-top:1px solid var(--line,#dce3ef)}
+.workspace .ii-preset-monitors h3{margin:0 0 8px;font-size:12px}
+.workspace .ii-preset-monitors a{font-size:12px;overflow-wrap:anywhere}
+@media(max-width:560px){.workspace .monitor-preset-library>summary>span{display:block;margin:3px 0 0 16px}.workspace .ii-preset-name>span{line-height:1.5}.workspace .ii-preset-body{padding-left:0}.workspace .ii-preset-controls>label{flex-basis:100%}}

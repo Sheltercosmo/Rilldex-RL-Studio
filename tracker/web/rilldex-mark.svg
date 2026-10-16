@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Rilldex</title>
+  <rect width="64" height="64" rx="18" fill="#19212f"/>
+  <path d="M20 46V18h12c8 0 12 4 12 10s-4 10-12 10H20" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m32 38 12 8" fill="none" stroke="#75e2ca" stroke-width="5" stroke-linecap="round"/>
+</svg>

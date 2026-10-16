@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rilldex · Checkpoint investigations</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/studies.css"><link rel="icon" type="image/svg+xml" href="/rilldex-mark.svg"><meta name="theme-color" content="#19212f"><meta name="description" content="Rilldex — RL Behavior Inspector. Monitor training, explore behavior maps and inspect rollout evidence."></head>
+<body><header class="study-header"><a href="/rollouts">← Training workspace</a><a href="/relations">Relation lab</a><a href="/semantic-map">Behavior map</a><span class="eyebrow">CHECKPOINT INVESTIGATIONS</span><button id="save-study" disabled>Save and export investigation</button></header>
+<main class="study-main">
+ <label>Source study<select id="study-select"></select></label>
+ <h1 id="study-title">Source-recorded checkpoint measurements</h1>
+ <p id="study-status" role="status" aria-live="polite">Loading studies…</p>
+ <details><summary>Saved investigations</summary><label for="saved-investigations">Reopen a saved comparison and note</label><select id="saved-investigations"><option value="">No saved investigations</option></select><p id="save-status" role="status" aria-live="polite"></p></details>
+ <div id="study-workspace" hidden>
+  <p id="study-definition"></p>
+  <div class="study-controls"><label>Reference policy<select id="study-reference"></select></label><label>Compared policy<select id="study-checkpoint"></select></label></div>
+  <p id="study-cohort" class="muted"></p>
+  <div class="study-table-wrap"><table id="study-metrics"><caption>Equal-game measurements on the selected matched cohort</caption><thead><tr><th scope="col">Measure</th><th scope="col">Reference</th><th scope="col">Compared</th><th scope="col">Change</th><th scope="col">Uncertainty and coverage</th></tr></thead><tbody></tbody></table></div>
+  <p class="muted">Click a measure to inspect every contributing game. Bounds show missing evidence, not statistical confidence. Direction alone is not evidence of better reasoning or a causal training effect.</p>
+  <details><summary>Definitions, weighting and source provenance</summary><div id="study-provenance"></div></details>
+  <section class="study-task-section"><h2 id="study-task-title">Contributing games</h2><p id="study-metric-definition"></p>
+   <div class="study-controls"><label>Filter task or game<input id="study-filter" type="search"></label><label>Show contributions<select id="study-direction"><option value="all">All matched games</option><option value="positive">Positive change</option><option value="negative">Negative change</option><option value="zero">No point change</option><option value="unknown">Unknown or unavailable</option></select></label></div>
+   <p id="study-task-count" class="muted"></p><div class="study-table-wrap"><table id="study-tasks"><thead><tr><th scope="col">Game / task</th><th scope="col">Reference</th><th scope="col">Compared</th><th scope="col">Change</th></tr></thead><tbody></tbody></table></div>
+  </section>
+  <section id="study-evidence" hidden><h2 id="study-evidence-title">Matched game evidence</h2><p class="muted">All recorded episodes for this game are available. Matching a slot does not establish an independently paired random seed. Model text below is not environment feedback; native environment observations are absent in this export.</p><div class="study-evidence-grid"><div id="study-before"></div><div id="study-after"></div></div></section>
+  <section class="study-notes"><h2>Investigation note</h2><label for="study-note">Finding, counterexamples and next experiment</label><textarea id="study-note" rows="5" placeholder="Record what the evidence supports, what it does not establish, and what you would test next."></textarea><p class="muted">Save and export retains an immutable local investigation with the exact comparison, selected raw episodes and this note. Reopen it from Saved investigations. Unsaved edits remain only in this page. An investigation note is not an independent review or accuracy label.</p></section>
+ </div>
+</main><script src="/studies.js"></script></body></html>

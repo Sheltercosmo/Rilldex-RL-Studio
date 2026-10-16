@@ -1,0 +1,23 @@
+.venv/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.tracker/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.pem
+*.key
+outputs/
+dist/
+# Local experiment workspaces and retained third-party research checkouts.
+research/
+tests/*browser*.cjs
+scripts/check_semantic_map.cjs
+test-results/
+research/history-monitor-2026-10-09/browser.sqlite*

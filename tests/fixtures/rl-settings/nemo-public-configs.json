@@ -1,0 +1,225 @@
+[
+  {
+    "name": "grpo",
+    "source": "grpo_math_1B.yaml",
+    "request": {
+      "framework": "nemo_rl",
+      "version": "a5fba40266a2d696d4fb63c8b6e1278104840f90",
+      "resolved": true,
+      "config": {
+        "loss_fn": {
+          "disable_ppo_ratio": false,
+          "force_on_policy_ratio": false,
+          "sequence_level_importance_ratios": false,
+          "token_level_loss": true,
+          "use_cispo": false,
+          "ratio_clip_min": 0.2,
+          "ratio_clip_max": 0.2,
+          "ratio_clip_c": null,
+          "use_importance_sampling_correction": false,
+          "truncated_importance_sampling_type": null,
+          "truncated_importance_sampling_ratio": null,
+          "truncated_importance_sampling_ratio_min": null,
+          "reference_policy_kl_penalty": 0.01,
+          "reference_policy_kl_type": "k3",
+          "use_kl_in_reward": false,
+          "positive_example_nll_weight": 0.0,
+          "seq_logprob_error_in_loss": false
+        },
+        "grpo": {
+          "num_generations_per_prompt": 16,
+          "max_rollout_turns": 1,
+          "overlong_filtering": false,
+          "use_dynamic_sampling": false,
+          "dynamic_sampling_max_gen_batches": 10,
+          "seq_logprob_error_threshold": null,
+          "adv_estimator": {
+            "name": "grpo",
+            "normalize_rewards": true,
+            "use_leave_one_out_baseline": true,
+            "minus_baseline": true,
+            "reward_weights": null
+          },
+          "async_grpo": {
+            "enabled": false,
+            "max_trajectory_age_steps": 1,
+            "in_flight_weight_updates": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "credit": "group_relative",
+      "weighting": "hard_gate"
+    }
+  },
+  {
+    "name": "ppo",
+    "source": "ppo_math_1B.yaml",
+    "request": {
+      "framework": "nemo_rl",
+      "version": "a5fba40266a2d696d4fb63c8b6e1278104840f90",
+      "resolved": true,
+      "config": {
+        "loss_fn": {
+          "disable_ppo_ratio": false,
+          "force_on_policy_ratio": false,
+          "sequence_level_importance_ratios": false,
+          "token_level_loss": true,
+          "use_cispo": false,
+          "ratio_clip_min": 0.2,
+          "ratio_clip_max": 0.28,
+          "ratio_clip_c": 10,
+          "use_importance_sampling_correction": false,
+          "truncated_importance_sampling_type": null,
+          "truncated_importance_sampling_ratio": null,
+          "truncated_importance_sampling_ratio_min": null,
+          "reference_policy_kl_penalty": 0.0,
+          "reference_policy_kl_type": "k3",
+          "use_kl_in_reward": false,
+          "positive_example_nll_weight": 0.0,
+          "seq_logprob_error_in_loss": false
+        },
+        "ppo": {
+          "num_generations_per_prompt": 16,
+          "max_rollout_turns": 1,
+          "overlong_filtering": false,
+          "use_dynamic_sampling": false,
+          "dynamic_sampling_max_gen_batches": 10,
+          "seq_logprob_error_threshold": null,
+          "adv_estimator": {
+            "name": "gae",
+            "gae_lambda": 0.95,
+            "gae_gamma": 1,
+            "normalize_advantages": true,
+            "gae_lambda_value": null,
+            "gae_lambda_policy": null,
+            "length_adaptive_alpha": 0.0
+          },
+          "async_ppo": {
+            "enabled": false,
+            "max_trajectory_age_steps": 1,
+            "in_flight_weight_updates": false
+          },
+          "ppo_epochs": 4,
+          "critic_ppo_epochs": 4,
+          "policy_training_start_step": 0
+        }
+      }
+    },
+    "expected": {
+      "credit": "critic",
+      "credit_unit": "token",
+      "weighting": "hard_gate"
+    }
+  },
+  {
+    "name": "gdpo",
+    "source": "gdpo_math_1B.yaml",
+    "request": {
+      "framework": "nemo_rl",
+      "version": "a5fba40266a2d696d4fb63c8b6e1278104840f90",
+      "resolved": true,
+      "config": {
+        "loss_fn": {
+          "disable_ppo_ratio": false,
+          "force_on_policy_ratio": false,
+          "sequence_level_importance_ratios": false,
+          "token_level_loss": true,
+          "use_cispo": false,
+          "ratio_clip_min": 0.2,
+          "ratio_clip_max": 0.2,
+          "ratio_clip_c": null,
+          "use_importance_sampling_correction": false,
+          "truncated_importance_sampling_type": null,
+          "truncated_importance_sampling_ratio": null,
+          "truncated_importance_sampling_ratio_min": null,
+          "reference_policy_kl_penalty": 0.01,
+          "reference_policy_kl_type": "k3",
+          "use_kl_in_reward": false,
+          "positive_example_nll_weight": 0.0,
+          "seq_logprob_error_in_loss": false
+        },
+        "grpo": {
+          "num_generations_per_prompt": 16,
+          "max_rollout_turns": 1,
+          "overlong_filtering": false,
+          "use_dynamic_sampling": false,
+          "dynamic_sampling_max_gen_batches": 10,
+          "seq_logprob_error_threshold": null,
+          "adv_estimator": {
+            "name": "gdpo",
+            "normalize_rewards": true,
+            "use_leave_one_out_baseline": false,
+            "minus_baseline": true,
+            "reward_weights": null
+          },
+          "async_grpo": {
+            "enabled": false,
+            "max_trajectory_age_steps": 1,
+            "in_flight_weight_updates": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "credit": "group_relative",
+      "weighting": "hard_gate"
+    }
+  },
+  {
+    "name": "async_cispo",
+    "source": "recipes/llm/grpo-cispo-mm1-async-lag1-highoffpolicy-qwen3-30ba3b-3n8g-megatron-cispo.yaml",
+    "request": {
+      "framework": "nemo_rl",
+      "version": "a5fba40266a2d696d4fb63c8b6e1278104840f90",
+      "resolved": true,
+      "config": {
+        "loss_fn": {
+          "disable_ppo_ratio": false,
+          "force_on_policy_ratio": false,
+          "sequence_level_importance_ratios": false,
+          "token_level_loss": true,
+          "use_cispo": true,
+          "ratio_clip_min": 1.0,
+          "ratio_clip_max": 5.0,
+          "ratio_clip_c": null,
+          "use_importance_sampling_correction": true,
+          "truncated_importance_sampling_type": null,
+          "truncated_importance_sampling_ratio": null,
+          "truncated_importance_sampling_ratio_min": null,
+          "reference_policy_kl_penalty": 0.0,
+          "reference_policy_kl_type": "k3",
+          "use_kl_in_reward": false,
+          "positive_example_nll_weight": 0.0,
+          "seq_logprob_error_in_loss": false
+        },
+        "grpo": {
+          "num_generations_per_prompt": 16,
+          "max_rollout_turns": 1,
+          "overlong_filtering": false,
+          "use_dynamic_sampling": false,
+          "dynamic_sampling_max_gen_batches": 10,
+          "seq_logprob_error_threshold": null,
+          "adv_estimator": {
+            "name": "grpo",
+            "normalize_rewards": true,
+            "use_leave_one_out_baseline": true,
+            "minus_baseline": true,
+            "reward_weights": null
+          },
+          "async_grpo": {
+            "enabled": true,
+            "max_trajectory_age_steps": 1,
+            "in_flight_weight_updates": true
+          }
+        }
+      }
+    },
+    "expected": {
+      "credit": "group_relative",
+      "weighting": "capped",
+      "scheduling": "asynchronous"
+    }
+  }
+]

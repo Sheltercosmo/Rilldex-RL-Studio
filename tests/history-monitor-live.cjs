@@ -1,0 +1,9 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const root='research/history-monitor-2026-10-09',report=JSON.parse(fs.readFileSync(root+'/live-audit.json','utf8'));
+(async()=>{const browser=await chromium.launch({headless:true,channel:'msedge'}),errors=[];try{
+ const page=await browser.newPage({viewport:{width:1450,height:1000}});page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:8765/?experiment=__unassigned__');const card=page.locator('.metric-card').filter({hasText:'Bookings selecting a recorded Mastercard'});await card.locator('.metric-headline strong').waitFor();assert.equal(await card.locator('.metric-headline strong').innerText(),'50.0%');assert.match(await card.innerText(),/1 \/ 1 selected rollouts measured/);assert.match(await card.innerText(),/18 rollouts have no selected dispatches/);
+ await card.screenshot({path:root+'/live-monitor.png'});await card.getByRole('link',{name:'50.0%',exact:true}).click();await page.getByRole('button',{name:'Explain value',exact:true}).click();await page.locator('#detail-body').getByRole('button').filter({hasText:'Dispatch e55'}).click();await page.locator('.history-evidence').waitFor();assert.match(await page.locator('.history-evidence').innerText(),/Recorded comparison: Matches/);assert.ok(page.url().includes(report.receipts[0].measurement_id));
+ await page.setViewportSize({width:430,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));assert.deepEqual(errors,[]);console.log(JSON.stringify({live_monitor:report.monitor_id,checks:['selection coverage','real saved receipt link','exact history comparison','mobile layout'],errors}));
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
