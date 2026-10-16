@@ -22,19 +22,11 @@ For existing output, use **Detect output**, apply a suggested layout, then
 does not import records or start model inference; unresolved formats remain
 visible instead of being treated as ready.
 
-**Check source** also shows the decoded rollout: source text, actions and their
-recorded responses. Select a sampled rollout; use **Result for…** to locate the
-corresponding action. The preview shows up to 12 events per rollout and 700
-characters per event, with omitted content counted explicitly. For repeated
-rollout identities it uses the highest revision found in the bounded sample.
-Checking does not save data, advance collection or call a model.
-
-Choose **Connect & watch** to follow existing and new output. The connected-source
-panel updates with received rollouts and links to their source maps and recorded
-experiments. Its URL retains the source selection across refreshes; **Check this
-source** reloads its saved settings for another preview. Each connection has its
-own recent receipts, so other busy workers do not displace its links. Semantic
-maps and behavior measures still require saved observations.
+**Check source** previews text, actions and linked responses: up to 12 events,
+700 characters each, with no saved data or model calls. **Connect & watch** collects
+existing and new output, with links to each source’s recent rollouts and experiment.
+**Check this source** reuses saved settings. Semantic maps and behavior measures
+require saved observations.
 
 ```sh
 rilldex doctor --port 0
