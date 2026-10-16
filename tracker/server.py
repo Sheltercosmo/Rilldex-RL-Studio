@@ -10,6 +10,7 @@ import sqlite3
 import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -38,7 +39,10 @@ class LocalServer(ThreadingHTTPServer):
         # leaving requests split between old and new application processes.
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
+        # HTTPServer normally reverse-resolves this address. A local collector
+        # needs no hostname lookup; unavailable DNS can stall macOS startup.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=False):

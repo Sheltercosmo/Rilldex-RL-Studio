@@ -15,6 +15,7 @@ import tracker
 from tracker.analytics import Analysis
 from tracker.analysis_mirror import FeedMirror
 from tracker.portable import generation_document
+from tracker.trainer_telemetry import packet
 
 
 def stop(process):
@@ -54,7 +55,16 @@ def main():
                 assert len(get('/api/analysis/tables/revisions?history=1')['rows'])==2
                 catalog=get('/api/analysis/catalog')
                 assert {t['name'] for t in catalog['tables']}=={'rollouts','revisions','sources','graphs','nodes','edges',
-                    'measurements','monitor_values','monitor_definitions','training_records','executions'}
+                    'measurements','monitor_values','monitor_definitions','training_records','executions',
+                    'generation_cohorts','evaluations','trainer_telemetry'}
+                telemetry=packet({'loss':.25,'entropy':.6},producer='smoke/learner',experiment='smoke',
+                    framework='trl-grpo',framework_version='synthetic-control',objective='grpo/control',
+                    session='start-1',step=7)
+                get('/api/trainer-telemetry',telemetry)
+                curves=get('/api/trainer-telemetry?experiment=smoke')
+                assert curves['records']==1 and {s['group'] for s in curves['series']}=={'loss','entropy'}
+                logs=get('/api/analysis/tables/trainer_telemetry?experiment=smoke')
+                assert len(logs['rows'])==1 and logs['rows'][0]['step']==7
                 options=get('/api/analysis/options?experiment=smoke')
                 assert any(e['experiment']=='smoke' for e in options['experiments']),options
                 with zipfile.ZipFile(io.BytesIO(get('/api/analysis/export?experiment=smoke',raw=True))) as z:
