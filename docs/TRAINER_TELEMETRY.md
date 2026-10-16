@@ -59,6 +59,45 @@ metrics.log({"server/output_tokens_per_s": 1250.0}, step=42)
 
 Groups: `loss`, `entropy`, `kl`, `clipping`, `tokens`, `throughput`, `other`. Unknown numeric keys are retained as unmapped native scalars and available in Python/exports. No guessed aliases or derived throughput are applied. Pass `environment=` only when the entire logged population belongs to that environment; mixed-environment batches should retain `unspecified` or an explicit mixture name.
 
+## Link a trainer log to rollout evidence
+
+When your trainer records individual training uses, attach their exact IDs to the log:
+
+```python
+metrics.log(native_metrics, step=global_steps, training_uses={
+    "records": [{"producer": "learner-0", "id": "use-0042", "revision": 0}],
+    "coverage": "partial",  # or complete when the producer records all log-context uses
+    "basis": "Uses recorded by the learner for this logger emission",
+})
+```
+
+The IDs refer to existing `kind="use"` records in the same experiment, through
+either training-records version. Use receipts and sources may arrive later.
+Click a trainer-curve point to open its linked rollout maps. A saved interval
+investigation automatically retains logs referencing its selected use receipts,
+including the native definitions, log identity and exact source links.
+
+Source generation steps and learner steps do not need to match. A mixed batch
+appears once with both interval labels; its aggregate is never split into invented
+per-rollout losses. Link coverage is producer-declared log context, not validation
+of a metric's denominator or individual sample influence. Unreferenced logs remain
+available in Training overview. Stock TRL callbacks do not invent sample/use IDs.
+
+```python
+from rilldex import Workspace
+
+ws = Workspace("study.sqlite", experiment="run-a")
+context = ws.telemetry_evidence(producer="run-a/learner", record_id="saved-log-id")
+print(context["run_ids"], context["unmatched_uses"])
+```
+
+For JSONL import, supply `step`, `split`, `metrics` and `training_uses` in each
+linked row. An explicit split prevents applying a train batch's references to a
+separate evaluation log. Unlinked version-1 packets remain supported; linked logs
+use `trainer-telemetry/2` and require an updated collector. Reads and interval
+capture use one database snapshot. New receipts only affect a newly captured
+comparison; previous saved investigations stay unchanged.
+
 ## Existing logs and staged batches
 
 Import a TRL `trainer_state.json` or JSONL objects with `step` and native keys. A JSONL object can also contain `{"step": 1, "metrics": {...}}`.

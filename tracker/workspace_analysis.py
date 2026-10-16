@@ -195,6 +195,16 @@ Each call sees fresh committed data; joins within one call share a read snapshot
 
     def telemetry(self,**filters): return self.table('trainer_telemetry',**filters)
 
+    def telemetry_evidence(self,*,producer,record_id):
+        """Resolve a native log's explicit use references in one read snapshot."""
+        from .store import ReadSnapshot
+        from .telemetry_evidence import evidence
+        if not self.scope['experiment']:raise InputError('Select one experiment for native log evidence')
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Linked trainer evidence requires a live workspace or full restore')
+            return evidence(ReadSnapshot(self.data.path,source.c),producer=producer,
+                experiment=self.scope['experiment'],record_id=record_id)
+
     def relations(self,*,source_activity=None,target_activity=None,relation=None,limit=1000):
         clauses=[];values=[]
         for name,value in [('s.activity',source_activity),('t.activity',target_activity),('e.type',relation)]:

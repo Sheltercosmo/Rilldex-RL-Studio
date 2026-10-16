@@ -47,10 +47,15 @@ def run(args):
         step=row.get('step',row.get('global_step',row.get('_step')))
         logs=row.get('metrics',row)
         if not isinstance(logs,dict):raise InputError('metrics must be an object')
-        if args.framework.startswith('trl-'):
+        references=row.get('training_uses')
+        if references is not None:
+            if 'metrics' not in row or row.get('split') not in ('train','evaluation'):
+                raise InputError('Linked logs require metrics and an explicit train/evaluation split')
+            partitions=[(row['split'],logs)]
+        elif args.framework.startswith('trl-') and args.split=='train':
             partitions=[('train',{k:v for k,v in logs.items() if not k.startswith('eval_')}),
                         ('evaluation',{k:v for k,v in logs.items() if k.startswith('eval_')})]
         else:partitions=[(args.split,logs)]
         for split,values in partitions:
-            if values:inserted+=collector.log(values,step=step,split=split).get('inserted',0)
+            if values:inserted+=collector.log(values,step=step,split=split,training_uses=references).get('inserted',0)
     return dict(imported=inserted,read_logs=len(rows),experiment=args.experiment)

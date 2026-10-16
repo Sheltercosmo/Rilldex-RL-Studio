@@ -7,13 +7,24 @@
  const svg=(tag,attrs={})=>{const n=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);return n;};
  let scope={},seq=0,saved='',data=null,selection=new Map();
  const fmt=v=>v===null?'Unavailable':Number(v).toLocaleString(undefined,Number.isInteger(v)?{maximumFractionDigits:0}:{maximumSignificantDigits:5});
- function showRecord(s,p){
-  const d=el('dialog',undefined,'telemetry-dialog'),close=el('button','Close');close.type='button';close.onclick=()=>d.close();
-  d.append(el('h2',s.label),el('p',`${s.context.clock} ${p.step} · ${p.status}`),el('p',s.definition),el('pre',JSON.stringify({context:s.context,native_key:s.native_key,unit:s.unit,reduction:s.reduction,...p},null,2)),close);
+ async function showRecord(s,p){
+  const d=el('dialog',undefined,'telemetry-dialog'),close=el('button','Close');d.setAttribute('aria-label',s.label);close.type='button';close.onclick=()=>d.close();
+  const links=el('div','Loading linked rollout evidence…'),raw=el('details');raw.append(el('summary','Native point & definition'),el('pre',JSON.stringify({context:s.context,native_key:s.native_key,unit:s.unit,reduction:s.reduction,...p},null,2)));
+  d.append(el('h2',s.label),el('p',`${fmt(p.value)} ${s.unit} · ${s.context.clock} ${p.step} · ${p.status}`),el('p',s.definition),links,raw,close);
   d.addEventListener('close',()=>d.remove());document.body.append(d);d.showModal();
+  try{
+   const records=await Promise.all(p.record_ids.map(async record_id=>{const q=new URLSearchParams({producer:s.context.producer,experiment:s.context.experiment,record_id});const r=await fetch('/api/trainer-telemetry/evidence?'+q);if(!r.ok)throw Error('Linked evidence is unavailable.');return r.json();}));
+   if(!links.isConnected)return;links.replaceChildren();
+   for(const record of records){
+    links.append(el('h3','Linked rollout evidence'),el('p',record.declared_uses?`${record.matched_uses} / ${record.declared_uses} declared training uses have exact source links · ${record.declared_coverage} reference inventory`:'No training-use references recorded. Add references in TrainerTelemetry.log() to enable rollout drill-down.'));
+    const list=el('ul');for(const [index,id] of record.run_ids.slice(0,100).entries()){const item=el('li'),a=el('a',`Open rollout ${index+1}`);a.href='/semantic-map?'+new URLSearchParams({run:id,observer:'source',return_to:location.pathname+location.search});item.append(a);list.append(item);}links.append(list);
+    if(record.run_ids.length>100)links.append(el('p',`${record.run_ids.length-100} further rollout links are retained in the full evidence record.`));
+    const detail=el('details');detail.append(el('summary','Training-use receipts & attribution'),el('p',record.boundary),el('pre',JSON.stringify(record.references,null,2)));links.append(detail);
+   }
+  }catch(e){if(links.isConnected)links.textContent=e.message;}
  }
  function chart(s){
-  const g=svg('svg',{viewBox:'0 0 360 160',role:'img','aria-label':`${s.label} by ${s.context.clock}; gaps are unavailable coordinates`});
+  const g=svg('svg',{viewBox:'0 0 360 160',role:'group','aria-label':`${s.label} by ${s.context.clock}; gaps are unavailable coordinates`});
   const values=s.points.filter(p=>p.value!==null),xs=s.points.map(p=>p.step);
   if(!values.length)return el('p','No finite values in the selected logs.','telemetry-empty');
   let lo=Math.min(...values.map(p=>p.value)),hi=Math.max(...values.map(p=>p.value));

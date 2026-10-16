@@ -188,6 +188,9 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                         clock=params.get('clock',[None])[0],basis=params.get('basis',[None])[0],
                         limit=int(params.get('limit',['100'])[0]),cohort_id=params.get('cohort',[None])[0],
                         producer=params.get('producer',[None])[0]))
+                if path == '/api/trainer-telemetry/evidence':
+                    from .telemetry_evidence import evidence
+                    return self.response(200,evidence(store,**{k:params.get(k,[''])[0] for k in ('producer','experiment','record_id')}))
                 if path == '/api/trainer-telemetry':
                     from .trainer_telemetry import snapshot
                     return self.response(200,snapshot(store,experiment=params.get('experiment',[None])[0],environment=params.get('environment',[None])[0],limit=int(params.get('limit',['1000'])[0])))

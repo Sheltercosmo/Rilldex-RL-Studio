@@ -107,10 +107,10 @@ class Outbox:
         packet=validate(dict(schema=VERSION,producer=self.producer,experiment=experiment,records=records))
         return self._enqueue([{'rollout_id':'@execution/'+digest(packet),'execution_records':packet}])[0]
 
-    def log_telemetry(self, experiment, records):
+    def log_telemetry(self, experiment, records, *, schema=None):
         """Queue native trainer scalars independently of rollout identities."""
         from .trainer_telemetry import VERSION, validate
-        packet=validate(dict(schema=VERSION,producer=self.producer,experiment=experiment,records=records))
+        packet=validate(dict(schema=schema or VERSION,producer=self.producer,experiment=experiment,records=records))
         return self._enqueue([{'rollout_id':'@telemetry/'+digest(packet),'trainer_telemetry':packet}])[0]
 
     def log_cohorts(self, experiment, cohorts):

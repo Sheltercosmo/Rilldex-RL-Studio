@@ -44,6 +44,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_launch.py"
       - name: Installed research input and output interfaces
         run: python scripts/analysis_smoke.py
+      - name: Native trainer logs to frozen investigations and rollout maps
+        run: python scripts/telemetry_investigation_smoke.py
       - name: Installed headless analysis and crash recovery
         run: python scripts/research_smoke.py
       - name: Installed live workspace analysis without optional dependencies

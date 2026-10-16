@@ -1,6 +1,6 @@
 # Synchronized training investigations
 
-Open **Monitor management** and choose a research question, or use **Investigate interval** on a behavior chart. Shift-drag also selects an inclusive interval on a chart. Enter a reference interval, confirm the experiment and measures, then capture once. This saves one database snapshot across the panels; opening the result does not run inference.
+Open **Monitor management** and select a monitor bundle, or use **Investigate interval** on a behavior chart. Shift-drag also selects an inclusive interval on a chart. Enter a reference interval, confirm the experiment and measures, then capture once. This saves one database snapshot across the panels; opening the result does not run inference.
 
 ## What the comparison answers
 
@@ -24,6 +24,10 @@ The five bundles reveal current measurement coverage and missing prerequisites. 
 - Charts use raw per-step values, pooling numerator/denominator for ratio measures. Missing steps remain gaps. Reference and selected summaries show measured rollouts, decidable opportunities and unresolved opportunities.
 
 ## Evidence, history and reliability
+
+**Linked trainer metrics** retains loss, entropy, KL, clipping, token and throughput logs that explicitly reference training-use receipts in the selected population. Expand a log to see its native definition, value, learner coordinate and linked rollout maps. The links resolve the exact use producer, record ID and revision to the recorded source revision. Equal step numbers do not create links. Add these references with [`TrainerTelemetry.log(..., training_uses=...)`](TRAINER_TELEMETRY.md#link-a-trainer-log-to-rollout-evidence).
+
+A log spanning both intervals stays a single aggregate. Partial or unresolved references remain visible; no conditional loss or baseline-to-selected difference is inferred. The inventory is producer-declared context, not proof of each metric's denominator. Up to 500 linked logs are retained per capture; the panel reports truncation. Unlinked-log counts cover the whole experiment. Native chart points also open their available rollout evidence without requiring a saved comparison.
 
 **Reference evidence / Selected evidence** open immutable measurement receipts. Recovery evidence shows the failed check, relevant recorded change and later check/result. The linked rollout map uses the same receipt. Counts of repeated-failure windows can overlap; they are not unique attempts or wasted compute.
 

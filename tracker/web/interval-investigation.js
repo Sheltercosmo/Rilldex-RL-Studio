@@ -65,11 +65,31 @@ const IntervalInvestigation=(()=>{
   }draw();
  }
  function section(host,title){const s=el('section',null,'iv-panel ii-panel');s.id='ii-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-');s.append(el('h2',title));host.append(s);return s;}
+ function nativeTelemetry(host,data){
+  const panel=section(host,'Linked trainer metrics');
+  if(!data){panel.append(el('p','This earlier capture does not contain native trainer logs. Create a new comparison to include linked logs.','field-note'));return;}
+  panel.append(el('p',`${data.records.length} native logs · ${data.referenced_selected_uses} / ${data.selected_uses} selected use receipts referenced`));
+  if(!data.records.length)panel.append(el('p','No trainer logs explicitly reference these training uses. Add training-use references when logging to include native metrics in an investigation.','field-note'));
+  if(data.unlinked_logs)panel.append(el('p',`${data.unlinked_logs} logs across this experiment have no use references and are not assigned to these source intervals. View them in Training overview.`, 'field-note'));
+  if(data.truncated)panel.append(el('p',`Capture limited to ${data.record_limit} native logs. Narrow the source intervals to retain more detail.`,'ii-warning'));
+  for(const item of data.records){
+   const r=item.record,row=el('details'),windows=item.windows.map(s=>s==='baseline'?'Reference':'Selected').join(' + ')||'Unresolved';
+   row.append(el('summary',`${r.framework} · ${r.clock} ${r.step} · ${windows}`));let loaded=false;
+   row.addEventListener('toggle',()=>{if(!row.open||loaded)return;loaded=true;
+   row.append(el('p',`${r.objective} · ${r.split} · ${item.producer} · ${r.session}`),el('p',`${item.matched_uses} / ${item.declared_uses} declared uses join this selection · ${item.declared_coverage} reference inventory`));
+   if(item.windows.length>1||item.unmatched_uses||item.declared_coverage==='partial')row.append(el('p','This log includes mixed, partial or unmatched references. Its aggregate is shown once and is not assigned as an interval-specific value.','ii-warning'));
+   row.append(table(['Native measure','Value','Unit / reduction'],Object.entries(r.metrics).map(([key,m])=>[`${m.label} · ${key}`,m.status==='recorded'?fmt(m.value,m.unit):m.status,`${m.unit} · ${m.reduction}`])));
+   const sources=el('div',null,'ii-actions');for(const [index,id] of item.run_ids.slice(0,50).entries())sources.append(link(`Open rollout ${index+1}`,'/semantic-map?'+new URLSearchParams({run:id,observer:'source',return_to:location.pathname+location.search})));row.append(sources,details('Pinned log and exact use references',item));
+   if(item.run_ids.length>50)row.append(el('p',`${item.run_ids.length-50} additional source links are retained in the pinned record.`));
+   });panel.append(row);
+  }
+  panel.append(details('Attribution and metric populations',data.boundary));
+ }
  function render(host,doc,onRevision){
   const s=doc.snapshot;host.replaceChildren();const pinned=el('div',null,'ii-pinned');pinned.append(el('strong',doc.title),el('span',`Captured ${new Date(s.captured_at).toLocaleString()} · immutable`),button('Compare with latest arrivals',()=>open({...doc.controls,title:doc.title,hypothesis:doc.hypothesis,parent_id:doc.id})));host.append(pinned);
   const scope=section(host,'One interval · shared evidence');scope.append(el('p',`${s.scope.experiment} · ${s.scope.environment||'all environments'} · reference ${s.scope.baseline.join('–')} → selected ${s.scope.current.join('–')}`),el('p','Source intervals stay separate from native learner steps. Related records are joined by exact identity.','field-note'),details('Coordinate definitions and alignment',s.clock_boundary));
   if(s.excluded.missing_coordinates)scope.append(el('p',`${s.excluded.missing_coordinates} sources excluded: no recorded training coordinate.`,'ii-warning'));
-  const jump=el('nav',null,'ii-jumps');jump.setAttribute('aria-label','Interval evidence');for(const [label,id]of [['Population','ii-outcome-context-task-composition'],['Learning signals','ii-recorded-learning-signals'],['Behavior','ii-behavior-outcome-measures'],['Run history','ii-run-history-candidate-explanations'],['Follow-up','ii-hypothesis-follow-up']])jump.append(link(label,'#'+id));scope.append(jump);
+  const jump=el('nav',null,'ii-jumps');jump.setAttribute('aria-label','Interval evidence');for(const [label,id]of [['Population','ii-outcome-context-task-composition'],['Learning signals','ii-recorded-learning-signals'],['Trainer metrics','ii-linked-trainer-metrics'],['Behavior','ii-behavior-outcome-measures'],['Run history','ii-run-history-candidate-explanations'],['Follow-up','ii-hypothesis-follow-up']])jump.append(link(label,'#'+id));scope.append(jump);
   if(s.excluded.unselected_monitors)scope.append(el('p',`${s.excluded.unselected_monitors} registered monitors are outside this capture. Change the measure selection when creating a new comparison.`,'field-note'));
   const composition=section(host,'Outcome context & task composition');
   const mix=new Map();for(const r of s.source_rows){const side=s.population.baseline.includes(r.id)?'baseline':'current';const key=JSON.stringify([r.adapter,...['environment','environment_version','split','task_id','task_revision','training_clock','training_step_basis','sampling','reward_definition','source_selection','training_inclusion'].map(k=>r.metadata[k])]);if(!mix.has(key))mix.set(key,{label:[r.metadata.environment||'Environment unspecified',r.metadata.split||'split unspecified',r.metadata.task_id||'Task unspecified',r.metadata.training_clock||'clock unspecified',r.metadata.training_step_basis||'basis unspecified',...['sampling','reward_definition','task_revision'].filter(k=>r.metadata[k]).map(k=>k.replaceAll('_',' ')+': '+JSON.stringify(r.metadata[k]))].join(' · '),baseline:[],current:[]});mix.get(key)[side].push(r);}
@@ -103,6 +123,7 @@ const IntervalInvestigation=(()=>{
   }
   if(!hasSignals)signals.append(el('p','No exact-joined score, filter or learner-use records. Missing telemetry is not no learning.','ii-warning'));
   signals.append(el('p',s.learning_context?.boundary,'field-note'),el('p','GPU-hour learning efficiency needs timestamped resource allocations and comparable evaluations. Action counts and masked-token fractions cannot substitute.','field-note'));
+  nativeTelemetry(host,s.native_telemetry);
   const measures=section(host,'Behavior & outcome measures');measures.append(el('p','Raw per-step values. Shading marks the selected interval. Different configurations remain separate; no universal “healthy” direction is assigned.','field-note'));
   if(!s.panels.length)measures.append(link('Configure measures in Monitor management','/monitors'));
   for(const panel of s.panels){const card=el('article',null,'ii-measure');card.append(el('h3',panel.monitor.name),el('p',panel.monitor.analysis_definition?.description||panel.monitor.custom?.description||panel.limits.at(-1),'field-note'));

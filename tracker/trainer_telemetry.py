@@ -12,6 +12,7 @@ from numbers import Real, Integral
 from .schema import InputError, digest, dumps
 
 VERSION = 'trainer-telemetry/1'
+LINKED_VERSION = 'trainer-telemetry/2'
 MAPPING = 'native-trainer-metrics/1'
 GROUPS = ('loss', 'entropy', 'kl', 'clipping', 'tokens', 'throughput')
 
@@ -71,6 +72,12 @@ def initialize(c):
       session TEXT NOT NULL, step INTEGER NOT NULL, document TEXT NOT NULL,
       received_at TEXT NOT NULL, PRIMARY KEY(producer,experiment,record_id));
       CREATE INDEX IF NOT EXISTS telemetry_scope ON trainer_telemetry(experiment,producer,session,step);''')
+    c.executescript('''CREATE TABLE IF NOT EXISTS trainer_telemetry_uses (
+      experiment TEXT NOT NULL, producer TEXT NOT NULL, record_id TEXT NOT NULL,
+      use_producer TEXT NOT NULL, use_id TEXT NOT NULL, use_revision INTEGER NOT NULL,
+      PRIMARY KEY(experiment,producer,record_id,use_producer,use_id,use_revision));
+      CREATE INDEX IF NOT EXISTS telemetry_use_lookup ON trainer_telemetry_uses(
+        experiment,use_producer,use_id,use_revision);''')
 
 
 def text(value, name):
@@ -79,16 +86,33 @@ def text(value, name):
 
 
 def validate(packet):
-    if not isinstance(packet, dict) or set(packet) != {'schema','producer','experiment','records'} or packet['schema'] != VERSION:
-        raise InputError('Use trainer-telemetry/1 with producer, experiment and records')
+    if not isinstance(packet, dict) or set(packet) != {'schema','producer','experiment','records'} or packet['schema'] not in {VERSION,LINKED_VERSION}:
+        raise InputError('Use trainer-telemetry/1 or trainer-telemetry/2 with producer, experiment and records')
     for k in ('producer','experiment'): text(packet[k], k)
     if not isinstance(packet['records'], list) or not 1 <= len(packet['records']) <= 1000:
         raise InputError('Supply 1–1,000 telemetry records')
     seen = set()
     for r in packet['records']:
         required = {'id','session','step','clock','split','framework','framework_version','objective','population','environment','metrics','mapping'}
+        if packet['schema']==LINKED_VERSION: required.add('training_uses')
         if not isinstance(r, dict) or set(r) != required: raise InputError('Invalid telemetry record fields')
-        for k in required - {'step','metrics'}: text(r[k], k)
+        for k in required - {'step','metrics','training_uses'}: text(r[k], k)
+        if 'training_uses' in r:
+            link=r['training_uses']
+            if not isinstance(link,dict) or set(link)!={'coverage','basis','records'} or not isinstance(link['coverage'],str) or link['coverage'] not in {'complete','partial'}:
+                raise InputError('training_uses needs coverage (complete or partial), basis and records')
+            text(link['basis'],'training-use link basis')
+            if not isinstance(link['records'],list) or not 1<=len(link['records'])<=10000:
+                raise InputError('Supply 1–10,000 exact training-use references')
+            identities=set()
+            for ref in link['records']:
+                if not isinstance(ref,dict) or set(ref)!={'producer','id','revision'}:
+                    raise InputError('A training-use reference needs producer, id and revision')
+                text(ref['producer'],'use producer');text(ref['id'],'use record id')
+                if type(ref['revision']) is not int or ref['revision']!=0:raise InputError('Training uses are immutable revision zero records')
+                identity=(ref['producer'],ref['id'],ref['revision'])
+                if identity in identities:raise InputError('Duplicate training-use reference')
+                identities.add(identity)
         if type(r['step']) is not int or not 0 <= r['step'] < 2**63: raise InputError('step must be a nonnegative integer')
         if r['split'] not in {'train','evaluation'}: raise InputError('split must be train or evaluation')
         if r['id'] in seen: raise InputError('Duplicate telemetry identity')
@@ -110,7 +134,7 @@ def validate(packet):
 
 def packet(logs, *, producer, experiment, framework, framework_version, objective,
            step, session, clock='learner_update', split='train', population='trainer logged batch',
-           environment='unspecified', definitions=None, record_id=None):
+           environment='unspecified', definitions=None, record_id=None, training_uses=None):
     """Adapt a native logger dictionary without pooling or inventing scalars.
 
     Unknown numeric keys survive as native/unmapped values. Overrides require
@@ -144,8 +168,13 @@ def packet(logs, *, producer, experiment, framework, framework_version, objectiv
     record = dict(session=session,step=step,clock=clock,split=split,framework=framework,
                   framework_version=framework_version,objective=objective,population=population,
                   environment=environment,metrics=values,mapping=MAPPING)
+    if training_uses is not None:
+        # Own the supplied references; callers may reuse and mutate their batch.
+        from copy import deepcopy
+        record['training_uses']=deepcopy(training_uses)
     record['id'] = record_id or 'log-' + digest(record)
-    return validate(dict(schema=VERSION,producer=producer,experiment=experiment,records=[record]))
+    return validate(dict(schema=LINKED_VERSION if training_uses is not None else VERSION,
+                         producer=producer,experiment=experiment,records=[record]))
 
 
 def receive(store, value):
@@ -160,6 +189,9 @@ def receive(store, value):
             if prior and json.loads(prior[0]) != r: raise ReviewConflict('Telemetry identity conflicts with retained evidence')
             inserted += c.execute('INSERT OR IGNORE INTO trainer_telemetry VALUES (?,?,?,?,?,?,?)',
                 (*key,r['session'],r['step'],dumps(r),datetime.now(timezone.utc).isoformat())).rowcount
+            for ref in r.get('training_uses',{}).get('records',[]):
+                c.execute('INSERT OR IGNORE INTO trainer_telemetry_uses VALUES (?,?,?,?,?,?)',
+                    (value['experiment'],value['producer'],r['id'],ref['producer'],ref['id'],ref['revision']))
     return dict(id='telemetry-packet-'+digest(value),revision=0,inserted=inserted)
 
 
@@ -216,10 +248,10 @@ class TrainerTelemetry:
             text(self.context[key],key)
         if framework not in PROFILES: raise InputError('Unknown telemetry framework profile')
 
-    def log(self, logs, *, step, split='train', record_id=None):
-        value = packet(logs,step=step,split=split,record_id=record_id,**self.context)
+    def log(self, logs, *, step, split='train', record_id=None, training_uses=None):
+        value = packet(logs,step=step,split=split,record_id=record_id,training_uses=training_uses,**self.context)
         if value is None: return {'skipped':'No scalar metrics'}
-        if hasattr(self.target,'log_telemetry'): return self.target.log_telemetry(value['experiment'],value['records'])
+        if hasattr(self.target,'log_telemetry'): return self.target.log_telemetry(value['experiment'],value['records'],schema=value['schema'])
         return receive(self.target,value)
 
     def transformers_callback(self):

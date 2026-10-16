@@ -186,11 +186,12 @@ def capture(store,raw):
             panels.append(panel)
         # These shared panels use the entire selected source population, not
         # the first monitor's potentially narrower custom population.
-        from . import training_lineage, comparison_lineage, generation_cohorts
+        from . import training_lineage, comparison_lineage, generation_cohorts, telemetry_evidence
         windows={'baseline':baseline,'current':current}
         members={side:[r['id'] for r in selected if lo<=r['metadata']['training_step']<=hi] for side,(lo,hi) in windows.items()}
         training=training_lineage.snapshot(saved,experiment=experiment,environment=environment)
         lineage=comparison_lineage.capture(members,training)
+        native_telemetry=telemetry_evidence.capture(saved,experiment=experiment,lineage=lineage)
         pending=generation_cohorts.project(saved,experiment=experiment,environment=environment,windows=windows,include_members=True,limit=1000)
         events=history(saved,experiment,environment)
         # Preserve exact outcomes and task composition even without a monitor.
@@ -203,7 +204,7 @@ def capture(store,raw):
         questions=listing(saved,experiment,environment)['questions']
         snapshot=dict(captured_at=m.now(),scope=dict(experiment=experiment,environment=environment,baseline=baseline,current=current),
             population=members,source_rows=sources,panels=panels,training_lineage=lineage,declared_populations=pending,
-            history=events,questions=questions,learning_context=learning_context(lineage,sources),excluded=dict(missing_coordinates=sum(type(r['metadata'].get('training_step')) is not int for r in runs),
+            history=events,questions=questions,learning_context=learning_context(lineage,sources),native_telemetry=native_telemetry,excluded=dict(missing_coordinates=sum(type(r['metadata'].get('training_step')) is not int for r in runs),
                 unselected_monitors=len(definitions)-len(requested)),
             clock_boundary='Windows select recorded source training coordinates. Configurations and clocks remain separate cohorts. Learner updates are joined through exact source revisions, not equal step numbers. Generation declarations retain their own clock; unaligned declarations cannot establish closure of this source population.')
     snapshot['snapshot_id']='interval-'+digest(snapshot)
