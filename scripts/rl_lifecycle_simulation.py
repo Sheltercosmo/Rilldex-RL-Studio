@@ -51,6 +51,18 @@ def wait_for(fn, description, timeout=45):
     raise AssertionError('Timed out: ' + description)
 
 
+def dashboard_ready(result, monitor_ids, expected):
+    # An incomplete snapshot can already have a measured (unavailable) result.
+    # Wait for final source delivery as well as monitor materialization before
+    # asserting the training samples' exact final-revision joins.
+    rows = [m for m in result['monitors'] if m['id'] in monitor_ids]
+    return (result['population'] == expected and len(result['runs']) == expected
+        and all(r['state'] == 'complete' for r in result['runs'])
+        and len(rows) == len(monitor_ids) and all(
+        sum(len(s['points']) for s in m['series']) == expected
+        and m['coverage']['statuses'].get('pending', 0) == 0 for m in rows))
+
+
 def document(step, index, environment, *, partial=False):
     """Known state changes and check results, recorded through the producer SDK."""
     pattern = PATTERNS[step][index]
@@ -249,11 +261,7 @@ def run(root):
         def dashboard(expected):
             result = server.request('/api/monitoring?' + urlencode(dict(experiment=EXPERIMENT)))
             wanted = {m['id'] for m in monitors.values()}
-            rows = [m for m in result['monitors'] if m['id'] in wanted]
-            ready = result['population'] == expected and len(rows)==2 and all(
-                sum(len(s['points']) for s in m['series']) == expected
-                and m['coverage']['statuses'].get('pending',0)==0 for m in rows)
-            return result if ready else None
+            return result if dashboard_ready(result, wanted, expected) else None
 
         for step in range(3):
             if step == 2:
