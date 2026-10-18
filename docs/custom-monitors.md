@@ -53,7 +53,7 @@ These charts use saved observations; selecting them does not run a model.
 Definitions follow the selected observation version. New `--protocol search`
 workspaces preserve complete readable task instructions and explicit benign
 alternatives; existing workers keep their version and cache.
-[Public-case results](../research/real-trajectory-evaluation-2026-10-18/coherent-context-evaluation/README.md).
+[Validation and limitations](DETECTOR_VALIDATION.md).
 
 Choose **Custom reward detector** for task-specific rules. The generated Python
 compares a configured reward threshold with a recorded check on the same

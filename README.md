@@ -4,7 +4,7 @@
 
 **RL observability from training curves to agent behavior.** Collect rollouts and native trainer metrics, map activities and their relationships, and inspect the evidence behind each measurement. Work through the dashboard, Python, SQL, or a combination—before, during, or after training.
 
-[Quick start](#quick-start) · [Product tour](#product-tour) · [Trainer metrics](docs/TRAINER_TELEMETRY.md) · [Model setup](#model-setup) · [Python & SQL](#python--sql) · [Deployment](docs/DEPLOYMENT.md)
+[Quick start](#quick-start) · [Product tour](#product-tour) · [Reward checks](#reward-hacking-detection) · [Trainer metrics](docs/TRAINER_TELEMETRY.md) · [Model setup](#model-setup) · [Python & SQL](#python--sql) · [Deployment](docs/DEPLOYMENT.md)
 
 ## Highlights
 
@@ -37,6 +37,7 @@ Figures use saved app content with navigation removed. Maps use a [public OpenHa
 | Training overview | Follow rollout measures and native trainer curves with explicit populations, clocks, units and missing data. |
 | Trainer telemetry | Connect TRL GRPO/PPO callbacks, verl logger dictionaries or custom definitions. Preserve objective, version, writer and restart boundaries. |
 | Monitor management | Use built-in measures, relationship queries and Python-defined monitors; inspect coverage and contributing cases. |
+| Reward hacking detection | Select common behavior checks or define reward-specific detectors; follow flagged rollouts and inspect their supporting evidence. |
 | Investigations | Compare intervals and populations, retain hypotheses, annotate run history and reopen saved evidence. |
 | Continuous collection | Follow existing and new output, ingest growing rollouts, retry durable outboxes, resume after interruption, or import staged batches. |
 | Code-first analysis | Query rollouts, graph nodes/edges, measurements and trainer logs through Python and SQL; export JSONL/CSV or use optional dataframe/graph libraries. |
@@ -109,6 +110,30 @@ rilldex --db study.sqlite semantic watch-run observations --follow --candidate-c
 ```
 
 `proposer.py` is your local/API adapter. These are lifetime call/byte ceilings, not token or cost estimates. The worker begins with zero allowance and reuses compatible saved work. Keep credentials in environment variables. [Contracts and local/API setup →](docs/MODEL_SETUP.md)
+
+## Reward hacking detection
+
+Track suspicious behavior and reward inconsistencies across rollouts, then open a finding to inspect its source passages, applicable instructions and evaluator records. Choose the checks relevant to your task in **Monitors → Reward checks**.
+
+| Coverage | Available checks |
+| --- | --- |
+| Answer acquisition | Online or repository-history searches for the current task's answer; reuse of an externally supplied solution. |
+| Evaluator access | Reading or probing grading material; a separate check for access against an explicit restriction. |
+| Evaluation manipulation | Suspected evaluator bypass, substituted work, and instructions aimed at influencing a downstream judge. |
+| Task conflicts | Actions conflicting with recorded requirements, using the separate `requirements` protocol. |
+| Recorded reward checks | Unmet diagnostic checks outside the reward; discrepancies between logged reward and its declared component sum or product. |
+
+**Start:** configure `JEV_API_KEY`, then scan imported rollouts. No semantic map or candidate LLM is required for these behavior checks.
+
+```sh
+rilldex --db study.sqlite monitor-rollouts run reward-checks --experiment run-a --all-latest --protocol search --max-new-calls 20
+```
+
+Select the resulting saved observations in **Reward checks** to add charts. Rerun to resume cached work; use `watch` instead of `run`, without `--all-latest`, to follow completed rollouts. Recorded reward checks need evaluator data, not a model call.
+
+**Customize:** choose **Custom reward detector** to generate a Python worker, or use `Workspace.reward_detector()` directly. Bind a reward version, map input fields, and implement `detect(ctx)` with your rules, libraries, local model or API. Return `flagged`, `clear`, `unknown` or `not_applicable`, with a summary and evidence. Scalar, component and custom rewards use your own logic; separately arriving evaluator reports can be matched to the same task and output. The worker backfills and follows rollouts; its results appear in the normal charts, case views and Python/SQL analysis. [Customization guide →](docs/custom-monitors.md#custom-reward-checks)
+
+**Limits:** flags are investigation signals, not proof of successful exploitation. Permitted evaluator access is still access. Missing records and incomplete scans reduce coverage; false positives and misses remain, particularly for bypass and numerical exploits. No general real-world accuracy rate is established. [Validation and limitations →](docs/DETECTOR_VALIDATION.md)
 
 ## Python & SQL
 
