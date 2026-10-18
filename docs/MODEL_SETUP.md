@@ -45,3 +45,5 @@ This is a developer integration interface, not a CLI model switch or an installe
 `watch-init` permits zero new calls. `watch-budget` explicitly raises lifetime request and UTF-8 byte ceilings; these are not token or currency limits. Failed or interrupted provider invocations remain accounted for. Exact compatible candidates and decisions are reused. `rilldex semantic watch-status observations` shows queued, blocked and published work and retained usage reports.
 
 [Continuous observation and recovery](CONTINUOUS_OBSERVATION.md) covers live prefixes, staged layers and resuming a blocked rollout.
+
+[Experimental attachment review](ATTACHMENT_REVIEW.md) compares qualifier and intention attachments without changing saved maps.
