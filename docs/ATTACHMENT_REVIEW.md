@@ -17,6 +17,19 @@ Transport uses `JEV_API_KEY`, respects proxy settings and reuses exact saved res
 
 `compare_to_choice(packet, feature_id, choice_bound, choice_result, membership_bound, membership_result)` compares validated readings without choosing a winner. Results are **review-only** and do not publish graph edges or modify metrics.
 
+For explicit **individual versus joint application**, use the separate scope-reading protocol:
+
+```python
+from tracker import work_scope_interpretations as scopes
+
+query = scopes.request(packet, bound, feature_id)
+transport = BoundedTransport("scope-readings", maximum=1)
+decision = scopes.resolve(packet, bound, feature_id, transport(query))
+view = scopes.project(packet, bound, feature_id, decision)
+```
+
+`individual_applications` attaches the feature to each selected item; `joint_applications` retains the group and source context without copying the feature to its members. Missing groups and application errors remain possible. This protocol also stays review-only; it does not migrate existing maps.
+
 Development trials found mixed results: shared-method attachment improved, but hedge attachment and shared negation still failed. This is not a validated extractor replacement. Four authored controls retain the original API responses, including failures:
 
 ```sh
