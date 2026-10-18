@@ -1,0 +1,921 @@
+{
+  "schema": "recorded-syntax-context/1",
+  "cases": [
+    {
+      "case": "shared-method",
+      "syntax": {
+        "id": "syntax-499dd882c9a72b7b08b89d5bcafd654e2da5f73faf4b23f73c9e6dcb9ccf5637",
+        "schema": "work-syntax-evidence/1",
+        "unit_id": "u1",
+        "parsed": {
+          "source": {
+            "event_id": "e1",
+            "start": 0,
+            "end": 111,
+            "text": "Using the staging database, I will inspect the schema and validate the records. Then I will publish the report."
+          },
+          "tokens": [
+            {
+              "id": 0,
+              "text": "Using",
+              "start": 0,
+              "end": 5,
+              "sentence": 0,
+              "head": 7,
+              "relation": "advcl",
+              "pos": "VERB"
+            },
+            {
+              "id": 1,
+              "text": "the",
+              "start": 6,
+              "end": 9,
+              "sentence": 0,
+              "head": 3,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 2,
+              "text": "staging",
+              "start": 10,
+              "end": 17,
+              "sentence": 0,
+              "head": 3,
+              "relation": "compound",
+              "pos": "NOUN"
+            },
+            {
+              "id": 3,
+              "text": "database",
+              "start": 18,
+              "end": 26,
+              "sentence": 0,
+              "head": 0,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 4,
+              "text": ",",
+              "start": 26,
+              "end": 27,
+              "sentence": 0,
+              "head": 7,
+              "relation": "punct",
+              "pos": "PUNCT"
+            },
+            {
+              "id": 5,
+              "text": "I",
+              "start": 28,
+              "end": 29,
+              "sentence": 0,
+              "head": 7,
+              "relation": "nsubj",
+              "pos": "PRON"
+            },
+            {
+              "id": 6,
+              "text": "will",
+              "start": 30,
+              "end": 34,
+              "sentence": 0,
+              "head": 7,
+              "relation": "aux",
+              "pos": "AUX"
+            },
+            {
+              "id": 7,
+              "text": "inspect",
+              "start": 35,
+              "end": 42,
+              "sentence": 0,
+              "head": 7,
+              "relation": "ROOT",
+              "pos": "VERB"
+            },
+            {
+              "id": 8,
+              "text": "the",
+              "start": 43,
+              "end": 46,
+              "sentence": 0,
+              "head": 9,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 9,
+              "text": "schema",
+              "start": 47,
+              "end": 53,
+              "sentence": 0,
+              "head": 7,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 10,
+              "text": "and",
+              "start": 54,
+              "end": 57,
+              "sentence": 0,
+              "head": 7,
+              "relation": "cc",
+              "pos": "CCONJ"
+            },
+            {
+              "id": 11,
+              "text": "validate",
+              "start": 58,
+              "end": 66,
+              "sentence": 0,
+              "head": 7,
+              "relation": "conj",
+              "pos": "VERB"
+            },
+            {
+              "id": 12,
+              "text": "the",
+              "start": 67,
+              "end": 70,
+              "sentence": 0,
+              "head": 13,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 13,
+              "text": "records",
+              "start": 71,
+              "end": 78,
+              "sentence": 0,
+              "head": 11,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 14,
+              "text": ".",
+              "start": 78,
+              "end": 79,
+              "sentence": 0,
+              "head": 7,
+              "relation": "punct",
+              "pos": "PUNCT"
+            },
+            {
+              "id": 15,
+              "text": "Then",
+              "start": 80,
+              "end": 84,
+              "sentence": 1,
+              "head": 18,
+              "relation": "advmod",
+              "pos": "ADV"
+            },
+            {
+              "id": 16,
+              "text": "I",
+              "start": 85,
+              "end": 86,
+              "sentence": 1,
+              "head": 18,
+              "relation": "nsubj",
+              "pos": "PRON"
+            },
+            {
+              "id": 17,
+              "text": "will",
+              "start": 87,
+              "end": 91,
+              "sentence": 1,
+              "head": 18,
+              "relation": "aux",
+              "pos": "AUX"
+            },
+            {
+              "id": 18,
+              "text": "publish",
+              "start": 92,
+              "end": 99,
+              "sentence": 1,
+              "head": 18,
+              "relation": "ROOT",
+              "pos": "VERB"
+            },
+            {
+              "id": 19,
+              "text": "the",
+              "start": 100,
+              "end": 103,
+              "sentence": 1,
+              "head": 20,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 20,
+              "text": "report",
+              "start": 104,
+              "end": 110,
+              "sentence": 1,
+              "head": 18,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 21,
+              "text": ".",
+              "start": 110,
+              "end": 111,
+              "sentence": 1,
+              "head": 18,
+              "relation": "punct",
+              "pos": "PUNCT"
+            }
+          ],
+          "parser": {
+            "name": "spacy",
+            "version": "3.8.16",
+            "model": "core_web_sm",
+            "model_version": "3.8.0",
+            "language": "en",
+            "label_scheme": "spaCy pipeline dependency labels"
+          }
+        },
+        "validation": "Exact source coverage and dependency topology; parser predictions remain unvalidated.",
+        "publication": "review_only"
+      },
+      "review_hash": "4f117f64e68f707629a147e85ba367181d65ebd69c1a8890b1f654e942e9b947"
+    },
+    {
+      "case": "state-hedge",
+      "syntax": {
+        "id": "syntax-58c0297be522e39a81a838be1ffa8e511bf2c72292abd807d0fb9962871e7b6f",
+        "schema": "work-syntax-evidence/1",
+        "unit_id": "u1",
+        "parsed": {
+          "source": {
+            "event_id": "e1",
+            "start": 0,
+            "end": 104,
+            "text": "The cache may be stale. I will measure the request latency and restart the worker after saving the logs."
+          },
+          "tokens": [
+            {
+              "id": 0,
+              "text": "The",
+              "start": 0,
+              "end": 3,
+              "sentence": 0,
+              "head": 1,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 1,
+              "text": "cache",
+              "start": 4,
+              "end": 9,
+              "sentence": 0,
+              "head": 3,
+              "relation": "nsubj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 2,
+              "text": "may",
+              "start": 10,
+              "end": 13,
+              "sentence": 0,
+              "head": 3,
+              "relation": "aux",
+              "pos": "AUX"
+            },
+            {
+              "id": 3,
+              "text": "be",
+              "start": 14,
+              "end": 16,
+              "sentence": 0,
+              "head": 3,
+              "relation": "ROOT",
+              "pos": "AUX"
+            },
+            {
+              "id": 4,
+              "text": "stale",
+              "start": 17,
+              "end": 22,
+              "sentence": 0,
+              "head": 3,
+              "relation": "acomp",
+              "pos": "ADJ"
+            },
+            {
+              "id": 5,
+              "text": ".",
+              "start": 22,
+              "end": 23,
+              "sentence": 0,
+              "head": 3,
+              "relation": "punct",
+              "pos": "PUNCT"
+            },
+            {
+              "id": 6,
+              "text": "I",
+              "start": 24,
+              "end": 25,
+              "sentence": 1,
+              "head": 8,
+              "relation": "nsubj",
+              "pos": "PRON"
+            },
+            {
+              "id": 7,
+              "text": "will",
+              "start": 26,
+              "end": 30,
+              "sentence": 1,
+              "head": 8,
+              "relation": "aux",
+              "pos": "AUX"
+            },
+            {
+              "id": 8,
+              "text": "measure",
+              "start": 31,
+              "end": 38,
+              "sentence": 1,
+              "head": 8,
+              "relation": "ROOT",
+              "pos": "VERB"
+            },
+            {
+              "id": 9,
+              "text": "the",
+              "start": 39,
+              "end": 42,
+              "sentence": 1,
+              "head": 11,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 10,
+              "text": "request",
+              "start": 43,
+              "end": 50,
+              "sentence": 1,
+              "head": 11,
+              "relation": "compound",
+              "pos": "NOUN"
+            },
+            {
+              "id": 11,
+              "text": "latency",
+              "start": 51,
+              "end": 58,
+              "sentence": 1,
+              "head": 8,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 12,
+              "text": "and",
+              "start": 59,
+              "end": 62,
+              "sentence": 1,
+              "head": 8,
+              "relation": "cc",
+              "pos": "CCONJ"
+            },
+            {
+              "id": 13,
+              "text": "restart",
+              "start": 63,
+              "end": 70,
+              "sentence": 1,
+              "head": 8,
+              "relation": "conj",
+              "pos": "VERB"
+            },
+            {
+              "id": 14,
+              "text": "the",
+              "start": 71,
+              "end": 74,
+              "sentence": 1,
+              "head": 15,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 15,
+              "text": "worker",
+              "start": 75,
+              "end": 81,
+              "sentence": 1,
+              "head": 13,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 16,
+              "text": "after",
+              "start": 82,
+              "end": 87,
+              "sentence": 1,
+              "head": 13,
+              "relation": "prep",
+              "pos": "ADP"
+            },
+            {
+              "id": 17,
+              "text": "saving",
+              "start": 88,
+              "end": 94,
+              "sentence": 1,
+              "head": 16,
+              "relation": "pcomp",
+              "pos": "VERB"
+            },
+            {
+              "id": 18,
+              "text": "the",
+              "start": 95,
+              "end": 98,
+              "sentence": 1,
+              "head": 19,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 19,
+              "text": "logs",
+              "start": 99,
+              "end": 103,
+              "sentence": 1,
+              "head": 17,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 20,
+              "text": ".",
+              "start": 103,
+              "end": 104,
+              "sentence": 1,
+              "head": 8,
+              "relation": "punct",
+              "pos": "PUNCT"
+            }
+          ],
+          "parser": {
+            "name": "spacy",
+            "version": "3.8.16",
+            "model": "core_web_sm",
+            "model_version": "3.8.0",
+            "language": "en",
+            "label_scheme": "spaCy pipeline dependency labels"
+          }
+        },
+        "validation": "Exact source coverage and dependency topology; parser predictions remain unvalidated.",
+        "publication": "review_only"
+      },
+      "review_hash": "4b77a10516768b3c4bbf6495e779fa934d9681d8e484186d853388100ed2dfac"
+    },
+    {
+      "case": "shared-negation",
+      "syntax": {
+        "id": "syntax-60f31258e3fb0e853a42bfcc61d88bda83d2ad3c5bef7d9d1dc9f47ed094244d",
+        "schema": "work-syntax-evidence/1",
+        "unit_id": "u1",
+        "parsed": {
+          "source": {
+            "event_id": "e1",
+            "start": 0,
+            "end": 74,
+            "text": "Do not delete the snapshots or overwrite the backup. First list the files."
+          },
+          "tokens": [
+            {
+              "id": 0,
+              "text": "Do",
+              "start": 0,
+              "end": 2,
+              "sentence": 0,
+              "head": 2,
+              "relation": "aux",
+              "pos": "AUX"
+            },
+            {
+              "id": 1,
+              "text": "not",
+              "start": 3,
+              "end": 6,
+              "sentence": 0,
+              "head": 2,
+              "relation": "neg",
+              "pos": "PART"
+            },
+            {
+              "id": 2,
+              "text": "delete",
+              "start": 7,
+              "end": 13,
+              "sentence": 0,
+              "head": 2,
+              "relation": "ROOT",
+              "pos": "VERB"
+            },
+            {
+              "id": 3,
+              "text": "the",
+              "start": 14,
+              "end": 17,
+              "sentence": 0,
+              "head": 4,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 4,
+              "text": "snapshots",
+              "start": 18,
+              "end": 27,
+              "sentence": 0,
+              "head": 2,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 5,
+              "text": "or",
+              "start": 28,
+              "end": 30,
+              "sentence": 0,
+              "head": 2,
+              "relation": "cc",
+              "pos": "CCONJ"
+            },
+            {
+              "id": 6,
+              "text": "overwrite",
+              "start": 31,
+              "end": 40,
+              "sentence": 0,
+              "head": 2,
+              "relation": "conj",
+              "pos": "VERB"
+            },
+            {
+              "id": 7,
+              "text": "the",
+              "start": 41,
+              "end": 44,
+              "sentence": 0,
+              "head": 8,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 8,
+              "text": "backup",
+              "start": 45,
+              "end": 51,
+              "sentence": 0,
+              "head": 6,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 9,
+              "text": ".",
+              "start": 51,
+              "end": 52,
+              "sentence": 0,
+              "head": 2,
+              "relation": "punct",
+              "pos": "PUNCT"
+            },
+            {
+              "id": 10,
+              "text": "First",
+              "start": 53,
+              "end": 58,
+              "sentence": 1,
+              "head": 11,
+              "relation": "advmod",
+              "pos": "ADV"
+            },
+            {
+              "id": 11,
+              "text": "list",
+              "start": 59,
+              "end": 63,
+              "sentence": 1,
+              "head": 11,
+              "relation": "ROOT",
+              "pos": "VERB"
+            },
+            {
+              "id": 12,
+              "text": "the",
+              "start": 64,
+              "end": 67,
+              "sentence": 1,
+              "head": 13,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 13,
+              "text": "files",
+              "start": 68,
+              "end": 73,
+              "sentence": 1,
+              "head": 11,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 14,
+              "text": ".",
+              "start": 73,
+              "end": 74,
+              "sentence": 1,
+              "head": 11,
+              "relation": "punct",
+              "pos": "PUNCT"
+            }
+          ],
+          "parser": {
+            "name": "spacy",
+            "version": "3.8.16",
+            "model": "core_web_sm",
+            "model_version": "3.8.0",
+            "language": "en",
+            "label_scheme": "spaCy pipeline dependency labels"
+          }
+        },
+        "validation": "Exact source coverage and dependency topology; parser predictions remain unvalidated.",
+        "publication": "review_only"
+      },
+      "review_hash": "006e525f816db56bfbc2c7b9be54b1cc56b46df6571fc48a795ca50f5892ec4b"
+    },
+    {
+      "case": "joint-negation",
+      "syntax": {
+        "id": "syntax-b75c2cf62eb137b09d6dda7c7d89e7b1366dba3a4b072804b43bc8f579e8fed4",
+        "schema": "work-syntax-evidence/1",
+        "unit_id": "u1",
+        "parsed": {
+          "source": {
+            "event_id": "e1",
+            "start": 0,
+            "end": 103,
+            "text": "Do not both delete the snapshots and overwrite the backup. You may do either one. First list the files."
+          },
+          "tokens": [
+            {
+              "id": 0,
+              "text": "Do",
+              "start": 0,
+              "end": 2,
+              "sentence": 0,
+              "head": 3,
+              "relation": "aux",
+              "pos": "AUX"
+            },
+            {
+              "id": 1,
+              "text": "not",
+              "start": 3,
+              "end": 6,
+              "sentence": 0,
+              "head": 3,
+              "relation": "neg",
+              "pos": "PART"
+            },
+            {
+              "id": 2,
+              "text": "both",
+              "start": 7,
+              "end": 11,
+              "sentence": 0,
+              "head": 3,
+              "relation": "advmod",
+              "pos": "PRON"
+            },
+            {
+              "id": 3,
+              "text": "delete",
+              "start": 12,
+              "end": 18,
+              "sentence": 0,
+              "head": 3,
+              "relation": "ROOT",
+              "pos": "VERB"
+            },
+            {
+              "id": 4,
+              "text": "the",
+              "start": 19,
+              "end": 22,
+              "sentence": 0,
+              "head": 5,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 5,
+              "text": "snapshots",
+              "start": 23,
+              "end": 32,
+              "sentence": 0,
+              "head": 3,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 6,
+              "text": "and",
+              "start": 33,
+              "end": 36,
+              "sentence": 0,
+              "head": 3,
+              "relation": "cc",
+              "pos": "CCONJ"
+            },
+            {
+              "id": 7,
+              "text": "overwrite",
+              "start": 37,
+              "end": 46,
+              "sentence": 0,
+              "head": 3,
+              "relation": "conj",
+              "pos": "VERB"
+            },
+            {
+              "id": 8,
+              "text": "the",
+              "start": 47,
+              "end": 50,
+              "sentence": 0,
+              "head": 9,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 9,
+              "text": "backup",
+              "start": 51,
+              "end": 57,
+              "sentence": 0,
+              "head": 7,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 10,
+              "text": ".",
+              "start": 57,
+              "end": 58,
+              "sentence": 0,
+              "head": 3,
+              "relation": "punct",
+              "pos": "PUNCT"
+            },
+            {
+              "id": 11,
+              "text": "You",
+              "start": 59,
+              "end": 62,
+              "sentence": 1,
+              "head": 13,
+              "relation": "nsubj",
+              "pos": "PRON"
+            },
+            {
+              "id": 12,
+              "text": "may",
+              "start": 63,
+              "end": 66,
+              "sentence": 1,
+              "head": 13,
+              "relation": "aux",
+              "pos": "AUX"
+            },
+            {
+              "id": 13,
+              "text": "do",
+              "start": 67,
+              "end": 69,
+              "sentence": 1,
+              "head": 13,
+              "relation": "ROOT",
+              "pos": "VERB"
+            },
+            {
+              "id": 14,
+              "text": "either",
+              "start": 70,
+              "end": 76,
+              "sentence": 1,
+              "head": 15,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 15,
+              "text": "one",
+              "start": 77,
+              "end": 80,
+              "sentence": 1,
+              "head": 13,
+              "relation": "dobj",
+              "pos": "NUM"
+            },
+            {
+              "id": 16,
+              "text": ".",
+              "start": 80,
+              "end": 81,
+              "sentence": 1,
+              "head": 13,
+              "relation": "punct",
+              "pos": "PUNCT"
+            },
+            {
+              "id": 17,
+              "text": "First",
+              "start": 82,
+              "end": 87,
+              "sentence": 2,
+              "head": 18,
+              "relation": "advmod",
+              "pos": "ADV"
+            },
+            {
+              "id": 18,
+              "text": "list",
+              "start": 88,
+              "end": 92,
+              "sentence": 2,
+              "head": 18,
+              "relation": "ROOT",
+              "pos": "VERB"
+            },
+            {
+              "id": 19,
+              "text": "the",
+              "start": 93,
+              "end": 96,
+              "sentence": 2,
+              "head": 20,
+              "relation": "det",
+              "pos": "DET"
+            },
+            {
+              "id": 20,
+              "text": "files",
+              "start": 97,
+              "end": 102,
+              "sentence": 2,
+              "head": 18,
+              "relation": "dobj",
+              "pos": "NOUN"
+            },
+            {
+              "id": 21,
+              "text": ".",
+              "start": 102,
+              "end": 103,
+              "sentence": 2,
+              "head": 18,
+              "relation": "punct",
+              "pos": "PUNCT"
+            }
+          ],
+          "parser": {
+            "name": "spacy",
+            "version": "3.8.16",
+            "model": "core_web_sm",
+            "model_version": "3.8.0",
+            "language": "en",
+            "label_scheme": "spaCy pipeline dependency labels"
+          }
+        },
+        "validation": "Exact source coverage and dependency topology; parser predictions remain unvalidated.",
+        "publication": "review_only"
+      },
+      "review_hash": "d0343c3c5441a2472205ad28562682f5f86ee426d3daf27b22ff9962f6459fe9"
+    }
+  ]
+}

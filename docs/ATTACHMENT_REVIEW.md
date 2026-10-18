@@ -24,3 +24,21 @@ python -m unittest discover -s tests -p test_work_feature_membership.py
 ```
 
 This replay makes no model calls. Passing tests establish protocol behavior, not semantic accuracy.
+
+## Optional local syntax context
+
+With [spaCy and its English model](https://spacy.io/models/en#en_core_web_sm) installed separately:
+
+```python
+import spacy
+from tracker import work_syntax_evidence as syntax
+
+nlp = spacy.load("en_core_web_sm")
+document = nlp(request["state"]["unit"]["source"]["text"])
+captured = syntax.from_spacy(packet, bound, document,
+    library_version=spacy.__version__, model=nlp.meta["name"],
+    model_version=nlp.meta["version"])
+evidence = syntax.review(packet, bound, feature_id, result, captured)
+```
+
+Inspect `pairs` for source spans, predicted dependency paths and cross-sentence review flags. Flags do not reject attachments or establish negation scope. Partial token matches stay unaligned. Other parsers can supply `bind()` with the same source, parser metadata and token-tree fields. Saved records replay without spaCy or API calls.
