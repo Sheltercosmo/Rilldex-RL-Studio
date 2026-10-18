@@ -23,3 +23,10 @@ test('unresolved evidence differs from a missing receipt or inapplicable task',(
  assert.equal(receiptLabel({...p,status:'error'}),'Measurement error');
  assert.equal(receiptLabel({...p,value:0},'fraction'),'0.0%');
 });
+test('a single reward finding is a verdict, not a percentage or confidence score',()=>{
+ const monitor={kind:'custom',custom:{config:{reward_detector:{schema:'reward-detector/1'}}}};
+ assert.equal(receiptLabel({value:1},'fraction',monitor),'Flagged');
+ assert.equal(receiptLabel({value:0},'fraction',monitor),'Clear');
+ assert.equal(receiptLabel({value:null,value_id:'receipt',unknown_opportunities:1},'fraction',monitor),'Unresolved evidence · 1 opportunities');
+ assert.equal(receiptLabel({value:1},'fraction',{kind:'custom'}),'100.0%');
+});

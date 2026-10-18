@@ -19,6 +19,15 @@ test('setup escapes user text as Python string content',()=>{
  assert.ok(!code.includes('experiment='));
 });
 
+test('reward setup binds the reward contract and versioned check, without assuming a positive scale',()=>{
+ const code=script({template:'reward',database:'study.sqlite',name:'Penalty integrity',rewardDefinition:'cost-v2',rewardPath:'/raw/score',checkPath:'/raw/check',subjectPath:'/raw/subject',threshold:-2,direction:'le'});
+ for(const part of ['ws.reward_detector(', 'reward_definition="cost-v2"','"reward": "/raw/score"','"threshold": -2','"direction": "le"','check.get("subject_id") != subject','check.get("reward_definition") != ctx.reward_definition','"input_evidence"','"not_applicable"','monitor.follow(detect'])assert.ok(code.includes(part),part);
+ assert.throws(()=>script({template:'reward',threshold:'not a number'}),/finite/);
+ assert.throws(()=>script({template:'reward',threshold:''}),/finite/);
+ assert.ok(script({template:'reward',definitionPath:'/raw/reward_version'}).includes('definition_path="/raw/reward_version"'));
+ assert.ok(script({template:'reward',rewardDefinition:'x"\nimport os'}).includes('reward_definition="x\\"\\nimport os"'));
+});
+
 function editorHarness(){
  const source=fs.readFileSync(require.resolve('../tracker/web/monitoring.js'),'utf8');
  const nodes=new Map();const $=id=>{if(!nodes.has(id))nodes.set(id,{value:'',hidden:false,disabled:false,textContent:'',attributes:{},setAttribute(key,value){this.attributes[key]=value;},classList:{toggle(){}}});return nodes.get(id);};
@@ -61,4 +70,29 @@ test('top-level Advanced code choice preserves built-in settings when switching 
  assert.equal($('#monitor-observer').value,'reviewed-v2');
  assert.equal($('#monitor-name').value,'Follow-through review');
  assert.equal($('#save-monitor').disabled,false);
+});
+
+test('reward template shows the matching callback instructions and blocks invalid downloads',()=>{
+ const {$,ctx}=editorHarness();
+ $('#monitor-kind').value='custom';$('#custom-monitor-template').value='reward';$('#custom-reward-threshold').value='-2';
+ ctx.updateCustomScript();
+ assert.equal($('#custom-reward-fields').hidden,false);
+ assert.match($('#custom-callback-help').textContent,/flagged, clear, unknown/);
+ assert.equal($('#monitor-group').value,'Reward integrity');
+ assert.equal($('#download-custom-monitor').disabled,false);
+ $('#custom-reward-threshold').value='';ctx.updateCustomScript();
+ assert.equal($('#download-custom-monitor').disabled,true);
+ assert.equal($('#custom-monitor-script').textContent,'');
+});
+test('evaluator template uses pinned reports without a scalar reward threshold',()=>{
+ const code=script({template:'evaluations',rewardDefinition:'reward/v3',rewardProducer:'score-worker/1',checkProducer:'check "quoted"'});
+ for(const part of ['evaluations={','"producer": "score-worker/1"','ctx.compare_evaluations("reward", "check")','"ambiguous_reports"','"evaluation_ids"','monitor.follow(detect'])assert.ok(code.includes(part),part);
+ assert.ok(code.includes('"producer": "check \\"quoted\\""'));
+ assert.ok(!code.includes('"threshold"'));
+ const {$,ctx}=editorHarness();$('#custom-monitor-template').value='evaluations';ctx.updateCustomScript();
+ assert.equal($('#custom-reward-fields').hidden,false);
+ assert.equal($('#custom-recorded-check-fields').hidden,true);
+ assert.equal($('#custom-evaluation-fields').hidden,false);
+ assert.equal($('#download-custom-monitor').disabled,false);
+ assert.match($('#custom-callback-help').textContent,/ctx.evaluations/);
 });

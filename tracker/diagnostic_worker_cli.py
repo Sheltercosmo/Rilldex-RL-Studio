@@ -11,13 +11,14 @@ from .schema import InputError,digest
 def configure(commands):
     parser=commands.add_parser('monitor-rollouts',help='Run/resume diagnostic monitoring across completed rollout imports')
     sub=parser.add_subparsers(dest='monitor_command',required=True)
-    for name in ('run','watch'):
+    for name in ('run','watch','plan'):
         p=sub.add_parser(name);p.add_argument('directory')
-        p.add_argument('--protocol',choices=('source','chains'),default='chains')
-        p.add_argument('--prompt-key',action='store_true');p.add_argument('--max-new-calls',type=int,default=100)
-        p.add_argument('--retry-failed',action='store_true',help='Explicitly retry failed sources once in this process')
+        p.add_argument('--protocol',choices=('source','chains','search','requirements'),default='chains',help='requirements finds task-conflict candidates; search scans long traces for behavior flags')
+        if name!='plan':
+            p.add_argument('--prompt-key',action='store_true');p.add_argument('--max-new-calls',type=int,default=100)
+            p.add_argument('--retry-failed',action='store_true',help='Explicitly retry failed sources once in this process')
         p.add_argument('--experiment');p.add_argument('--adapter',action='append')
-        if name=='run':
+        if name in {'run','plan'}:
             choose=p.add_mutually_exclusive_group(required=True)
             choose.add_argument('--run-id',action='append');choose.add_argument('--all-latest',action='store_true')
         else:
@@ -29,6 +30,8 @@ def configure(commands):
 def execute(args,store):
     if args.monitor_command in {'status','audit'}:
         print(json.dumps(getattr(worker,args.monitor_command)(store,args.directory),ensure_ascii=False,indent=2));return
+    if args.monitor_command=='plan':
+        print(json.dumps(worker.plan(store,worker.selection(args.run_id,args.experiment,args.adapter),args.protocol),ensure_ascii=False,indent=2));return
     from .jev import JevClient
     client=JevClient();prompted=False;used=0
     def transport(req):

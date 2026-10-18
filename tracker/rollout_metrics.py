@@ -44,8 +44,12 @@ DEFINITIONS = {
  'recovery_rate': ('Recovery after failure', 'Requires scoped failure, subsequent attempt and confirmed recovery; not yet measured.'),
  'plan_completion_rate': ('Plan completion', 'Requires result evidence for each stage; attempts and reports alone are insufficient.'),
 }
-from .diagnostic_monitors import DETECTORS as DIAGNOSTIC_DETECTORS
+from .diagnostic_monitors import DETECTORS as BASE_DIAGNOSTIC_DETECTORS
+from .diagnostic_access import definitions as access_definitions
+DIAGNOSTIC_DETECTORS=access_definitions(BASE_DIAGNOSTIC_DETECTORS)
 DEFINITIONS.update({'diagnostic_'+k:(label+' · experimental',definition+' Per-rollout indicator (1/0); unresolved or unsupported evidence is unavailable. Incidence uses only decidable inspected rollouts; not a policy-violation or confirmed reward-hacking rate.') for k,(label,definition) in DIAGNOSTIC_DETECTORS.items()})
+from .requirement_diagnostics import METRIC as REQUIREMENT_METRIC, DEFINITION as REQUIREMENT_DEFINITION
+DEFINITIONS['diagnostic_'+REQUIREMENT_METRIC]=REQUIREMENT_DEFINITION
 from .reward_records import DEFINITIONS as REWARD_DEFINITIONS, INDICATORS as REWARD_INDICATORS
 DEFINITIONS.update(REWARD_DEFINITIONS)
 from .feedback_assessment import DEFINITIONS as FEEDBACK_DEFINITIONS

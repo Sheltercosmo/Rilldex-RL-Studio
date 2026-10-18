@@ -41,6 +41,52 @@ class EvaluationTests(unittest.TestCase):
         right['inputs']['evaluator']['sha256']=digest('different check implementation')
         return run,left,right
 
+    def test_source_citations_bind_exact_text_and_survive_sdk_http_and_followups(self):
+        root=self.base();parent=self.plan(root)
+        run=self.store.get(root['snapshot']['rows'][0]['id'],raw=True)['run']
+        event=next(e for e in run['events'] if e['text'].strip())
+        w=Workspace(self.db)
+        citation=w.cite_source(run['id'],event['id'],role='context',quote=event['text'])
+        raw=report(run);raw['source_citations']=[citation]
+        saved=w.record_evaluation(raw)
+        self.assertEqual(saved['source_citations'],[citation])
+        endpoint=self.start_server()
+        req=Request(endpoint+'/api/evaluations',data=json.dumps(raw).encode(),headers={'Content-Type':'application/json'})
+        with urlopen(req,timeout=15) as response:self.assertEqual(json.load(response),saved)
+        finding=self.finding(parent,evidence=[dict(kind='evaluation',id=saved['id'])],assessment='inconclusive')
+        retained=follow.bundle(self.store,finding['id'])['investigation']['follow_up']['checks'][0]['results'][0]
+        self.assertEqual(retained['evidence'][0]['receipt']['source_citations'],[citation])
+        self.assertEqual(Workspace(self.db).table('evaluations').rows[0]['receipt']['source_citations'],[citation])
+
+    def test_forged_source_citations_are_rejected_without_saving_any_report(self):
+        run,left,_=self.pair();event=next(e for e in run['events'] if len(e['text'])>2)
+        cite=evaluations.cite_source(run,event['id'],role='implementation')
+        mutations=[dict(text='x'+cite['text'][1:]),dict(source_pointer='/wrong'),dict(event_id='missing'),
+            dict(source_hash='0'*64),dict(run_id='other'),dict(start=True),dict(end=cite['end']+1),
+            dict(role='verified_reward_hack'),dict(basis='utf16'),dict(extra='untrusted')]
+        for change in mutations:
+            with self.subTest(change=change),self.assertRaises(InputError):
+                evaluations.receive(self.store,{**left,'source_citations':[{**cite,**change}]})
+        with self.assertRaisesRegex(InputError,'Duplicate'):
+            evaluations.receive(self.store,{**left,'source_citations':[cite,cite]})
+        self.assertEqual(evaluations.listing(self.store,run_id=run['id'])['receipts'],[])
+        denied=Workspace(self.db,experiment='not-this-experiment')
+        with self.assertRaisesRegex(InputError,'scope'):
+            denied.cite_source(run['id'],event['id'],role='context')
+
+    def test_citation_quote_ambiguity_unicode_offsets_and_legacy_identity(self):
+        run,left,_=self.pair();event=run['events'][0]
+        event['text']='😀 start repeated repeated 结束'
+        cite=evaluations.cite_source(run,event['id'],role='requirement',quote='结束')
+        self.assertEqual(cite['start'],26)
+        self.assertEqual(evaluations.cite_source(run,event['id'],role='requirement',start=26,end=28),cite)
+        for options in [dict(quote='repeated'),dict(quote='absent'),dict(quote='start',start=2),dict(start=-1),dict(end=100)]:
+            with self.subTest(options=options),self.assertRaises(InputError):
+                evaluations.cite_source(run,event['id'],role='context',**options)
+        saved=evaluations.receive(self.store,left)
+        self.assertNotIn('source_citations',saved)
+        self.assertEqual(saved['id'],'evaluation-'+digest(left))
+
     def test_bound_report_is_idempotent_and_does_not_change_reward_graph_or_source_search(self):
         run,left,right=self.pair()
         before=self.store.get(run['id'],raw=True)['run']

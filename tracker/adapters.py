@@ -194,6 +194,10 @@ def normalize(document: dict, fmt: str = "auto", meta: dict | None = None, sourc
     version = FORMAT_VERSIONS.get(fmt, ADAPTER_VERSION)
     if fmt in {'chat-messages','generation'} and 'trajectory_format' not in document:
         version = fmt+'/unmarked-1'
+    if fmt == 'chat-messages':
+        from .anthropic_blocks import native, VERSION as native_version
+        if native(document.get('messages', [])) or 'system' in document or any(isinstance(t,dict) and 'input_schema' in t for t in document.get('tools', [])):
+            version = native_version
     if fmt == 'environment-episode' and document.get('trajectory_format') == 'environment-episode/2':
         version = 'environment-episode/2'
     if fmt=='agent-process-bench' and document.get('data_source','').startswith('bfcl'):

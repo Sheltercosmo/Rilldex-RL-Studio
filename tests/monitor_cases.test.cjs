@@ -93,3 +93,17 @@ test('a slower previous cohort request cannot replace a newer selection',async()
  pending[0]({rows});await previous;
  assert.deepEqual(Array.from(c.filteredCases(),r=>r.run.id),['business-pass']);
 });
+
+test('binary code review includes unflagged and unknown cases without widening the selected cohort or step',async()=>{
+ const {context:c,controls}=harness(async path=>path.includes('options')?{measurement_review:{version:'measurement-review-sample/3',custom_aggregation:'incidence'}}:{rows});
+ const custom={...monitor,kind:'custom',custom:{aggregation:'incidence'}};
+ await c.openCases(custom,0,1,'positive',series);
+ assert.deepEqual(Array.from(c.filteredCases(),r=>r.run.id),['terminal-pass']);
+ assert.deepEqual(Array.from(c.reviewCases(),r=>r.run.id),['terminal-pass','terminal-unknown']);
+ assert.equal(controls.get('#cases-review').hidden,false);
+ assert.equal(controls.get('#cases-review').textContent,'Review all outcomes');
+ await c.openCases(custom,null,1,'positive',series);
+ assert.deepEqual(Array.from(c.reviewCases(),r=>r.run.id),['terminal-pass','terminal-unknown','terminal-later']);
+ controls.get('#cases-filter').value='unknown';
+ assert.equal(c.reviewCases().length,3);
+});

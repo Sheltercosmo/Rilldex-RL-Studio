@@ -132,3 +132,15 @@ body.workspace .active-captures{padding:16px 18px;margin:12px 0 20px;border:1px 
 .advanced-monitor-setup .form-pair{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .advanced-monitor-setup label,.advanced-monitor-setup input{min-width:0;max-width:100%}
 @media(max-width:560px){.advanced-monitor-setup .form-pair{grid-template-columns:minmax(0,1fr)}}
+
+.workspace .reward-check-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:10px;margin:16px 0}
+.workspace .reward-check-option{display:flex;align-items:flex-start;gap:10px;padding:14px;border:1px solid #dce2ee;border-radius:10px;background:#fff;min-width:0}
+.workspace .reward-check-option input{width:16px;height:16px;flex:0 0 16px;margin:3px 0;accent-color:#3d54df}
+.workspace .reward-check-option span{display:grid;gap:5px;min-width:0}.workspace .reward-check-option small{font-size:12px;line-height:1.5;color:#59677e}
+.workspace #reward-check-options{padding:18px}.workspace #custom-reward-fields{margin:14px 0;padding:14px;border:1px solid #dce2ee;border-radius:10px}
+.workspace #cases-dialog .custom-feedback{margin:8px 0;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.5}
+.workspace #cases-dialog .custom-feedback-warning{border-color:#e5c88f;background:#fff9ee}
+.workspace #cases-dialog .custom-feedback-critical{border-color:#e5bab7;background:#fff4f2}
+.workspace #cases-dialog .custom-feedback-info{border-color:#dce2f5;background:#f7f8fe}
+.workspace #cases-dialog .dialog-head{flex-direction:row;align-items:flex-start}
+@container registry (max-width:600px){.workspace #case-table td:nth-child(4),.workspace #case-table td:nth-child(5){grid-column:1/-1}.workspace #case-table td:nth-child(5){display:flex;gap:8px 16px;flex-wrap:wrap;align-items:center}.workspace #case-table td:nth-child(5)::before{display:none}.workspace #case-table td:nth-child(5) a{margin-top:0!important}}

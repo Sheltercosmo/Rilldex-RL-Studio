@@ -139,3 +139,51 @@ def from_spacy(prepared, bound, document, *, library_version, model, model_versi
         sentence=sentence_ids[t.i],head=t.head.i,relation=t.dep_,pos=t.pos_) for t in document]
     return bind(prepared,bound,dict(source=source,tokens=tokens,parser=dict(name='spacy',version=library_version,
         model=model,model_version=model_version,language=document.lang_,label_scheme='spaCy pipeline dependency labels')))
+
+
+def candidate_groups(prepared, bound, syntax):
+    """Propose groups of fixed contents whose heads share a dependency subtree.
+
+    This is candidate construction, not attachment or scope classification. It
+    neither removes supplied groups nor invents missing content expressions.
+    Sentence-spanning and unaligned contents remain in the original inventory.
+    """
+    parsed = checked(prepared, bound, syntax)
+    tokens = parsed['tokens']
+    anchors = {}; members = {}; depths = {}
+    for content in sorted(bound['contents'], key=lambda item: item['id']):
+        anchor = _anchor(content['expression'], tokens)
+        status = (anchor['status'] if anchor['status'] != 'aligned' else
+                  'multiple_sentence_span' if len(anchor['sentence_ids']) != 1 else 'eligible')
+        anchors[content['id']] = dict(status=status, head_ids=anchor['head_ids'])
+        if status != 'eligible':
+            continue
+        common = None
+        for head in anchor['head_ids']:
+            chain = []; current = head
+            while True:
+                chain.append(current)
+                if tokens[current]['head'] == current:
+                    break
+                current = tokens[current]['head']
+            for i, node in enumerate(chain):
+                depths[node] = len(chain) - i
+            common = set(chain) if common is None else common.intersection(chain)
+        for node in common or ():
+            members.setdefault(node, set()).add(content['id'])
+    groups = {}
+    for node, ids in members.items():
+        if len(ids) < 2:
+            continue
+        key = tuple(sorted(ids))
+        # The deepest witness is the smallest subtree with this same membership.
+        if key not in groups or depths[node] > depths[groups[key]]:
+            groups[key] = node
+    return dict(schema=VERSION+'/candidate-groups/1', syntax_id=syntax['id'],
+        source_hash=digest(parsed['source']), parser=deepcopy(parsed['parser']), anchors=anchors,
+        groups=[dict(content_ids=list(ids), root_token_id=node,
+                     root_expression={k:tokens[node][k] for k in ('text','start','end')},
+                     basis='predicted_dependency_subtree') for ids,node in sorted(groups.items())],
+        coverage=dict(all_multi_content_scopes=False, missing_contents_not_proposed=True),
+        publication='review_only',
+        limit='Candidate groups over the supplied inventory; no semantic scope, shared intent, execution or completeness guarantee.')

@@ -1,0 +1,6 @@
+.workspace .custom-evidence{margin:12px 0;padding:14px;border:1px solid var(--line,#dce2ee);border-radius:10px;background:#fff;min-width:0;overflow-wrap:anywhere}
+.workspace .custom-evidence h3{font-size:15px;margin:0 0 8px}.workspace .custom-evidence h4{font-size:13px;margin:16px 0 8px}
+.workspace .custom-evidence p{font-size:12px;line-height:1.55;margin:8px 0}.workspace .custom-evidence small{display:block;font-size:11px;color:var(--muted,#5a6477);margin:6px 0}
+.workspace .custom-evidence pre{padding:10px;margin:6px 0;font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;background:var(--surface-subtle,#f6f8fc);border-radius:6px}
+.workspace .custom-evidence code{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}.workspace .custom-evidence summary{font-size:12px;cursor:pointer}.workspace .custom-evidence details{margin:8px 0}
+.workspace .custom-evidence-excerpt{border-top:1px solid var(--line,#dce2ee);padding:12px 0}.workspace .custom-evidence-excerpt strong{font-size:12px;text-transform:capitalize}.workspace .custom-evidence-note{color:var(--muted,#5a6477)}

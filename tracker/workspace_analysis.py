@@ -132,7 +132,7 @@ Each call sees fresh committed data; joins within one call share a read snapshot
         """Discover experiment names and saved observation sets without a UI."""
         return self.data.options(experiment=self.scope['experiment'],history=self.scope['history'])
 
-    def monitor(self,name,*,version,description,unit='value',aggregation='mean',config=None,group='Behavior'):
+    def monitor(self,name,*,version,description,unit='value',aggregation='mean',config=None,group='Behavior',evaluations=None):
         """Register a code-defined monitor whose saved results appear in the UI.
 
         Use .run(callback) for backfill and .follow(callback) for new rollouts.
@@ -140,7 +140,14 @@ Each call sees fresh committed data; joins within one call share a read snapshot
         """
         from .custom_monitors import CustomMonitor
         return CustomMonitor(self,name,version=version,description=description,unit=unit,
-                             aggregation=aggregation,config=config,group=group)
+                             aggregation=aggregation,config=config,group=group,evaluations=evaluations)
+
+    def reward_detector(self,name,*,version,description,reward_definition,inputs,
+                        definition_path='/metadata/reward_definition',stage='custom',config=None,evaluations=None):
+        """Register a reward-scoped rule; .run/.follow publish ordinary monitor values."""
+        from .reward_detectors import RewardDetector
+        return RewardDetector(self,name,version=version,description=description,reward_definition=reward_definition,
+                              inputs=inputs,definition_path=definition_path,stage=stage,config=config,evaluations=evaluations)
 
     def cohort_readiness(self, *, environment=None, monitor=None, windows=None, include_members=False, clock=None, basis=None, limit=100, cohort_id=None, producer=None):
         """Live declared population evidence; observer scope constrains the monitor."""
@@ -398,6 +405,18 @@ Each call sees fresh committed data; joins within one call share a read snapshot
         with self.data.snapshot() as saved:
             self._evaluation_scope(saved, receipt['run_id'])
         return receive(Store(self.data.path), receipt)
+
+    def cite_source(self, run_id, event_id, *, role, quote=None, start=None, end=None):
+        """Exact source citation for an evaluation report; no semantic judgment.
+
+        Use a unique quote, explicit Python codepoint offsets, or the whole event.
+        Role labels are supplied by the caller, not inferred by this helper.
+        """
+        from .evaluation_receipts import cite_source
+        with self.data.snapshot() as saved:
+            self._evaluation_scope(saved, run_id)
+            run = json.loads(saved.c.execute('SELECT document FROM runs WHERE id=?', [run_id]).fetchone()[0])
+        return cite_source(run, event_id, role=role, quote=quote, start=start, end=end)
 
     def evaluations(self, run_id, *, limit=50, offset=0):
         """Page immutable evaluation reports for a rollout in this workspace scope."""

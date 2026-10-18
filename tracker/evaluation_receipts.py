@@ -18,6 +18,9 @@ COMPARISON_VERSION = 'evaluation-comparison/2'
 PURPOSES = {'reward', 'independent_check', 'repair_check'}
 EXECUTIONS = {'completed', 'error', 'incomplete', 'not_run'}
 VERDICTS = {'passed', 'failed', 'unknown'}
+CITATION_ROLES = {'requirement', 'implementation', 'action', 'observation', 'context'}
+CITATION_BASIS = 'source-event-text/unicode-codepoints/1'
+CITATION_FIELDS = ('role', 'run_id', 'source_hash', 'event_id', 'source_pointer', 'start', 'end', 'text', 'basis')
 BOUNDARY = ('Producer-reported evaluation, outside the agent-visible trace. Hashes pin declared inputs; '
             'Rilldex has not executed the check, verified artifact contents or authenticated independence. '
             'Disagreement is not a reward-hacking verdict.')
@@ -39,8 +42,8 @@ def initialize(c):
     c.execute('CREATE INDEX IF NOT EXISTS evaluation_receipt_run ON evaluation_receipts(run_id,received_at,id)')
 
 
-def fields(raw, required):
-    if not isinstance(raw, dict) or set(raw) != set(required):
+def fields(raw, required, optional=()):
+    if not isinstance(raw, dict) or set(raw) - set(required) - set(optional) or set(required) - set(raw):
         raise InputError('Unexpected or missing evaluation fields')
 
 
@@ -61,7 +64,7 @@ def finite(value):
 
 def validate(raw):
     fields(raw, ('schema', 'label', 'producer', 'performed_at', 'run_id', 'source_hash',
-                 'purpose', 'inputs', 'execution', 'verdict', 'score', 'summary', 'evidence'))
+                 'purpose', 'inputs', 'execution', 'verdict', 'score', 'summary', 'evidence'), ('source_citations',))
     if raw['schema'] != VERSION: raise InputError('Unsupported evaluation receipt')
     for name in ('label', 'producer', 'run_id'): text(raw[name], name)
     text(raw['summary'], 'summary', 6000)
@@ -95,7 +98,64 @@ def validate(raw):
         fields(item, ('label', 'text'))
         text(item['label'], 'evidence label')
         text(item['text'], 'evidence text', 12000)
+    citations = raw.get('source_citations', [])
+    if not isinstance(citations, list) or len(citations) > 32:
+        raise InputError('Attach at most 32 source citations')
+    seen = set()
+    for item in citations:
+        validate_citation(item)
+        if item['run_id'] != raw['run_id'] or item['source_hash'] != raw['source_hash']:
+            raise InputError('Source citation belongs to another rollout revision')
+        key = digest(item)
+        if key in seen: raise InputError('Duplicate source citation')
+        seen.add(key)
     if len(dumps(raw).encode('utf-8')) > 256000: raise InputError('Evaluation receipt exceeds 256 KB')
+
+
+def validate_citation(item):
+    fields(item, CITATION_FIELDS)
+    if not isinstance(item['role'], str) or item['role'] not in CITATION_ROLES:
+        raise InputError('Unknown source citation role')
+    if item['basis'] != CITATION_BASIS: raise InputError('Unknown source citation offset basis')
+    for name in ('run_id', 'event_id'): text(item[name], name)
+    # Some importers use an empty JSON pointer for their root object.
+    if not isinstance(item['source_pointer'], str) or len(item['source_pointer']) > 4096:
+        raise InputError('Invalid source citation pointer')
+    identity(item['source_hash'], 'source citation')
+    text(item['text'], 'source citation text', 12000)
+    if (type(item['start']) is not int or type(item['end']) is not int
+            or not 0 <= item['start'] < item['end'] or item['end'] - item['start'] != len(item['text'])):
+        raise InputError('Invalid source citation boundaries')
+
+
+def cite_source(run, event_id, *, role, quote=None, start=None, end=None):
+    """Construct an exact citation; its role is the caller's interpretation."""
+    event = next((e for e in run['events'] if e['id'] == event_id), None)
+    if event is None: raise InputError('Unknown source citation event')
+    if quote is not None:
+        if start is not None or end is not None: raise InputError('Use a unique quote or explicit source offsets')
+        text(quote, 'source quote', 12000)
+        start = event['text'].find(quote)
+        if start < 0: raise InputError('Quote is absent from the source event')
+        if event['text'].find(quote, start + 1) >= 0:
+            raise InputError('Quote occurs more than once; use explicit source offsets')
+        end = start + len(quote)
+    else:
+        start = 0 if start is None else start
+        end = len(event['text']) if end is None else end
+    if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(event['text']):
+        raise InputError('Invalid source citation boundaries')
+    value = dict(role=role, run_id=run['id'], source_hash=digest(run), event_id=event_id,
+                 source_pointer=event['source_pointer'], start=start, end=end,
+                 text=event['text'][start:end], basis=CITATION_BASIS)
+    validate_citation(value)
+    return value
+
+
+def check_citations(run, raw):
+    from .semantic_extraction import checked_span
+    for item in raw.get('source_citations', []):
+        checked_span(run, item)
 
 
 def receive(store, raw):
@@ -103,8 +163,10 @@ def receive(store, raw):
     identifier = 'evaluation-' + digest(raw)
     with store.connect() as c:
         row = c.execute('SELECT document FROM runs WHERE id=?', (raw['run_id'],)).fetchone()
-        if not row or digest(json.loads(row[0])) != raw['source_hash']:
+        run = json.loads(row[0]) if row else None
+        if run is None or digest(run) != raw['source_hash']:
             raise InputError('Evaluation must bind an available exact rollout source revision')
+        check_citations(run, raw)
         c.execute('INSERT OR IGNORE INTO evaluation_receipts VALUES(?,?,?,?)',
                   (identifier, raw['run_id'], dumps(raw), datetime.now(timezone.utc).isoformat()))
     return read(store, identifier)

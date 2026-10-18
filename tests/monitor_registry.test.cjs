@@ -162,6 +162,12 @@ test('custom rollout cases show feedback severity and expandable result details'
  assert.match(JSON.stringify(evidence),/Warning: Review the action count/);
  assert.match(JSON.stringify(evidence),/Inspect the rollout/);
  assert.match(JSON.stringify(evidence),/action_count/);
+ c.filteredCases=()=>[{run,measurement:{value:1,details:{detector:{schema:'reward-detector/1',status:'flagged'}}}}];
+ c.renderCases();
+ assert.equal(nodes.get('#case-table').children[0].children[0].children[2].textContent,'Flagged','per-case flags must not look like confidence percentages');
+ c.caseMonitor.coverage={available:3,population:6};
+ c.caseMonitor.detector_counts={flagged:2,clear:1,unknown:1,not_applicable:2};
+ assert.match(c.coverageView(c.caseMonitor).detail,/2 flagged.*1 clear.*1 unknown.*2 not applicable/);
 });
 
 test('Add core monitors posts the idempotent source-default request and reloads the registry',async()=>{

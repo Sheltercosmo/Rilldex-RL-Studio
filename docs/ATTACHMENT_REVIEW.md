@@ -55,3 +55,34 @@ evidence = syntax.review(packet, bound, feature_id, result, captured)
 ```
 
 Inspect `pairs` for source spans, predicted dependency paths and cross-sentence review flags. Flags do not reject attachments or establish negation scope. Partial token matches stay unaligned. Other parsers can supply `bind()` with the same source, parser metadata and token-tree fields. Saved records replay without spaCy or API calls.
+
+To add syntax-derived group options, pass `syntax=captured` to `scopes.request`, `scopes.resolve` and `scopes.project`. This preserves supplied options and adds groups from the predicted tree. Candidate coverage remains incomplete; no group is accepted automatically.
+
+## Targets within an activity
+
+Keep the activity intact while reviewing whether a qualification applies to a detail, the whole activity or neither:
+
+```python
+from tracker import work_content_targets as targets
+
+details = targets.from_syntax(packet, bound, content_id, captured)
+query = targets.request(packet, bound, feature_id, details)
+decision = targets.resolve(packet, bound, feature_id, details, transport(query))
+view = targets.project(packet, bound, feature_id, details, decision)
+```
+
+Detail targets create no extra activities. Missing or ambiguous targets remain unresolved. This experimental review does not update live maps or metrics.
+
+To construct relationships with these qualifications intact:
+
+```python
+from tracker import work_qualified_contents as qualified
+
+reviews = dict(inventory_selection=inventory_selection,
+    scope_reviews=[dict(decision=scope_decision)],
+    target_reviews=[dict(targets=details, decision=decision)])
+view = qualified.project(packet, bound, **reviews)
+request = qualified.relationship_request(packet, bound, **reviews)
+```
+
+Supply all feature reviews; include `syntax=captured` in any scope review that used it. Inspect `view["issues"]` for missing or conflicting reviews. Joint qualifications stay grouped; individual targets require their detail/whole-content review. `relationship_request` blocks incomplete reviews. Continue with `bind_links → selection_request → observation`, passing the same `reviews`; results remain review-only.

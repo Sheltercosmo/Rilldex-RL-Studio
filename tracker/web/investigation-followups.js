@@ -20,6 +20,7 @@ const InvestigationFollowups = (() => {
  function describe(parent,label,value){if(!value)return;const part=el('div',null,'if-description');part.append(el('small',label),el('p',value));parent.append(part);}
  const procedureLabels={same_procedure:'Same dispatched procedure',reconfigured_procedure:'Changed explicit settings or payload',alternative_procedure:'Different procedure',unresolved:'Unresolved'};
  const evaluationPurpose={reward:'Reward evaluation',independent_check:'Independent check (reported)',repair_check:'Repair check'};
+ const evaluationExecution={completed:'Completed',error:'Execution error',incomplete:'Incomplete',not_run:'Not run'};
  const evaluationStatus={agreement:'Verdicts agree',disagreement:'Verdicts disagree',different_source:'Different rollout or source revision',different_inputs:'Different declared inputs',missing_inputs:'Input revisions missing',execution_error:'Evaluation execution error',unresolved:'Check incomplete or verdict unknown'};
  function evaluationComparison(parent,pair){
   const current=pair.schema==='evaluation-comparison/2';const box=el('section',null,'if-case-row');box.append(el('strong',current?(evaluationStatus[pair.status]||pair.status):'Earlier comparison · criterion scope not checked'));
@@ -120,10 +121,19 @@ const InvestigationFollowups = (() => {
    for(const limit of e.limits)body.append(el('p',limit,'if-muted'));
    if(editing)for(const a of body.querySelectorAll('a')){a.target='_blank';a.rel='noopener';}
   }else if(e.kind==='evaluation'){
-   const r=e.receipt;body.append(el('p',evaluationPurpose[r.purpose]+' · '+r.execution+' · '+r.verdict,'if-question'));
+   const r=e.receipt;body.append(el('p',evaluationPurpose[r.purpose]+' · '+(evaluationExecution[r.execution]||r.execution)+' · '+r.verdict,'if-question'));
    describe(body,'Reported by',r.producer+' · '+r.performed_at);describe(body,'Summary',r.summary);
    if(r.score!=null)describe(body,'Reported score',String(r.score));
    body.append(el('p',e.boundary,'if-muted'));
+   if(r.source_citations?.length){
+    const citations=el('section',null,'if-source-citations');citations.append(el('h3','Linked source evidence'),el('p','Exact recorded passages. Roles are supplied by the report author; linking them does not verify the check or establish causation.','if-muted'));
+    const roles={requirement:'Requirement',implementation:'Implementation',action:'Action',observation:'Observation',context:'Context'};
+    for(const c of r.source_citations){const card=el('details',null,'if-case-row');card.open=true;
+     card.append(el('summary',(roles[c.role]||c.role)+' · '+c.event_id),el('pre',c.text),
+      inspectLink('Open source in map','/semantic-map?'+new URLSearchParams({run:r.run_id,observer:'source',level:'units',focus_unit:'event:'+c.event_id,return_to:location.pathname+location.search})));
+     citations.append(card);
+    }body.append(citations);
+   }
    const inputs=el('div',null,'if-case-list');for(const [role,input]of Object.entries(r.inputs)){
     const card=el('section',null,'if-case-row');card.append(el('strong',role.replaceAll('_',' ')),el('p',input?.label||'Revision not recorded'));
     if(input){const details=el('details');details.append(el('summary','Declared SHA-256'),el('code',input.sha256));card.append(details);}inputs.append(card);
@@ -237,7 +247,7 @@ const InvestigationFollowups = (() => {
      if(!choose.value){list.append(el('p','No rollout is bound to this investigation. Attach a saved receipt by identity.'));return;}
      const page=await api('/api/evaluations?'+new URLSearchParams({run_id:choose.value,limit:10,offset}));if(current!==request||token!==loadId||!d.isConnected)return;
      if(!page.receipts.length&&!append)list.append(el('p','No evaluation reports for this rollout. Send a report from your worker; missing reports are not passing checks.','if-empty'));
-     for(const r of page.receipts){const card=el('article',null,'if-case-row'),actions=el('div',null,'if-actions');card.append(el('strong',r.label),el('small',`${evaluationPurpose[r.purpose]} · ${r.execution} · ${r.verdict}`),el('small',r.producer+' · '+r.performed_at));
+     for(const r of page.receipts){const card=el('article',null,'if-case-row'),actions=el('div',null,'if-actions');card.append(el('strong',r.label),el('small',`${evaluationPurpose[r.purpose]} · ${evaluationExecution[r.execution]||r.execution} · ${r.verdict}`),el('small',r.producer+' · '+r.performed_at));
       actions.append(button('Inspect report',()=>showEvidence({kind:'evaluation',title:r.label,receipt:r,boundary:page.boundary},true,add)),button('Attach report',async()=>{try{await add({kind:'evaluation',id:r.id});error.textContent='';}catch(e){error.textContent=e.message;}}));card.append(actions);list.append(card);}
      offset+=page.receipts.length;more.hidden=!page.more;
     }catch(e){if(current===request&&token===loadId&&d.isConnected)error.textContent=e.message;}finally{if(current===request)more.disabled=false;}}

@@ -6,6 +6,14 @@ enforces recorded session/order boundaries and reserves each explicit question's
 matching passage before optional context. Version 5 added bounded continuation.
 Historical evaluations below retain their original implementation and evidence boundaries.
 
+For code-based source review, `tracker.criterion_review.make_request` compares
+an exact criterion with a selected source range. Specify `basis="dispatch"`,
+`"implementation"`, `"check_result"` or `"participant_report"`; `resolve` replays
+the model's raw argmax and retains the source references. These are experimental
+review findings, not compliance scores or verified reward-hacking detections.
+The [public-case evaluation](../research/reward-hacking-coverage-2026-10-18/README.md#criterion-and-evidence-type-review)
+retains both earlier failures and the corrected evidence-type comparison.
+
 The [source-scoped content experiment](../research/semantic-reconstruction-2026-10-16/README.md#implemented-shadow-protocol-and-live-development-results)
 separates quoted expressions from their qualification and argument attachments.
 Its six actual Jev calls exposed remaining scope and ordering disagreements on
@@ -410,3 +418,14 @@ leakage in version 5 and show exclusion in version 6. A two-question record now
 retains both matching passages within 2,000 characters, versus one previously.
 This is a bounded-allocation correction, not demonstrated broad ranking improvement.
 See [implementation and validation](../research/evidence-scope-budget-2026-10-16/README.md).
+
+## Long-trace behavior detection
+
+New `monitor-rollouts` workspaces with `--protocol search` use direct contextual
+flags, nested message attribution, local retrieval and cached pause/resume.
+Flags publish during partial scans; zero requires a completed, resolved scan.
+New search workspaces retain native task/call identities, retrieve linked result
+passages, and separate evaluator access from explicit instruction conflicts.
+Historical workspaces keep their protocol, definitions and cached decisions.
+Known bypass and numerical-reasoning errors remain; public-trace checks do not
+establish deployment accuracy. [Validation summary](DETECTOR_VALIDATION.md).

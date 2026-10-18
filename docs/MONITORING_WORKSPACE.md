@@ -197,6 +197,18 @@ The main workflow is a population of rollouts → saved monitors → per-rollout
 
 ## Persistent backend
 
+For long rollouts, preview inspection cost without API calls, then run a resumable budget:
+
+```sh
+rilldex --db study.sqlite monitor-rollouts plan ./inspection --all-latest --protocol search
+rilldex --db study.sqlite monitor-rollouts run ./inspection --all-latest --protocol search --max-new-calls 20
+rilldex --db study.sqlite monitor-rollouts status ./inspection
+```
+
+`search` is experimental: it scans bounded source pages, links evidence across pages and validates each proposed case. Repeat the same run command to reuse saved decisions. Status separates source scanning from link validation. Supported findings retain original source offsets; no supported finding means **unknown**, not a clean rollout or a reward-hacking rate. The preview counts initial scan requests before caching; evidence selection and validation can add calls. Existing `source` and `chains` protocols remain available.
+
+Workspaces retain their original protocol version on resume. Use a new workspace to try a newer version; existing cached decisions are not silently reclassified.
+
 SQLite already retains immutable rollout property graphs with typed nodes, directed relationships, adjacency indexes, source spans and observer identity. `tracker/monitoring.py` adds:
 
 - `monitors`: immutable measurement definitions, enabled/paused state and creation time. Editing creates a new definition and pauses the prior one.

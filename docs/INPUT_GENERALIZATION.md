@@ -43,6 +43,11 @@ This catches up existing lines and follows new complete lines. Stop and repeat w
 
 Reward/success on unmarked common records come from `outcome.reward` and `outcome.success`. Generic top-level `score` or `reward` fields are not guessed. The native verl reader has its own documented score convention. Preflight explains these boundaries and reports missing measures.
 
+The same `messages` route accepts Anthropic `tool_use`, `tool_result` and recorded
+thinking blocks, native tool definitions and top-level `system`. Mixed user
+messages separate tool feedback from instructions; results link by call ID.
+Supply accumulated message records, not raw Claude Code stream chunks.
+
 ## Capture in a rollout loop
 
 ```python
@@ -96,6 +101,8 @@ Analysis and graph tables use the normalized evidence, independently of transpor
 These checks run on Windows in the current workspace. They are contract and transport validation, not new distributed/GPU trainer, cloud-credential, browser-vision or semantic-classification accuracy validation.
 
 ## Upstream basis
+
+- Anthropic's [tool-use](https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/types/tool_use_block.py) and [tool-result](https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/types/tool_result_block_param.py) types define native arguments, result IDs and explicit error status.
 
 - [verl rollout tracing](https://verl.readthedocs.io/en/latest/advance/rollout_trace.html) distinguishes the agent loop, individual LLM calls and tool evidence. A flat generation export cannot replace the richer history.
 - [ART client architecture](https://art.openpipe.ai/fundamentals/art-client/) captures trajectories at the client boundary. This supports integrating at the record-producing loop instead of naming every trainer in the file picker.

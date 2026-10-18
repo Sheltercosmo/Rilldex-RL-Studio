@@ -78,6 +78,10 @@ def append_events(doc,fmt,events,warnings,meta):
         return result
     if fmt=='chat-messages':
         from .chat_messages import append_messages
+        if 'system' in doc:
+            text, media = content_text(doc['system'])
+            if text or media:
+                event(events, kind='context', actor='system', text=text, media=media, pointer='/system', context_kind='recorded_system_message')
         append_messages(doc,events,warnings,portable=True)
         meta.setdefault('environment','recorded-conversation')
         warnings.append('A supplied model conversation is not a complete simulator log. Additional agent histories must remain separate trajectories. Recorded tool results without native call IDs remain unlinked.')

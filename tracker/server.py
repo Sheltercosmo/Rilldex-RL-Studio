@@ -293,6 +293,9 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if path == '/api/monitoring/options':
                     from .monitoring import options
                     return self.response(200,options(store))
+                if path == '/api/monitoring/custom-inputs':
+                    from .custom_monitors import input_snapshot
+                    return self.response(200,input_snapshot(store,params.get('monitor',[''])[0],params.get('run',[''])[0]))
                 if path.startswith('/api/monitoring/values/'):
                     from .monitor_evidence import read
                     evidence=read(store,path.rsplit('/',1)[-1],params.get('run',[None])[0])
@@ -521,6 +524,8 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 allowed_files.update({'/monitor-comparisons.js':'monitor-comparisons.js','/monitor-comparisons.css':'monitor-comparisons.css'})
                 allowed_files['/population-evidence.js']='population-evidence.js'
                 allowed_files['/custom-monitor-setup.js']='custom-monitor-setup.js'
+                allowed_files['/reward-checks.js']='reward-checks.js'
+                allowed_files.update({'/custom-monitor-evidence.js':'custom-monitor-evidence.js','/custom-monitor-evidence.css':'custom-monitor-evidence.css'})
                 allowed_files['/POPULATION_READINESS.md']='population-readiness.md'
                 allowed_files.update({'/geist-sans.woff2':'geist-sans.woff2','/geist-mono.woff2':'geist-mono.woff2','/geist-LICENSE.txt':'geist-LICENSE.txt'})
                 allowed_files.update({'/code-syntax.js':'code-syntax.js','/prism-LICENSE.txt':'prism-LICENSE.txt','/choice-labels.js':'choice-labels.js','/workspace-navigation.js':'workspace-navigation.js'})
@@ -620,7 +625,8 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                     return self.response(200,save(store,body))
                 if self.path == '/api/evaluations':
                     from .evaluation_receipts import receive
-                    return self.response(201,receive(store,body))
+                    result=receive(store,body);monitor_service.wake()
+                    return self.response(201,result)
                 if self.path == '/api/evaluations/compare':
                     from .evaluation_receipts import compare_ids, fields
                     fields(body, ('ids',))
@@ -674,6 +680,10 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if self.path == '/api/monitoring/starters':
                     from .monitoring import add_starters
                     result=add_starters(store,body);monitor_service.wake()
+                    return self.response(200,result)
+                if self.path == '/api/monitoring/reward-checks':
+                    from .reward_detectors import activate
+                    result=activate(store,body);monitor_service.wake()
                     return self.response(200,result)
                 if self.path == '/api/monitoring/custom-values':
                     from .custom_monitors import publish

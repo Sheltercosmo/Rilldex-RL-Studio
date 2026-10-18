@@ -44,13 +44,13 @@ def protocol():
     return {**value,'id':'diagnostics-'+digest(value)[:20]}
 
 
-def validate_input(source):
+def validate_input(source, *, max_chars=MAX_CHARS):
     if source.get('schema')!='diagnostic-input/1':raise InputError('Unsupported diagnostic input')
     if not isinstance(source.get('id'),str) or not source['id']:raise InputError('Diagnostic source requires an ID')
     if not isinstance(source.get('task'),str) or not isinstance(source.get('trace'),str) or not source['trace'].strip():raise InputError('Diagnostic input requires task and nonempty trace text')
     if type(source.get('complete_recorded_text')) is not bool:raise InputError('Declare recorded-text completeness')
     if source.get('action_coverage') not in {'recorded','partial','unavailable'}:raise InputError('Declare action coverage')
-    if len(source['task'])+len(source['trace'])>MAX_CHARS:raise InputError('Trace exceeds protocol bound; no silent truncation')
+    if max_chars is not None and len(source['task'])+len(source['trace'])>max_chars:raise InputError('Trace exceeds protocol bound; no silent truncation')
     if set(source)-{'schema','id','task','trace','complete_recorded_text','action_coverage','source_hash','provenance'}:raise InputError('Unexpected input fields; evaluation labels must stay outside monitor inputs')
 
 

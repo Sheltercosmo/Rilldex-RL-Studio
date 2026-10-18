@@ -20,7 +20,8 @@ def append_messages(document, events, warnings, *, portable=False, message_field
         flat = (flat_tool_definitions and 'type' not in tool and 'function' not in tool
                 and isinstance(tool.get('name'),str) and bool(tool['name'].strip())
                 and isinstance(tool.get('parameters'),dict))
-        if flat:
+        native_tool = portable and isinstance(tool.get('name'), str) and bool(tool['name'].strip()) and isinstance(tool.get('input_schema'), dict)
+        if flat or native_tool:
             name=tool['name']
         elif tool.get("type") == "function" and isinstance(function, dict) and isinstance(function.get("name"), str):
             name=function['name']
@@ -30,12 +31,23 @@ def append_messages(document, events, warnings, *, portable=False, message_field
             raise InputError("Duplicate tool definition")
         definitions[name] = {"source_pointer": f"/tools/{i}", "definition": tool}
         if flat:definitions[name]['source_format']='bfcl-function/1'
+        if native_tool:definitions[name]['source_format']='anthropic-tool/1'
     seen_calls = {}
     for i, message in enumerate(messages):
         pointer = f"/{message_field}/{i}"
         role, text = message.get("role"), message.get("content")
         if role not in ({"system", "developer", "user", "assistant", "tool"} if portable else {"system", "user", "assistant", "tool"}):
             raise InputError(f"Unsupported source role at {pointer}")
+        if portable:
+            from .anthropic_blocks import native, append
+            if native([message]):
+                append(message, events, warnings, pointer, {'source_message_index': i, 'source_role': role}, seen_calls, definitions)
+                if message.get('reasoning_content') is not None:
+                    if role != 'assistant' or not isinstance(message['reasoning_content'], str):
+                        raise InputError('reasoning_content must be recorded assistant text')
+                    event(events, kind='reasoning', actor='agent', text=message['reasoning_content'], pointer=pointer+'/reasoning_content',
+                          source_message_index=i, source_role=role)
+                continue
         media=[]
         if portable:
             if isinstance(text,list) and any(not isinstance(p,dict) or not isinstance(p.get('type'),str) for p in text):

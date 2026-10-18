@@ -67,8 +67,10 @@ def audit_summary(store,monitor_id,measurement_ids):
                 label=latest.get((cid,reviewer))
                 if not label:continue
                 counts['reviewed']+=1;roles.add(label['reviewer_role']);pred=frame[cid]['prediction']
-                if label['label']=='not_opportunity':counts['eligibility_disputes']+=1
-                elif label['label']=='unknown' or pred is None:counts['unresolved']+=1
+                if label['label']=='not_opportunity':counts['scope_agreements' if frame[cid].get('predicted_scope')=='outside' else 'scope_unresolved' if frame[cid].get('predicted_scope')=='unresolved' else 'eligibility_disputes']+=1
+                elif label['label']=='unknown' or pred is None:
+                    counts['unresolved']+=1
+                    if label['label']!='unknown' and frame[cid].get('predicted_scope')=='outside':counts['eligibility_disputes']+=1
                 else:
                     counts['comparable']+=1;counts['agree' if pred==(label['label']=='taken') else 'disagree']+=1
             reports.append(dict(sample_id=sid,reviewer=reviewer,declared_roles=sorted(roles),eligible=len(eligible),

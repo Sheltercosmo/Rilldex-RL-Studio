@@ -24,6 +24,12 @@ def implementation(name):
     if name=='chains':
         from . import diagnostic_chains
         return diagnostic_chains
+    if name=='search':
+        from . import diagnostic_search
+        return diagnostic_search
+    if name=='requirements':
+        from . import requirement_diagnostics
+        return requirement_diagnostics
     raise InputError('Unknown diagnostic implementation')
 
 
@@ -39,17 +45,20 @@ def selection(run_ids=None,experiment=None,adapters=None):
 
 def initialize(store,root,selector,protocol_name):
     root=Path(root);module=implementation(protocol_name)
-    config={'schema':'diagnostic-worker/1','implementation':protocol_name,'protocol':module.protocol(),
+    path=root/'worker.json'
+    frozen=read(path) if path.exists() else None
+    selected_protocol=(module.protocol(frozen['protocol']['schema']) if frozen and protocol_name in {'search','requirements'}
+                       and frozen['implementation']==protocol_name else module.protocol())
+    config={'schema':'diagnostic-worker/1','implementation':protocol_name,'protocol':selected_protocol,
             'selection':selector,'database_path':str(store.path.resolve()),
             'eligibility':'Latest complete producer revisions or explicit imports; source inspection requires recorded action coverage'}
-    path=root/'worker.json'
     if path.exists() and read(path)!=config:raise InputError('Worker protocol, source selection or database changed; use a new workspace')
     if not path.exists():write(path,config)
     worker_id='monitor-'+digest({'config':config,'workspace':str(root.resolve())})[:24]
     return worker_id,config,module
 
 
-def inventory(store,selector):
+def inventory(store,selector,protocol_name='chains',protocol_version=None):
     # Read immutable source documents, without rebuilding every semantic map.
     # The query keeps in-progress/failed latest revisions visible for coverage.
     with store.connect() as c:
@@ -77,16 +86,33 @@ def inventory(store,selector):
         elif run['adapter']=='verl-generation':
             item.update(eligibility='ineligible',reason='Flattened generation has no recorded action coverage')
         else:
-            source=source_monitor.from_run(run)
+            source=(implementation('search').source_from_run(run, protocol_version or implementation('search').DEFAULT_VERSION)
+                    if protocol_name=='search' else source_monitor.from_run(run))
             if source['action_coverage']=='unavailable':item.update(eligibility='ineligible',reason='Recorded action coverage is unavailable')
             elif not source['trace'].strip():item.update(eligibility='ineligible',reason='No readable recorded trace')
-            elif len(source['task'])+len(source['trace'])>source_monitor.MAX_CHARS:
+            elif protocol_name not in {'search','requirements'} and len(source['task'])+len(source['trace'])>source_monitor.MAX_CHARS:
                 item.update(eligibility='ineligible',reason='Source exceeds current protocol bound; no source was clipped')
             else:item['_source']=source
         selected.append(item)
     if selector['kind']=='explicit_latest' and found!=set(selector['run_ids']):
         raise InputError('One or more selected runs are missing or superseded by a newer producer revision')
     return selected
+
+
+def plan(store,selector,protocol_name='chains'):
+    """Read-only eligibility and request-size preview; no provider or workspace."""
+    module=implementation(protocol_name);rows=[]
+    for item in inventory(store,selector,protocol_name):
+        row={k:v for k,v in item.items() if not k.startswith('_')}
+        if item['eligibility']=='ready':
+            source=item['_source'];row['source_chars']=len(source['task'])+len(source['trace'])
+            row['scan_requests_before_cache']=(sum(1 for _ in module.requests(source))+sum(1 for _ in module.term_requests(source)) if protocol_name=='requirements'
+                else len(list(module.pages(module.index(source, module.protocol()['schema'])))) if protocol_name=='search' else 1)
+            row['published_result_reusable']=published_measurement(store,item,module.protocol()) is not None
+        rows.append(row)
+    return {'protocol':module.protocol(),'rows':rows,'model_api_calls':0,
+            'estimate_scope':('Upper bound before requirement selection and cache reuse. Use --max-new-calls to bound spending.' if protocol_name=='requirements' else
+                'Initial scan requests before cache reuse. Candidate enumeration, linking and validation require additional data-dependent calls. Use --max-new-calls to bound spending.')}
 
 
 def _attempts(store,worker_id):
@@ -113,7 +139,8 @@ def published_measurement(store,item,protocol,preferred_id=None):
         record=json.loads(row['document'])
         if digest(record)!=row['id']:raise InputError('Published diagnostic measurement changed')
         result=record.get('diagnostic_result',{})
-        if (record.get('observation_kind')=='diagnostics' and record.get('source_hash')==item['source_hash']
+        if (result.get('coverage',{}).get('scan_complete') is not False
+                and record.get('observation_kind')=='diagnostics' and record.get('source_hash')==item['source_hash']
                 and result.get('input_hash')==digest(item['_source']) and result.get('protocol')==protocol
                 and record.get('annotation_hash')==digest(result)):
             matches.append(row['id'])
@@ -139,7 +166,7 @@ def execute(store,root,transport,*,selector,protocol_name='chains',max_new_calls
     calls=0;completed=[];failures=[];pending=[]
     with exclusive(root):
         root=Path(root);worker_id,config,module=initialize(store,root,selector,protocol_name)
-        items=inventory(store,selector);population=[{k:v for k,v in row.items() if not k.startswith('_')} for row in items]
+        items=inventory(store,selector,protocol_name,config['protocol']['schema']);population=[{k:v for k,v in row.items() if not k.startswith('_')} for row in items]
         document={'id':worker_id,'config':config,'population':population,'scanned_at':datetime.now(timezone.utc).isoformat()}
         with store.connect() as c:
             c.execute('INSERT INTO diagnostic_workers VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET document=excluded.document,updated_at=excluded.updated_at',
@@ -176,8 +203,23 @@ def execute(store,root,transport,*,selector,protocol_name='chains',max_new_calls
                     write(folder/'responses'/digest(req)/f'{time.time_ns()}.json',{'request':req,'response':response})
                     if progress:progress({'run_id':rid,'stage':req['state'].get('stage','source_detection'),'new_calls':calls})
                     return response
-                result=module.execute(source,folder,budgeted)
+                result=(module.execute(source,folder,budgeted,version=config['protocol']['schema'])
+                        if protocol_name in {'search','requirements'} else module.execute(source,folder,budgeted))
+                if result.get('coverage',{}).get('scan_complete') is False:
+                    # Publish actionable findings immediately; keep scanning on
+                    # resume. A budget-limited absence never publishes zero.
+                    receipt.update(status='pending',reason='Process request budget reached',
+                        inspection_progress=result['coverage'],result_hash=digest(result),finished_at=datetime.now(timezone.utc).isoformat())
+                    record=module.metric_record(run,source,result,folder) if result.get('findings') else None
+                    from .rollout_metrics import save
+                    with store.connect() as c:
+                        c.execute('BEGIN IMMEDIATE')
+                        if record:receipt['measurement_id']=save(c,record)
+                        _save_attempt(c,worker_id,receipt)
+                    pending.append(rid)
+                    continue
                 record=module.metric_record(run,source,result,folder)
+                if (folder/'search-progress.json').exists():receipt['inspection_progress']=read(folder/'search-progress.json')
                 # The successful attempt and its audited metric publish together.
                 from .rollout_metrics import save
                 with store.connect() as c:
@@ -186,6 +228,7 @@ def execute(store,root,transport,*,selector,protocol_name='chains',max_new_calls
                     _save_attempt(c,worker_id,receipt)
                 completed.append({'run_id':rid,'measurement_id':key,'reused_published_result':False})
             except CallBudgetReached:
+                if (folder/'search-progress.json').exists():receipt['inspection_progress']=read(folder/'search-progress.json')
                 receipt.update(status='pending',reason='Process request budget reached')
                 pending.append(rid)
                 with store.connect() as c:_save_attempt(c,worker_id,receipt)
@@ -194,6 +237,7 @@ def execute(store,root,transport,*,selector,protocol_name='chains',max_new_calls
                 with store.connect() as c:_save_attempt(c,worker_id,receipt)
                 raise
             except Exception as error:
+                if (folder/'search-progress.json').exists():receipt['inspection_progress']=read(folder/'search-progress.json')
                 receipt.update(status='failed',error_type=type(error).__name__)
                 match=re.match(r'Jev request failed with HTTP (\d{3});',str(error))
                 if match:receipt['http_status']=int(match.group(1))
@@ -247,7 +291,8 @@ def audit(store,root):
         for path in sorted((root/'runs').glob('*/*/source.json')):
             run=read(path);folder=path.parent
             if run['id']!=folder.parent.name or digest(run)!=folder.name:raise InputError('Frozen diagnostic source changed')
-            source=source_monitor.from_run(run)
+            source=(module.source_from_run(run, config['protocol']['schema'])
+                    if config['implementation']=='search' else source_monitor.from_run(run))
             if (folder/'input.json').exists() and read(folder/'input.json')!=source:raise InputError('Frozen diagnostic input changed')
             validation=module.audit(source,read(folder/'result.json'),folder) if (folder/'result.json').exists() else None
             for packet in (folder/'decisions').glob('*.json'):

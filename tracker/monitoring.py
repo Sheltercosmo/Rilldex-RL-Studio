@@ -143,6 +143,7 @@ def fingerprint(store):
     with store.connect() as c:
         data=[tuple(c.execute('SELECT count(*),max(created_at) FROM '+table).fetchone()) for table in ('rollout_measurements','rollout_graphs','custom_monitor_inputs')]
         data.append(tuple(c.execute('SELECT count(*),max(imported_at) FROM runs').fetchone()))
+        data.append(tuple(c.execute('SELECT count(*),max(received_at) FROM evaluation_receipts').fetchone()))
         data.append([tuple(r) for r in c.execute('SELECT producer,rollout_id,revision,run_id,state FROM rollout_revisions ORDER BY producer,rollout_id,revision')])
         data.append([tuple(r) for r in c.execute('SELECT id,enabled FROM monitors ORDER BY id')])
         # Another worker can finish an older annotation after this service has
@@ -364,6 +365,17 @@ def chart(monitor,runs,rows):
                 **({'procedure_comparisons':combine_procedure_coverage([p['procedure_comparisons'] for p in ps])} if procedures else {})})
         series.append({'cohort':json.loads(key),'points':points,'bins':summaries})
     is_indicator=aggregation(monitor)=='incidence'
+    detector_counts=None
+    detector=monitor.get('custom',{}).get('config',{}).get('reward_detector')
+    if isinstance(detector,dict) and detector.get('schema')=='reward-detector/1':
+        counts=Counter()
+        for r in runs:
+            value=rows.get(r['id'],{});details=value.get('details');finding=details.get('detector') if isinstance(details,dict) else None
+            status=finding.get('status') if isinstance(finding,dict) else None
+            if not isinstance(status,str) or status not in {'flagged','clear','unknown','not_applicable'}:
+                status='error' if value.get('status')=='error' else 'pending'
+            counts[status]+=1
+        detector_counts=dict(counts)
     selection=None
     if monitor.get('analysis',{}).get('measure')=='history_query':
         counts=[rows.get(r['id'],{}).get('opportunities') for r in runs]
@@ -378,6 +390,7 @@ def chart(monitor,runs,rows):
             'disputed_work_switches':sum(rows.get(r['id'],{}).get('coverage',{}).get('disputed_work_switches',0) for r in runs),
             **({'procedure_comparisons':combine_procedure_coverage([procedure_coverage(rows.get(r['id'],{})) for r in runs])} if procedures else {})},
             'feedback_counts':dict(Counter(v['feedback']['severity'] for v in rows.values() if v.get('feedback'))),
+            **({'detector_counts':detector_counts} if detector_counts is not None else {}),
             'positive_rollouts':sum(v['value']==1 for v in available) if is_indicator else None,
             'aggregation':aggregation(monitor),'unit':unit(monitor)}
 
@@ -395,8 +408,11 @@ def unit(monitor):
     return 'fraction' if monitor['kind']=='graph' or aggregation(monitor)=='incidence' or monitor.get('metric')=='recorded_success' or monitor.get('metric','').endswith(('_rate','_fraction','_share','_coverage')) else 'value'
 
 
-def description(monitor):
+def description(monitor,diagnostic_definitions=None):
     text=monitor['custom']['description'] if monitor['kind']=='custom' else monitor['analysis_definition']['description'] if monitor['kind']=='analysis' else DEFINITIONS[monitor['metric']][1] if monitor['kind']=='metric' else monitor['requirement']['question']
+    if monitor['kind']=='metric':
+        saved=(diagnostic_definitions or {}).get(monitor['observer'],{}).get(monitor['metric'].removeprefix('diagnostic_'))
+        if saved:text=saved['description']
     scope=monitor.get('population',{})
     return text+(' Saved source population: '+', '.join(k+'='+v for k,v in scope.items())+'.' if scope else '')
 
@@ -410,9 +426,11 @@ def _snapshot(store,experiment=None,environment=None):
     from . import execution_records, generation_cohorts, active_captures
     all_runs=population(store);runs=scoped(all_runs,experiment,environment);ids={r['id'] for r in runs};monitors=[]
     catalog=graph_store.catalog(store)
+    from .reward_detectors import catalog as reward_catalog
+    diagnostic_definitions={row['id']:row['checks'] for row in reward_catalog(store)['observers']}
     graph_counts=Counter(g['run_id'] for g in catalog['graphs'] if g['observer']!='source' and g['coverage'].get('semantic_relations')!='unavailable' and g['coverage'].get('observation_kind')!='feedback-assessment')
     for d in definitions(store):
-        row={**d,'description':description(d)}
+        row={**d,'description':description(d,diagnostic_definitions)}
         row['observer_label']=next((g['observer_label'] for g in catalog['graphs'] if g['observer']==d['observer']),None)
         notice=analysis_metrics.definition_notice(d)
         if notice:row['definition_notice']=notice
@@ -479,6 +497,7 @@ def _cases(store,monitor_id,experiment=None,environment=None):
 
 
 def options(store):
+    from .reward_detectors import catalog as reward_catalog
     from .monitor_catalog import catalog as starter_catalog
     from .measurement_reviews import VERSION as review_version
     from .analysis_contracts import registered, VERSION as contract_version
@@ -491,11 +510,12 @@ def options(store):
     graphs=graph_store.catalog(store)['graphs'];semantic={g['observer']:g['observer_label'] for g in graphs if g['observer']!='source' and g['coverage'].get('semantic_relations')!='unavailable'}
     return {'starters':starter_catalog(),'metrics':{k:{'label':v[0],'description':v[1]} for k,v in DEFINITIONS.items()},'analysis_measures':analysis_metrics.catalog(),'observers':observers,
             'custom_setup':{'database':str(store.path.resolve()),'sdk':'Workspace.monitor'},
+            'reward_checks':reward_catalog(store),
             'custom_observers':[{'id':k,'label':v} for k,v in sorted({g['observer']:g['observer_label'] for g in graphs}.items())],
             'analysis_inputs':{'schema':contract_version,'operations':{k:dict(v['observer_input'],accepted=list(v['observer_input']['accepted'])) for k,v in registered().items()}},
             'graph_observers':[{'id':k,'label':v} for k,v in sorted(semantic.items())], 'presets':graph_queries.PRESETS,
             'activities':activities,'relations':relations,
-            'measurement_review':{'version':review_version,'aggregation':'opportunity_ratio','default_size':20},
+            'measurement_review':{'version':review_version,'aggregation':'opportunity_ratio','custom_aggregation':'incidence','default_size':20},
             'question_setup':{'schema':'monitor-question-setup/1','population_fields':['experiment','environment','split']}}
 
 

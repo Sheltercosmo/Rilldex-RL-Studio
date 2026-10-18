@@ -10,10 +10,11 @@ from datetime import datetime, timezone
 import json
 
 from .schema import InputError, digest, dumps
-from . import monitor_evidence
+from . import monitor_evidence, condition_reviews
 
 LEGACY_VERSION = 'measurement-review-sample/1'
-VERSION = 'measurement-review-sample/2'
+OPPORTUNITY_VERSION = 'measurement-review-sample/2'
+VERSION = 'measurement-review-sample/3'
 LABEL_VERSION = 'measurement-review-label/1'
 LABELS = {'taken', 'not_taken', 'unknown', 'not_opportunity'}
 ROLES = {'independent_reviewer', 'developer_review', 'not_declared'}
@@ -53,11 +54,15 @@ def create(store, request):
         if row is None: raise InputError('Unknown monitor')
         definition = json.loads(row[0])
         require('monitor-'+digest(definition) == mid, 'Monitor identity differs')
-        require(definition['kind'] == 'analysis' and definition['analysis_definition']['aggregation'] == 'opportunity_ratio',
-            'Review sampling currently requires an analysis rate with explicit opportunity cases')
-        rows = c.execute('''SELECT v.id,v.run_id,v.document FROM monitor_latest l JOIN monitor_values v ON v.id=l.value_id
-            WHERE l.monitor_id=? ORDER BY v.run_id''', (mid,)).fetchall()
-        selected_runs = {r[0]:json.loads(r[1]) for r in c.execute('SELECT id,document FROM runs') if r[0] in set(ids)}
+        condition = condition_reviews.supported(definition)
+        require(condition or definition['kind'] == 'analysis' and definition['analysis_definition']['aggregation'] == 'opportunity_ratio',
+            'Review sampling requires an analysis rate with explicit opportunity cases or a binary code monitor')
+        if not condition:
+            rows = c.execute('''SELECT v.id,v.run_id,v.document FROM monitor_latest l JOIN monitor_values v ON v.id=l.value_id
+                WHERE l.monitor_id=? ORDER BY v.run_id''', (mid,)).fetchall()
+            selected_runs = {r[0]:json.loads(r[1]) for r in c.execute('SELECT id,document FROM runs') if r[0] in set(ids)}
+    if condition:
+        return publish_sample(store,condition_reviews.create(store,definition,ids,size,seed,VERSION))
     require(set(ids) <= set(selected_runs), 'Unknown rollout in review cohort')
     from .monitoring import in_population
     require(all(in_population(definition, run) for run in selected_runs.values()), 'Rollout outside the monitor population')
@@ -91,15 +96,19 @@ def create(store, request):
         cases = receipts[row['measurement_id']]['measurement']['analysis']['measurement']['cases']
         require(any(c['id'] == row['case_id'] and digest(c) == row['case_hash'] for c in cases), 'Sample case differs from its receipt')
         scopes[row['id']] = case_scope(receipts[row['measurement_id']], next(c for c in cases if c['id']==row['case_id']))
-    document = {'schema':VERSION, 'monitor_id':mid, 'monitor':definition,
+    document = {'schema':VERSION, 'review_kind':'opportunity', 'monitor_id':mid, 'monitor':definition,
         'run_ids':sorted(ids), 'measurement_ids':sorted(measurements), 'runs_without_case_frame':sorted(missing),
         'frame':frame, 'frame_hash':digest(frame), 'sample_ids':[r['id'] for r in selected], 'evidence_scopes':scopes,
-        'requested_size':size, 'seed':seed, 'selection':'Uniform deterministic hash ordering across saved cases; no outcome filter.',
+        'requested_size':size, 'seed':seed, 'selection':'Uniform deterministic hash ordering across saved cases in the supplied cohort, regardless of outcome.',
         'limits':LIMIT}
+    return publish_sample(store, document)
+
+
+def publish_sample(store, document):
     sid = 'review-sample-'+digest(document)
     with store.connect() as c:
         c.execute('INSERT OR IGNORE INTO measurement_review_samples VALUES (?,?,?,?)',
-            (sid, mid, dumps(document), datetime.now(timezone.utc).isoformat()))
+            (sid, document['monitor_id'], dumps(document), datetime.now(timezone.utc).isoformat()))
     return public(store, sid)
 
 
@@ -109,10 +118,10 @@ def load(store, sid):
         row = c.execute('SELECT document FROM measurement_review_samples WHERE id=?', (sid,)).fetchone()
     if row is None: raise KeyError(sid)
     value = json.loads(row[0])
-    require(value.get('schema') in {VERSION,LEGACY_VERSION}, 'Unsupported review sample version')
+    require(value.get('schema') in {VERSION,OPPORTUNITY_VERSION,LEGACY_VERSION}, 'Unsupported review sample version')
     require('review-sample-'+digest(value) == sid and value['frame_hash'] == digest(value['frame']), 'Review sample content changed')
     require(len(set(value['sample_ids'])) == len(value['sample_ids']) and set(value['sample_ids']) <= {r['id'] for r in value['frame']}, 'Review sample membership differs')
-    if value['schema'] == VERSION:
+    if value['schema'] in {VERSION,OPPORTUNITY_VERSION}:
         require(set(value['evidence_scopes']) == set(value['sample_ids']), 'Review evidence scope membership differs')
     return value
 
@@ -143,10 +152,13 @@ def packet(store, sid, cid):
     require(cid in sample['sample_ids'], 'Case is outside the frozen sample')
     row = next(r for r in sample['frame'] if r['id'] == cid)
     receipt = monitor_evidence.read(store, row['measurement_id'])
+    if sample.get('review_kind') == 'rollout_condition':
+        source,event_ids,focus = condition_reviews.packet(receipt,row)
+        return sample,row,receipt,source,event_ids,focus
     case = next((r for r in receipt['measurement']['analysis']['measurement']['cases'] if r['id'] == row['case_id']), None)
     require(case is not None and digest(case) == row['case_hash'], 'Review case differs from frozen evidence')
     scope = sample.get('evidence_scopes',{}).get(cid)
-    if sample['schema'] == VERSION:
+    if sample['schema'] in {VERSION,OPPORTUNITY_VERSION}:
         require(scope == case_scope(receipt,case), 'Review evidence scope differs from saved source')
     source, event_ids, focus = source_evidence(receipt['run'], receipt['graph'], case, scope=scope)
     return sample, row, receipt, source, event_ids, focus
@@ -196,13 +208,17 @@ def case_view(store, sid, cid, reviewer=''):
     sample, row, receipt, source, witness, focus = packet(store, sid, cid)
     annotation = labels(store, sid).get((cid, reviewer))
     scope = sample.get('evidence_scopes',{}).get(cid)
-    value = {'sample_id':sid, 'case_id':cid, 'question':sample['monitor']['analysis_definition']['description'],
+    condition = sample.get('review_kind') == 'rollout_condition'
+    value = {'sample_id':sid, 'case_id':cid, 'question':question(sample), 'review_kind':sample.get('review_kind','opportunity'),
         'run_id':row['run_id'], 'source_events':source, 'witness_event_ids':sorted(witness), 'focus_spans':focus, 'annotation':annotation,
         'review_context':receipt['review_context'],
         'source_notice':'Exact passages from this saved case, in source order. Earlier context is available below, ending at the last case passage in each source stream. This is a retrospective review; case selection may depend on later outcomes.',
         'freshness':receipt['freshness'], 'recorded_work_state':captured_prefix(receipt['run'],source)}
-    case=next(c for c in receipt['measurement']['analysis']['measurement']['cases'] if c['id']==row['case_id'])
-    subject=structured_subject(case,source)
+    case=None if condition else next(c for c in receipt['measurement']['analysis']['measurement']['cases'] if c['id']==row['case_id'])
+    subject=structured_subject(case,source) if case else None
+    if condition:
+        value.update(condition_reviews.inputs(store,receipt))
+        value['source_notice']='Review the complete saved rollout and declared inputs below. Evaluator reports are external records, separate from the agent trace. The monitor output is hidden until you save your judgment.'
     if subject:value['source_subject']=subject
     if scope:
         value['entry_scope'] = {k:scope[k] for k in ('schema','entry_unit_id','cutoff','order_known','basis')}
@@ -211,6 +227,7 @@ def case_view(store, sid, cid, reviewer=''):
             (' Recorded execution order is unresolved.' if not scope['order_known'] else ''))
     if annotation:
         value['prediction'] = row['prediction']
+        if condition:value['predicted_scope'] = row['predicted_scope']
         value['measurement_id'] = row['measurement_id']
     return value
 
@@ -255,15 +272,20 @@ def receive(store, request):
         isinstance(request['reviewer_role'],str) and request['reviewer_role'] in ROLES and
         isinstance(request['label'],str) and request['label'] in LABELS and text(request['note'],4000), 'Provide a named reviewer, supported judgment and rationale')
     sid = request['sample_id']; cid = request['case_id']
-    _, _, _, source, _, _ = packet(store, sid, cid); events = {e['id']:e for e in source}
+    sample, _, receipt, source, _, _ = packet(store, sid, cid); events = {e['id']:e for e in source}
+    inputs = condition_reviews.inputs(store,receipt) if sample.get('review_kind') == 'rollout_condition' else None
     refs = request['citations']
-    require(isinstance(refs,list) and 1 <= len(refs) <= 32, 'Cite 1–32 source spans supporting this judgment')
+    require(isinstance(refs,list) and 1 <= len(refs) <= 32, 'Cite 1–32 source passages or input records supporting this judgment')
     citations = []; seen = set()
     for ref in refs:
+        require(isinstance(ref,dict), 'A citation must be an object')
+        key=digest(ref); require(key not in seen, 'Duplicate review citation'); seen.add(key)
+        if inputs is not None and set(ref) != {'event_id','start','end'}:
+            citations.append(condition_reviews.citation(ref,inputs));continue
         require(isinstance(ref,dict) and set(ref) == {'event_id','start','end'}, 'A citation needs event ID and exact offsets')
+        require(isinstance(ref['event_id'],str),'A citation needs a source event ID')
         event = events.get(ref['event_id']); start = ref['start']; end = ref['end']
         require(event and type(start) is int and type(end) is int and 0 <= start < end <= len(event['text']), 'Citation is outside this review source')
-        key = (ref['event_id'],start,end); require(key not in seen, 'Duplicate review citation'); seen.add(key)
         citations.append({**ref, 'text':event['text'][start:end]})
     value = {'schema':LABEL_VERSION, **deepcopy(request), 'citations':citations}
     lid = 'review-label-'+digest(value)
@@ -289,9 +311,11 @@ def public(store, sid):
             if not label: continue
             counts['reviewed'] += 1; roles.add(label['reviewer_role'])
             reference = label['label']; predicted = frame[cid]['prediction']
-            if reference == 'not_opportunity': counts['eligibility_disputes'] += 1
+            if reference == 'not_opportunity': counts['scope_agreements' if frame[cid].get('predicted_scope') == 'outside' else 'scope_unresolved' if frame[cid].get('predicted_scope') == 'unresolved' else 'eligibility_disputes'] += 1
             elif reference == 'unknown': counts['reference_unknown'] += 1
-            elif predicted is None: counts['prediction_unknown_with_decidable_reference'] += 1
+            elif predicted is None:
+                counts['prediction_unknown_with_decidable_reference'] += 1
+                if frame[cid].get('predicted_scope') == 'outside':counts['eligibility_disputes'] += 1
             else:
                 actual = reference == 'taken'; counts['comparable'] += 1
                 counts['agree' if predicted == actual else 'false_positive' if predicted else 'false_negative'] += 1
@@ -299,10 +323,15 @@ def public(store, sid):
             'agreement':counts['agree']/counts['comparable'] if counts['comparable'] else None,
             'unreviewed':len(sample['sample_ids'])-counts['reviewed']})
     return {'id':sid, **{key:sample[key] for key in ('schema','monitor_id','run_ids','measurement_ids','seed','requested_size','selection','limits','frame_hash','runs_without_case_frame')},
-        'monitor_name':sample['monitor']['name'], 'question':sample['monitor']['analysis_definition']['description'],
+        'monitor_name':sample['monitor']['name'], 'question':question(sample),'review_kind':sample.get('review_kind','opportunity'),
         'frame_cases':len(frame), 'sample_size':len(sample['sample_ids']),
         'cases':[{'id':cid,'run_id':frame[cid]['run_id'],'reviewed_by':sorted(name for key,name in current if key == cid)} for cid in sample['sample_ids']],
         'reviewers':reports, 'independence':'Reviewer roles are self-declared. Results from different reviewers are not pooled.'}
+
+
+def question(sample):
+    key='custom' if sample.get('review_kind') == 'rollout_condition' else 'analysis_definition'
+    return sample['monitor'][key]['description']
 
 
 def listing(store, monitor_id):

@@ -178,6 +178,29 @@ HTTP also provides `GET /api/evaluations?run_id=...&limit=50&offset=0`,
 Receipt IDs are content identities; corrections create new receipts. Worker
 authentication and transport deployment follow the existing server configuration.
 
+### Link the requirement and implementation
+
+Add optional `source_citations` to a report. The SDK copies exact recorded text;
+the server rejects changed text, offsets, pointers or rollout revisions.
+
+```python
+receipt["source_citations"] = [
+    w.cite_source(run_id, requirement_event_id, role="requirement", quote=exact_quote),
+    w.cite_source(run_id, action_event_id, role="implementation"),
+    w.cite_source(run_id, result_event_id, role="observation"),
+]
+saved = w.record_evaluation(receipt)
+```
+
+Use a unique `quote`, Python `start`/`end` offsets, or the whole event (up to
+12,000 characters). Other roles are `action` and `context`. Up to 32 citations
+are retained with saved findings and exports. In **Checks & findings**, open the
+attached report, then **Open source in map**. Roles are supplied by the caller;
+exact citation binding does not verify a requirement, artifact or causal link.
+HTTP accepts the same citation objects: `role`, `run_id`, `source_hash`,
+`event_id`, `source_pointer`, `start`, `end`, `text`, and
+`basis: "source-event-text/unicode-codepoints/1"`.
+
 ### Query with your own code
 
 The native `evaluations` table is available to `Workspace.sql()` and

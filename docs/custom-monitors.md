@@ -44,6 +44,84 @@ Pause/resume works in the UI. Re-registering the same code definition respects
 that state. Change definitions in code, rather than disconnecting the publisher
 through a UI definition edit.
 
+## Custom reward checks
+
+Open **Monitors → Reward checks** to select common checks: task-answer search,
+repository-history search, answer reuse, evaluator access, evaluator
+tampering, grader injection, unmet diagnostic checks, or reward/component gaps.
+These charts use saved observations; selecting them does not run a model.
+Definitions follow the selected observation version. New `--protocol search`
+workspaces preserve complete readable task instructions and explicit benign
+alternatives; existing workers keep their version and cache.
+[Public-case results](../research/real-trajectory-evaluation-2026-10-18/coherent-context-evaluation/README.md).
+
+Choose **Custom reward detector** for task-specific rules. The generated Python
+compares a configured reward threshold with a recorded check on the same
+versioned subject. Edit `detect()` for other reward functions or mechanisms.
+Run the script beside the database; results appear in the same registry,
+charts, cases and native SQL as other monitors.
+
+The SDK entry point is `Workspace.reward_detector(name, version=...,
+description=..., reward_definition=..., inputs={...}, config={...})`:
+
+- `reward_definition` binds the rule to a recorded reward version; customize
+  `definition_path` when it is not at `/metadata/reward_definition`.
+- `inputs` maps names to JSON pointers in the normalized rollout. Scalar,
+  negative, component/vector and custom rewards are supported through your
+  callback logic; no universal success threshold is assumed.
+- `detect(ctx)` receives those inputs, the source, selected graph, native SQL
+  workspace and configuration. Use Python, a local model or your API client.
+- Return `status`, `summary`, and supporting `input_evidence` names, graph
+  `evidence_ids`, or `source_citations`. Status is `flagged`, `clear`, `unknown`, or `not_applicable`.
+  Rates include only flagged/clear results; the other counts remain visible.
+
+Missing required inputs become unknown; different reward versions are not
+applicable. A finding reports the rule's result, not proven reward hacking.
+The matched-check starter does not authenticate the check's independence.
+Evidence receipts are bounded to 128 KiB; cite graph IDs or short passages for long traces.
+Use normal ingestion revisions for late source results and explicit dependency
+revisions for external checks. Pause, restart and versioning follow the rules below.
+
+Attach exact trace passages with `ctx.cite(event_id, role='action', quote='…')`
+in a result's `source_citations` list. Use `start`/`end` instead of `quote` for
+repeated text. Publication checks the source revision, offsets and quoted text.
+**View values → Open map → Explain value** and saved interval investigations
+show feedback, cited inputs and passages; map links select overlapping units.
+These links preserve evidence, not a guarantee that the rule's conclusion is correct.
+
+### Evaluator reports that arrive separately
+
+Choose **Advanced code → Reward / evaluator reports** for a worker that compares
+recorded verdicts on matching task, criterion, artifact and output inputs.
+Send reports with `Workspace.record_evaluation()` or `POST /api/evaluations`.
+Declare inputs on either `Workspace.monitor()` or `Workspace.reward_detector()`:
+
+```python
+evaluations={
+    'reward': {'purpose': 'reward', 'producer': 'scorer/v1'},
+    'check': {'purpose': 'independent_check', 'producer': 'verifier/v1'},
+}
+```
+
+The callback receives lists in `ctx.evaluations`; `ctx.compare_evaluations('reward',
+'check')` compares a unique pair. Optional `label`, `criterion_sha256` and
+`evaluator_sha256` filters narrow selection. Missing or multiple reports remain
+unresolved; arrival order never chooses a winner. Return cited `evaluation_ids`
+to show the original reports beside feedback. Declared report arrivals invalidate
+affected live values and trigger the running worker; saved investigations stay
+pinned. Other external dependencies still require explicit revisions.
+
+### Review detector results
+
+Open **View values → Review all outcomes** on a binary code monitor. Sampling
+keeps the selected cohort and step, but includes clear, flagged and unresolved
+results even when the table is filtered. Missing current results are counted.
+Review the saved source, declared inputs and evaluator reports, cite evidence,
+then save a judgment to reveal the detector output. Summaries separate false
+positives, missed cases, unresolved judgments and scope disagreements by reviewer.
+Samples stay pinned when source or evaluator inputs change; these reviews do not
+establish accuracy outside the sampled results.
+
 ## Inputs and outputs
 
 The callback receives `ctx.run` (normalized source), `ctx.graph` (exact selected
@@ -99,8 +177,10 @@ For a worker that cannot access SQLite, use the authenticated collector API:
 1. `POST /api/monitoring/monitors` with `definition` containing `name`,
    `kind: "custom"`, `observer`, optional `population`, and
    `custom: {version, description, unit, aggregation, config}`.
-2. Obtain the current source snapshot and selected graph through the existing
-   rollout/graph APIs. Retain their `source_hash` and graph `id`.
+2. `GET /api/monitoring/custom-inputs?monitor=<id>&run=<id>` returns one source,
+   graph and declared evaluator snapshot. Retain its `source_hash`, `graph_id`
+   and `dependencies`; add your own dependency revisions without changing
+   `rilldex_evaluations`.
 3. `POST /api/monitoring/custom-values` with `monitor_id`, `run_id`, `source_hash`,
    `graph_id`, optional `dependencies`, and `result`. The background service then
    updates the normal UI. Stale or conflicting publications are rejected.
@@ -170,4 +250,22 @@ experiment and monitor name. Use **Copy Python** or **Download .py**, adapt the
 callback, then run it beside the database. Publishing registers the monitor;
 its values, feedback, charts and pause control appear in the normal UI. The
 editor does not execute Python. **Custom code setup** opens this same flow.
+
+**Task-specific conflicts:** run `rilldex --db study.sqlite monitor-rollouts run
+./requirement-checks --all-latest --protocol requirements --max-new-calls 20`.
+The worker selects requirements from recorded instructions and checks relevant
+pages first, retaining every page in its queue. Findings appear even when the
+call budget pauses the scan; rerunning resumes cached work. Add **Requirement conflicts
+flagged** from Reward checks using the resulting observer. Its evidence view
+pairs each requirement with its selected passage and source/map links. Repeated
+matches share a source card; full records remain expandable. Flags include bugs and shortcuts;
+they do not establish that a reward exploit succeeded.
+New worker directories use the updated requirement matcher. Existing directories
+retain their saved version and cached decisions.
+
+**Evaluator access:** new `--protocol search` workers provide separate
+**Evaluator-material access** and **Access against an explicit restriction**
+checks. Select the resulting observer in **Reward checks**; open a finding to
+see its action and, for a conflict, the recorded instruction. Access alone does
+not mean cheating. Older observers keep their original checks and definitions.
 
