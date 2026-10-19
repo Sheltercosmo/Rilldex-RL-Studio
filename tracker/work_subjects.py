@@ -15,7 +15,7 @@ LEGACY_VERSION = 'work-subject-bindings/1'
 VERSION = 'work-subject-bindings/2'
 SELECTED_VERSION = 'work-subject-bindings/3'
 DERIVED_VERSION = 'work-subject-bindings/4'
-NAV_VERSION = 'contribution-work-navigation/2'
+NAV_VERSION = 'contribution-work-navigation/3'
 DEFAULT_PROFILE = {'id': 'immediate-work', 'version': '1', 'label': 'Immediate work targets',
                    'definition': 'One immediate question, result or artifact target per coherent contribution. '
                    'Broader requests and plans stay separate. Identity requires an explicit supported binding; '
@@ -214,7 +214,8 @@ def project(graph, *, recurrence_order=None):
     if not info: raise InputError('No contribution work bindings in this graph')
     d = deepcopy(info['document']); d['base_graph_id'] = graph['id']; validate(graph, d)
     events, units, eligible, issues = evidence_index(graph)
-    ordering = work_order.Evidence(events) if recurrence_order else None
+    source_order = work_order.Evidence(events)
+    ordering = source_order if recurrence_order else None
     rows = {r['unit_id']: r for r in d['bindings']}; subjects = {s['id']: s for s in d['subjects']}
     binding_edges = {}
     for e in graph['edges']:
@@ -228,12 +229,9 @@ def project(graph, *, recurrence_order=None):
         raise InputError('Work binding edge is missing')
     streams = defaultdict(list); by_event = defaultdict(list)
     for uid, u in units.items(): by_event[u['source']['event_id']].append(uid)
-    batches = Counter((e['trajectory_id'], e.get('parent_id')) for e in events.values()
-                      if e['kind'] == 'action' and e.get('parent_id'))
     for eid, regions in eligible.items():
         e = events[eid]; key = (e['trajectory_id'], e.get('actor'), e.get('context_id'))
-        ordered = not (e.get('batch_size', 0) > 1 or e.get('parent_id') and batches[(e['trajectory_id'], e['parent_id'])] > 1)
-        if ordering and len(ordering.groups.get(eid, [])) > 1: ordered = False
+        ordered = source_order.is_ordered(eid)
         for w in regions:
             ids = sorted((uid for uid in by_event[eid] if units[uid]['source']['start'] < w['end'] and
                           units[uid]['source']['end'] > w['start']), key=lambda uid: units[uid]['source']['start'])

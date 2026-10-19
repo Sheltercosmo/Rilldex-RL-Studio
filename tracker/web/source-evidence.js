@@ -20,6 +20,7 @@
  }
  function why(r,names={}){
   if(r.kind==='lexical_match')return 'Search match #'+r.rank;
+  if(r.kind==='literal_match')return r.rank?'Exact phrase match #'+r.rank:'Exact phrase passage';
   if(r.kind==='recorded_context_match')return 'Recorded tool context match #'+r.rank;
   if(r.kind==='recorded_user_request')return 'Recorded user request';
   if(r.kind==='matching_record_context')return 'Surrounding matching source record';
@@ -43,7 +44,13 @@
   if(excluded)text+=` ${excluded} records excluded by session or ordering checks.`;
   return text;
  }
- if(typeof module!=='undefined'){module.exports={anchor,plan,questions,why,scopeNote,requestedPlan};return;}
+ function literalNote(packet){
+  const qs=(packet.questions||[]).filter(q=>q.literal_phrases?.length);if(!qs.length)return '';
+  const retained=new Set(qs.flatMap(q=>q.retained_literal_event_ids||[])).size;
+  if(retained)return `Exact phrases shown in ${retained} record${retained===1?'':'s'}. Other records may be keyword matches or context.`;
+  return qs.some(q=>q.literal_matched_events)?'Exact phrases matched, but their complete passages are outside this page.':'No exact phrase matched. Results use keywords and recorded context.';
+ }
+ if(typeof module!=='undefined'){module.exports={anchor,plan,questions,why,scopeNote,requestedPlan,literalNote};return;}
  const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
  function open(graph,n){
   const ref=anchor(n);if(!ref)return;
@@ -51,7 +58,7 @@
   const head=el('header'),title=el('h2','Earlier evidence'),close=el('button','Close');close.type='button';close.onclick=()=>dialog.close();head.append(title,close);dialog.append(head);
   dialog.append(el('p','Find earlier passages for a claim, target or artifact. Results are candidates to inspect, not verified claims.','source-evidence-intro'));
   const selected=el('details');selected.append(el('summary','Selected contribution · '+ref.event_id),el('pre',n.properties.source?.text||n.properties.text||''));dialog.append(selected);
-  const form=el('form'),label=el('label','Claim, target or artifact'),input=el('input'),submit=el('button','Find earlier evidence');input.type='search';input.maxLength=6000;input.placeholder='Dataset name, acceptance criterion, reservation ID…';input.setAttribute('aria-label','Evidence search text');label.append(input);submit.type='submit';form.append(label,submit);dialog.append(form,el('small','Leave blank to search the selected contribution. A focused question often retrieves better evidence than an entire report.'));
+  const form=el('form'),label=el('label','Claim, target or artifact'),input=el('input'),submit=el('button','Find earlier evidence');input.type='search';input.maxLength=6000;input.placeholder='Dataset name, acceptance criterion, reservation ID…';input.setAttribute('aria-label','Evidence search text');label.append(input);submit.type='submit';form.append(label,submit);dialog.append(form,el('small','Use quotes or backticks to prioritize an exact phrase or filename. Leave blank to search the selected contribution.'));
   const questionBox=el('details'),questionLabel=el('label','Evidence questions · one per line'),questionInput=el('textarea');questionInput.rows=3;questionInput.maxLength=6000;questionInput.placeholder='What failed?\nWhat changed before the retry?\nWhat did the later check return?';questionInput.setAttribute('aria-label','Evidence questions');questionLabel.append(questionInput);questionBox.append(el('summary','Check several parts of a claim'),el('p','Up to eight questions share the same evidence budget. These searches replace the single search above and show missing candidates separately.'),questionLabel);form.append(questionBox);
   const strategyLabel=el('label','Search method'),strategy=el('select');strategy.setAttribute('aria-label','Evidence search method');for(const [value,text] of [['source','Source passages'],['source_and_calls','Source + recorded tool context']]){const option=el('option',text);option.value=value;strategy.append(option);}strategyLabel.append(strategy);questionBox.append(strategyLabel,el('small','Tool context also searches the recorded call and parent message. It can recover otherwise uninformative results, but can displace useful source matches.'));
   const terms=el('details',null,'source-evidence-terms'),termList=el('div'),termStatus=el('p'),loadTerms=el('button','Load recorded terms');loadTerms.type='button';
@@ -93,6 +100,7 @@
     const context=el('div',null,'source-evidence-context');
     context.append(el('small','Through '+ref.event_id+(ref.start!=null?' before character '+ref.start:' before this event')+' · lexical ranking, not confidence.'),el('small',scopeNote(current)));
     if(!current.query.questions?.length)context.append(el('small','Search: '+(current.query.text||'selected contribution')));
+    const phraseNote=literalNote(current);if(phraseNote)context.append(el('small',phraseNote));
     context.append(el('small',p?.exhausted?'Ranked candidates exhausted; unmatched events and omitted passages may still matter.':'Continue the same search · 16,000 characters per page · context may repeat.'));if(current.dispatch_group_context?.enabled)context.append(el('small',current.dispatch_group_context.boundary));results.append(context);
     const review=pageReviews[pageIndex];if(review){const panel=el('section',null,'source-evidence-questions');panel.append(el('h3','Requested terms · review remains open'),el('p',`${review.coverage.searched_questions} / ${review.coverage.total_questions} terms searched. No satisfaction or truth verdict has been made.`),el('small','Primary candidate types: '+current.query.questions[0].source_types.join(', ')+'. Other types may appear as context.'));for(const q of review.questions.filter(q=>review.selected_question_ids.includes(q.id))){const row=el('div');row.append(el('strong',q.text),el('small',q.retrieval_status==='originating_request_only'?'Only the originating request matched on this page. Further evidence is still needed.':q.retrieval_status==='candidates_to_review'?`${q.candidate_event_ids.length} other source records to inspect · relevance and result not assessed.`:'No candidate retained on this page · refine the query or continue.'));if(q.candidate_event_ids?.length){const inspect=el('button','First candidate ↓','rs-text-button');inspect.type='button';inspect.onclick=()=>{const card=cards.get(q.candidate_event_ids[0]);card?.scrollIntoView({block:'start'});card?.focus({preventScroll:true});};row.append(inspect);}panel.append(row);}results.append(panel);}
     if(current.query.questions?.length&&!review){const summary=el('section',null,'source-evidence-questions');summary.append(el('h3','Evidence by question · this page'),el('p','Candidate passages need review. A match does not establish that a condition is satisfied.'));

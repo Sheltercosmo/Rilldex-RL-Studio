@@ -120,6 +120,8 @@ def _read(store,identifier,run_id=None):
             diagnostic_source=source_from_run(run,schema)
         else:diagnostic_source=from_run(run)
         diagnostic=explanation['diagnostic'];refs=list(diagnostic.get('evidence_roles',{}).values())
+        for contract in diagnostic.get('artifact_contracts',[]):
+            refs.extend(contract.get('view',{}).get('opening_context',[]))
         for finding in diagnostic.get('candidates',[]):refs.extend([finding['requirement'],finding['candidate']])
         explanation['diagnostic_excerpts']=project(diagnostic_source,refs,run,graph)
     from .analysis_metrics import definition_notice
@@ -176,15 +178,22 @@ def explain(value,monitor,graph,input_record):
     common['unit']='fraction' if monitor['kind']=='graph' or metric_aggregation(monitor['metric'])=='incidence' or monitor['metric'].endswith(('_rate','_fraction','_share','_coverage')) else 'value'
     if monitor['kind']=='metric':
         diagnostic=(input_record or {}).get('diagnostic_result')
+        diagnostic_metric=None
         if diagnostic:
-            saved_definition=diagnostic.get('protocol',{}).get('detectors',{}).get(monitor['metric'].removeprefix('diagnostic_'))
+            detector=monitor['metric'].removeprefix('diagnostic_')
+            diagnostic_metric=diagnostic.get('metrics',{}).get(detector)
+            flows=[f['code_flow'] for f in diagnostic.get('findings',[]) if f.get('detector')==detector and f.get('code_flow')]
+            if diagnostic_metric and flows:diagnostic_metric={**diagnostic_metric,'code_flows':flows}
+            contracts=[f['artifact_contract'] for f in diagnostic.get('findings',[]) if f.get('detector')==detector and f.get('artifact_contract')]
+            if diagnostic_metric and contracts:diagnostic_metric={**diagnostic_metric,'artifact_contracts':contracts}
+            saved_definition=diagnostic.get('protocol',{}).get('detectors',{}).get(detector)
             if isinstance(saved_definition,list) and len(saved_definition)==2:common['definition']=saved_definition[1]
         return {**common,'basis':'recorded_metric','cases':[],
                 'source_refs':(input_record or {}).get('metrics',{}).get(monitor['metric'],{}).get('source_refs',[]),
                 'retry_observation':(input_record or {}).get('retry_observation') if monitor['metric'] in {'changed_retry_completion_fraction','unchanged_retry_fraction','changed_retry_unknown_fraction'} else None,
                 'revision_observation':(input_record or {}).get('revision_observation') if monitor['metric'].startswith('enacted_revision_') else (input_record or {}).get('linked_adjustment_observation') if monitor['metric'].startswith('linked_adjustment_') else None,
                 'feedback_assessment':(input_record or {}).get('feedback_assessment') if monitor['metric'].startswith('feedback_assessment_') else None,
-                'diagnostic':diagnostic.get('metrics',{}).get(monitor['metric'].removeprefix('diagnostic_')) if diagnostic else None,
+                'diagnostic':diagnostic_metric,
                 'limitations':[(input_record or {}).get('scope') or 'The measurement uses the saved input only.']}
     query=value.get('query')
     if not query:return {**common,'basis':'recorded_graph_matches','cases':[],'not_established':None,'behavior_negatives':None,
@@ -211,7 +220,22 @@ def explain(value,monitor,graph,input_record):
             witnesses.append({**match,'node_ids':ids,'edge_ids':edge_ids})
         cases.append({'anchor':case['anchor'],'status':'recorded_match' if witnesses else 'not_established',
                       'inspected_window':case['inspected_window'],'window_size':len(case['inspected_window']),
-                      'requested_window':monitor['requirement']['within_units'],'matches':witnesses})
+                      'requested_window':monitor['requirement']['within_units'],'matches':witnesses,
+                      **{k:case[k] for k in ('window_status','order_blocker') if k in case}})
+    unavailable=query.get('unavailable_windows',[])
+    for case in unavailable:
+        require(case['anchor'] in nodes and all(n in nodes for n in case['inspected_window']),
+                'Unavailable query window contains missing units')
+        blocker=case.get('order_blocker') or {}
+        require(blocker.get('from_unit') in nodes and
+                (blocker.get('to_unit') is None or blocker['to_unit'] in nodes),
+                'Query order gap contains missing units')
+        require(not case['matches'] and case['status']=='order_unavailable',
+                'Unavailable query window contains a recorded match')
+    all_anchors=[c['anchor'] for c in [*cases,*unavailable]]
+    require(len(set(all_anchors))==len(all_anchors),'Query populations contain duplicate anchors')
+    if 'candidate_anchors' in query:
+        require(query['candidate_anchors']==len(all_anchors),'Query candidate count differs from saved windows')
     n=sum(bool(c['matches']) for c in cases);d=len(cases)
     require(len({c['anchor'] for c in cases})==d,'Query denominator contains duplicate anchors')
     require((n,d)==(value['numerator'],value['denominator']) and (n,d)==(query['matched_anchors'],query['anchors']),
@@ -224,6 +248,7 @@ def explain(value,monitor,graph,input_record):
         expected=None
         require(value['status']=='unavailable','Unmeasured no-match window cannot be available')
     require(value['value']==expected,'Saved fraction differs from its contributing cases')
-    return {**common,'basis':'recorded_graph_matches','cases':cases,'not_established':d-n,'behavior_negatives':None,
+    return {**common,'basis':'recorded_graph_matches','cases':cases,'unavailable_windows':unavailable,
+            'candidate_anchors':len(all_anchors),'not_established':d-n,'behavior_negatives':None,
             'behavior_rate':None,'engine_version':query['engine_version'],'association':query['association'],
             'limitations':query['limitations']+([value['reason']] if version and not n and value.get('reason') else [])}

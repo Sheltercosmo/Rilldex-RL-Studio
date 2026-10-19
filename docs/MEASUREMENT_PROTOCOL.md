@@ -1,6 +1,8 @@
 # General behavior measurements and independent reference protocol
 
-Version: `general-measurements/1` and `reference-benchmark/1`, 6 October 2026.
+Version: `general-measurements/1` and `reference-benchmark/2`, 18 October 2026.
+
+Reference exports retain recorded sessions, native message groups and unknown-order markers. Prefixes and closure comparisons stay within the recorded session. Version 1 exports remain readable; omitted source metadata cannot be recovered from them.
 
 The machine-readable definitions live in `tracker/contracts.py`; `python -m rilldex contracts` prints them. They are definitions of intended measurements, not claims of validated accuracy. Specialized failure diagnoses remain outside this layer.
 
@@ -18,7 +20,9 @@ For checkpoint comparisons, compute rollout rates first, average within each tas
 
 ## Runtime evidence requirements
 
-`measurement-evidence/1` records source capabilities and support for each investigation. `macro/0.7.0` uses the same action/result linkage and opportunity rules as `macro-semantics/0.4.0`, which gates Jev questions before submission. `verification-evidence/2` leaves the post-check sequence unresolved when action purposes or order are unresolved. These versions supersede earlier packet/derivation behavior without rewriting original source records or stored answers.
+`measurement-evidence/3` scopes action/result links and dispatch batches by recorded session. `macro/0.11.0`, `purpose-sequence/3`, `verification-evidence/4` and `goals/4` preserve unknown order: goal/target returns require ordered endpoints and observed intervening work; complete bracketed parallel dispatches remain usable. Assignments and exact command equality survive ordering gaps. Saved analyses refresh on read without new inference or changes to source records and model answers.
+
+`work-episodes/4` and `contribution-work-navigation/3` preserve those boundaries in work cards and recurrence counts, including parallel dispatches and explicit unknown order. Saved v3 comparisons retain their original measurements. Structural replay: 2,864 interleaved events; 80 false returns corrected without inference. This does not validate the underlying semantic labels.
 
 | Source condition | Measurement treatment |
 | --- | --- |

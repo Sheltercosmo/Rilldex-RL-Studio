@@ -6,8 +6,10 @@ unresolved. Method comparison is independent of target correspondence.
 """
 from collections import Counter,defaultdict
 from .schema import digest
+from .capabilities import recorded_scope
+from .work_order import Evidence as OrderEvidence
 
-VERSION='work-episodes/3'
+VERSION='work-episodes/4'
 LABELS={'continued':'Consecutive same-work recurrence','returned':'Return after intervening operations',
         'interrupted':'Same-work recurrence across an observation gap'}
 METHODS={'same_procedure':'Same dispatched procedure','reconfigured_procedure':'Reconfigured procedure',
@@ -22,6 +24,7 @@ def project(graph):
         checked(graph)
     nodes={n['id']:n for n in graph['nodes']};events={n['properties']['id']:n['properties'] for n in nodes.values() if n['kind']=='event'}
     units={n['id']:n['properties'] for n in nodes.values() if n['kind']=='unit'}
+    ordering=OrderEvidence(events)
     edges=graph['edges'];issues=[]
     observations=(graph.get('semantic_context') or {}).get('work_observations',{})
     reviews={r['action_unit_id']:r for r in observations.get('identity_reviews',[])}
@@ -31,21 +34,24 @@ def project(graph):
         s=source(uid);return (events[s['event_id']]['index'],s['start'],s['end'])
     def valid(uid):
         s=source(uid);e=events.get(s.get('event_id'))
-        return bool(e and not e.get('copied_context') and type(s.get('start')) is int and type(s.get('end')) is int and 0<=s['start']<s['end']<=len(e['text']) and e['text'][s['start']:s['end']]==s.get('text'))
+        return bool(e and not e.get('copied_context') and e.get('agent_visibility')!='not_established' and type(s.get('start')) is int and type(s.get('end')) is int and 0<=s['start']<s['end']<=len(e['text']) and e['text'][s['start']:s['end']]==s.get('text'))
     valid_units={uid for uid in units if valid(uid)}
     actions={uid for uid in valid_units if units[uid].get('kind')=='action' and units[uid].get('actor')=='agent'}
     def lane(uid):
-        e=events[source(uid)['event_id']];return (e.get('actor'),e['trajectory_id'])
+        e=events[source(uid)['event_id']];return (e.get('actor'),*recorded_scope(e))
     def earlier(a,b):
-        pa,pb=position(a),position(b)
-        return lane(a)[1]==lane(b)[1] and (pa[0]<pb[0] or pa[0]==pb[0] and pa[2]<=pb[1])
+        pa,pb=position(a),position(b);ea,eb=(events[source(u)['event_id']] for u in (a,b))
+        return (recorded_scope(ea)==recorded_scope(eb) and ea.get('order_known') is not False
+            and eb.get('order_known') is not False and
+            (pa[0]<pb[0] or ea['id']==eb['id'] and pa[2]<=pb[1]))
     def available(edge,at):
         p=edge.get('properties',edge);refs=[p.get('cutoff')]+p.get('evidence',[])+p.get('context_evidence',[])
         refs += (p.get('inspector_context') or {}).get('source_ranges',[])
         for ref in refs:
             if not isinstance(ref,dict) or 'event_id' not in ref:continue
             event=events.get(ref['event_id']);start=ref.get('start',0) if ref is p.get('cutoff') else ref.get('start');end=ref.get('end')
-            if not event or event.get('copied_context') or event['trajectory_id']!=lane(at)[1]:return False
+            if (not event or event.get('copied_context') or event.get('order_known') is False or
+                event.get('agent_visibility')=='not_established' or recorded_scope(event)!=lane(at)[1:]):return False
             if type(start) is not int or type(end) is not int or not 0<=start<end<=len(event['text']):return False
             if 'text' in ref and event['text'][start:end]!=ref['text']:return False
             if (event['index'],end)>(position(at)[0],position(at)[2]):return False
@@ -75,15 +81,14 @@ def project(graph):
         else:roots[uid]=uid;chains[uid]=[]
     actions_at=defaultdict(list)
     for uid in actions:actions_at[source(uid)['event_id']].append(uid)
-    batches=Counter((e['trajectory_id'],e.get('parent_id')) for e in events.values() if e['kind']=='action' and e.get('parent_id'))
     streams=defaultdict(list)
     # Every native action occupies the axis, including omitted/ambiguous units.
     for e in sorted(events.values(),key=lambda e:e['index']):
         if e['kind']!='action' or e.get('actor')!='agent' or e.get('copied_context'):continue
         candidates=actions_at[e['id']];uid=candidates[0] if len(candidates)==1 else None
-        ambiguous=e.get('batch_size',0)>1 or batches[(e['trajectory_id'],e.get('parent_id'))]>1
+        ambiguous=not ordering.is_ordered(e['id'])
         if uid and (source(uid)['start']!=0 or source(uid)['end']!=len(e['text'])):uid=None
-        streams[(e['actor'],e['trajectory_id'])].append({'unit_id':uid,'event_id':e['id'],
+        streams[(e['actor'],*recorded_scope(e))].append({'unit_id':uid,'event_id':e['id'],
             'group_id':roots.get(uid) if not ambiguous else None,'order_known':not ambiguous})
     def content(uid):
         c=units[uid].get('content',{})
@@ -105,7 +110,7 @@ def project(graph):
             if stage:result.append({'plan_unit_id':e['target'],'step_id':sid,'text':stage['text'],'target':stage.get('target'), 'role':e['type'],'edge_id':e['id']})
         return result
     episodes=[];paths=[]
-    for (actor,trajectory),positions in sorted(streams.items()):
+    for (actor,trajectory,context),positions in sorted(streams.items(),key=lambda item:str(item[0])):
         last={};groups={}
         for index,p in enumerate(positions):
             uid=p['unit_id'];root=p['group_id'];p['identity_status']=reviews.get(uid,{}).get('status','not_recorded')
@@ -145,7 +150,7 @@ def project(graph):
                 evidence_ids=list(dict.fromkeys([*chains[uid],*chains[prior],*[e['id'] for e in responses+assessments],*[a['edge_id'] for a in adjustments]]))
                 connections=[{k:e[k] for k in ('id','source','target','type')} for e in edges
                              if e['id'] in evidence_ids and e['source'] in member_ids and e['target'] in member_ids]
-                value={'graph_id':graph['id'],'run_id':graph['run_id'],'actor':actor,'trajectory_id':trajectory,
+                value={'graph_id':graph['id'],'run_id':graph['run_id'],'actor':actor,'trajectory_id':trajectory,'context_id':context,
                     'category':category,'target':group['target'],'previous_unit_id':prior,'current_unit_id':uid,'group_id':root,
                     'start_position':earlier_index+1,'end_position':index+1,'intervening':between,'cards':cards,
                     'previous_plan_stages':stage_edges(prior),'current_plan_stages':stage_edges(uid),
@@ -158,7 +163,7 @@ def project(graph):
                     value['method'].update(basis=method['basis'],review=method['review'])
                 eid='work-episode-'+digest(value);p['episode_id']=eid;episodes.append({'id':eid,**value})
             last[root]=index
-        paths.append({'actor':actor,'trajectory_id':trajectory,'positions':positions,'groups':list(groups.values())})
+        paths.append({'actor':actor,'trajectory_id':trajectory,'context_id':context,'positions':positions,'groups':list(groups.values())})
     positions=[v for p in paths for v in p['positions']]
     counts={k:sum(e['category']==k for e in episodes) for k in LABELS}
     counts.update(recorded_actions=len(positions),represented_actions=sum(bool(v['unit_id']) for v in positions),

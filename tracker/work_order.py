@@ -42,6 +42,52 @@ class Evidence:
             group = sorted(members)
             for eid in members: self.groups[eid] = group
 
+    def is_ordered(self, event_id):
+        event=self.events[event_id]
+        return (event.get('order_known') is not False and
+                (event.get('batch_size') or 0)<=1 and len(self.groups.get(event_id,[]))<=1)
+
+    def recurrences(self, points):
+        """Classify observed identities without imposing order on dispatch members.
+
+        Adjacency and recurrence are separate: a valid immediate edge may follow
+        an unresolved earlier occurrence. A complete parallel group may support
+        a bracketed return, but never edges between its unordered members.
+        """
+        routes, seen, ordered = defaultdict(list), defaultdict(dict), defaultdict(dict)
+        rows = []
+        for point in sorted(points, key=lambda p: self.events[p['event_id']]['index']):
+            event = self.events[point['event_id']]
+            lane = (event['trajectory_id'], event.get('context_id'))
+            route = routes[lane]
+            point = {**point, 'order_known': self.is_ordered(point['event_id'])}
+            route.append(point)
+            index, gid = len(route)-1, point['group_id']
+            previous = route[index-1] if index else None
+            before = (previous if previous and previous['order_known'] and point['order_known']
+                      and previous['group_id'] and previous['identity_status'] not in
+                      {'source_gap', 'unreviewed', 'unresolved'} else None)
+            _, proof = self.classify(route, index, index)
+            if not gid or point['identity_status'] in {'source_gap', 'unreviewed', 'unresolved'}:
+                kind, before = 'unresolved', None
+            elif not point['order_known']:
+                kind = 'unordered'
+            elif gid in seen[lane]:
+                # Prefer the last ordered endpoint. Intermediate appearances of
+                # this identity inside a complete dispatch do not erase it.
+                start = ordered[lane].get(gid, seen[lane][gid])
+                kind, proof = self.classify(route, start, index)
+                if kind == 'interrupted': kind = 'reobserved'
+            else:
+                kind = 'switch' if before else 'first'
+            rows.append({**point, 'kind': kind, 'order_evidence': proof,
+                         'previous_event_id': before['event_id'] if before else None,
+                         'previous_group_id': before['group_id'] if before else None})
+            if gid and kind != 'unresolved':
+                seen[lane][gid] = index
+                if point['order_known']: ordered[lane][gid] = index
+        return rows
+
     def classify(self, route, start, end):
         old,current = route[start],route[end]
         proof = {'policy':VERSION, 'status':'ordered', 'parallel_groups':[], 'blockers':[],
@@ -51,6 +97,8 @@ class Evidence:
             proof['blockers'].append('Endpoint order is not established.')
         if any(p['identity_status'] in {'source_gap','unreviewed','unresolved'} for p in segment):
             proof['blockers'].append('Intervening work coverage is incomplete.')
+        if any(self.events[p['event_id']].get('order_known') is False for p in segment):
+            proof['blockers'].append('Source order is explicitly unestablished.')
         lo,hi = self.events[old['event_id']]['index'],self.events[current['event_id']]['index']
         by_event = defaultdict(list)
         for p in segment: by_event[p['event_id']].append(p)

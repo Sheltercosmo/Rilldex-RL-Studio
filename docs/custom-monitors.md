@@ -89,6 +89,22 @@ repeated text. Publication checks the source revision, offsets and quoted text.
 show feedback, cited inputs and passages; map links select overlapping units.
 These links preserve evidence, not a guarantee that the rule's conclusion is correct.
 
+### Required artifacts
+
+Choose **Advanced code → Evaluator / submission artifacts** to flag empty or
+missing required files. Before scoring, record the actual evaluator inputs with
+`rilldex.reward_checks.snapshot_artifact(path)` in the rollout document's
+`evaluation_artifacts` map. The generated worker uses `check_artifacts`; results
+appear in the normal registry, charts, evidence views and SQL. No model calls.
+
+Set an artifact's `sha256` to a trusted baseline to detect changes to a fixed
+grader; omit it for editable files. Missing telemetry is unknown. These checks
+identify artifact failures, including parser failures, without inferring intent
+or successful reward hacking. Capture frozen files before evaluation and ingest
+a new rollout revision when records arrive late.
+
+For terminal use, see [reward_artifact_monitor.py](../examples/reward_artifact_monitor.py).
+
 ### Evaluator reports that arrive separately
 
 Choose **Advanced code → Reward / evaluator reports** for a worker that compares
@@ -268,4 +284,16 @@ retain their saved version and cached decisions.
 checks. Select the resulting observer in **Reward checks**; open a finding to
 see its action and, for a conflict, the recorded instruction. Access alone does
 not mean cheating. Older observers keep their original checks and definitions.
+
+**UI shortcut:** open **Reward hacking** in the sidebar for flagged rollouts,
+common checks, **Scan setup & budget**, and **Custom detector**. Scan setup
+generates preview, batch/watch and status commands; it does not run a model.
+**Scan progress** refreshes saved page/request coverage every five seconds.
+Use **Resume / budget** to retain the workspace and selection; partial and
+unscanned rollouts stay separate from negative findings.
+Requirement reading and in-flight requests are included. Restarting retains
+inspected coverage and reuses committed decisions; an interrupted request without
+a saved decision may need to be sent again.
+**Findings** in the top bar lists current alerts and controls popup notifications.
+Popups link to evidence and remember receipts already shown in this browser.
 

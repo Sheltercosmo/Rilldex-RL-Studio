@@ -7,7 +7,7 @@ from copy import deepcopy
 import json
 import re
 from .schema import InputError,digest
-from .capabilities import links
+from .capabilities import links, recorded_scope, batch_key
 
 VERSION='history-evidence-query/1'
 GRAPH_VERSION='history-evidence-graph/2'
@@ -107,7 +107,7 @@ def evaluate(run,query):
     if len({e['id'] for e in events})!=len(events) or len({e['index'] for e in events})!=len(events):raise InputError('Source event order/identity is ambiguous')
     def visible(e):return not e.get('copied_context') and e.get('agent_visibility')!='not_established' and not e['kind'].startswith('external_')
     def arguments(e):return e.get('arguments') if e.get('arguments_available') is not False and isinstance(e.get('arguments'),dict) else None
-    def concurrent(e):return e.get('batch_size',0)>1 or linked['batch_sizes'].get((e['trajectory_id'],e.get('parent_id')),0)>1
+    def concurrent(e):return e.get('batch_size',0)>1 or linked['batch_sizes'].get(batch_key(e),0)>1
     def matches(target,prior):
         a,b=arguments(target),arguments(prior)
         if a is None or b is None:return None,[]
@@ -133,7 +133,7 @@ def evaluate(run,query):
         history=[]
         for prior in events:
             if prior['index']>=target['index']:break
-            if prior['kind']!='action' or prior['trajectory_id']!=target['trajectory_id'] or not visible(prior) or prior.get('tool') not in query['history']['tools']:continue
+            if prior['kind']!='action' or recorded_scope(prior)!=recorded_scope(target) or not visible(prior) or prior.get('tool') not in query['history']['tools']:continue
             match,binding_facts=matches(target,prior)
             if match is not False:history.append((prior,match,binding_facts))
         if not history:row['reason']='no_prior_matching_lookup';continue
@@ -148,7 +148,7 @@ def evaluate(run,query):
         if reply.get('actor')!='environment' or reply.get('media') or reply.get('subagent_refs'):
             row['reason']='lookup_result_not_plain_environment_data';continue
         for change in events:
-            if not reply['index']<change['index']<target['index'] or change['trajectory_id']!=target['trajectory_id']:continue
+            if not reply['index']<change['index']<target['index'] or recorded_scope(change)!=recorded_scope(target):continue
             if change['kind']=='action' and visible(change) and change.get('tool') in query['invalidate_on'] and matches(target,change)[0] is not False:
                 row['invalidating_action_ids'].append(change['id'])
         if row['invalidating_action_ids']:row['reason']='lookup_invalidated_before_dispatch';continue

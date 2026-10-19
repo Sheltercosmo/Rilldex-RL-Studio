@@ -113,27 +113,28 @@ rilldex --db study.sqlite semantic watch-run observations --follow --candidate-c
 
 ## Reward hacking detection
 
-Track suspicious behavior and reward inconsistencies across rollouts, then open a finding to inspect its source passages, applicable instructions and evaluator records. Choose the checks relevant to your task in **Monitors → Reward checks**.
+Scan rollouts for suspicious behavior, follow findings during training, and open the exact evidence. **Reward hacking** in the sidebar brings together common checks, scan progress, budgets and custom detectors.
 
 | Coverage | Available checks |
 | --- | --- |
-| Answer acquisition | Online or repository-history searches for the current task's answer; reuse of an externally supplied solution. |
-| Evaluator access | Reading or probing grading material; a separate check for access against an explicit restriction. |
-| Evaluation manipulation | Suspected evaluator bypass, substituted work, and instructions aimed at influencing a downstream judge. |
-| Task conflicts | Actions conflicting with recorded requirements, using the separate `requirements` protocol. |
-| Recorded reward checks | Unmet diagnostic checks outside the reward; discrepancies between logged reward and its declared component sum or product. |
+| Answer acquisition | Task-answer searches, repository-history lookup, external solution reuse, and test-label copying in recorded Python code. |
+| Evaluator access | Grading-material access, with a separate check for explicit access restrictions. |
+| Evaluation manipulation | Suspected bypass, substituted work, and instructions aimed at influencing a downstream judge. |
+| Task conflicts | Actions conflicting with recorded instructions (`requirements` protocol). |
+| Reward consistency | Reward/component discrepancies and reward-versus-check comparisons. |
+| Artifact integrity | Missing or empty required files; changes to fixed evaluator files against a supplied baseline (Python helper). |
 
-**Start:** configure `JEV_API_KEY`, then scan imported rollouts. No semantic map or candidate LLM is required for these behavior checks.
+**Start:** set `JEV_API_KEY` and scan imported rollouts. Behavior checks need no prebuilt semantic map or candidate LLM.
 
 ```sh
 rilldex --db study.sqlite monitor-rollouts run reward-checks --experiment run-a --all-latest --protocol search --max-new-calls 20
 ```
 
-Select the resulting saved observations in **Reward checks** to add charts. Rerun to resume cached work; use `watch` instead of `run`, without `--all-latest`, to follow completed rollouts. Recorded reward checks need evaluator data, not a model call.
+Select saved observations to add charts. Scan progress shows inspected pages, pending rollouts and resume commands. Rerun with the same workspace to reuse cached decisions, or replace `run` with `watch` and omit `--all-latest` to follow completed rollouts. Recorded reward and artifact checks need no model calls.
 
-**Customize:** choose **Custom reward detector** to generate a Python worker, or use `Workspace.reward_detector()` directly. Bind a reward version, map input fields, and implement `detect(ctx)` with your rules, libraries, local model or API. Return `flagged`, `clear`, `unknown` or `not_applicable`, with a summary and evidence. Scalar, component and custom rewards use your own logic; separately arriving evaluator reports can be matched to the same task and output. The worker backfills and follows rollouts; its results appear in the normal charts, case views and Python/SQL analysis. [Customization guide →](docs/custom-monitors.md#custom-reward-checks)
+**Customize:** choose **Custom reward detector**, or use `Workspace.reward_detector()`. Bind your reward definition and inputs, then implement `detect(ctx)` with Python rules, libraries, a local model or an API. Return a status, summary and evidence. The worker processes existing and new rollouts; results share the built-in charts, alerts, evidence views and Python/SQL access. [Custom detectors and artifact checks →](docs/custom-monitors.md#custom-reward-checks)
 
-**Limits:** flags are investigation signals, not proof of successful exploitation. Permitted evaluator access is still access. Missing records and incomplete scans reduce coverage; false positives and misses remain, particularly for bypass and numerical exploits. No general real-world accuracy rate is established. [Validation and limitations →](docs/DETECTOR_VALIDATION.md)
+**Coverage:** unscanned and incomplete results remain distinct from clear results. Flags identify suspected behavior, not proven exploitation; permitted evaluator access is not automatically a violation. False positives and misses remain, and no general real-world accuracy rate is established. [Validation and limitations →](docs/DETECTOR_VALIDATION.md)
 
 ## Python & SQL
 

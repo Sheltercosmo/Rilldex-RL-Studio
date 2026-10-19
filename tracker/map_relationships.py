@@ -4,10 +4,12 @@ Passing these checks is not semantic entailment. Selected wording and relation
 meaning still require review. No label, argmax or stored edge is rewritten.
 """
 REVIEW_TYPES={'assesses','uses_evidence','revises'}
-VERSION='map-relationship-boundaries/2'
+VERSION='map-relationship-boundaries/3'
 
 
 def inspect(graph):
+    from .graph_sequence import Ordering
+    order=Ordering(graph)
     nodes={n['id']:n for n in graph['nodes']}
     events={n['properties']['id']:n for n in graph['nodes'] if n['kind']=='event' and 'id' in n['properties']}
     recipients={}
@@ -18,7 +20,7 @@ def inspect(graph):
     def lane(n):return n.get('trajectory_id'),event(n)['properties'].get('context_id')
     def invisible(n):
         p=event(n)['properties']
-        return p.get('agent_visibility')=='not_established' or p.get('copied_context') or p.get('kind','').startswith('external_')
+        return p.get('agent_visible') is False or p.get('agent_visibility')=='not_established' or p.get('copied_context') or p.get('kind','').startswith('external_')
     def before(a,b):
         if a.get('event_index') is None or b.get('event_index') is None:return False
         if a['event_index']!=b['event_index']:return a['event_index']<b['event_index']
@@ -31,7 +33,9 @@ def inspect(graph):
         a=nodes.get(e['source']);b=nodes.get(e['target']);problem=None
         if not a or not b:problem='missing_endpoint'
         elif lane(a)!=lane(b):problem='cross_context_or_trajectory'
-        elif any(event(n)['properties'].get('order_known') is False for n in (a,b)):problem='unresolved_source_order'
+        elif (any(event(n)['properties'].get('order_known') is False for n in (a,b))
+              and not (order.event_id(a) is not None and order.event_id(a)==order.event_id(b))):problem='unresolved_source_order'
+        elif order.parallel_siblings(a,b):problem='parallel_dispatch_reference'
         elif any(invisible(n) for n in (a,b)):problem='unestablished_visibility'
         elif not before(b,a):problem='referent_not_earlier'
         elif e['type']=='assesses' or e['type']=='uses_evidence' and b['properties'].get('kind')=='feedback':
@@ -59,7 +63,7 @@ def inspect(graph):
                         problem='relationship_quote_mismatch';break
                     if lane(source)!=lane(a):problem='cross_context_relationship_source';break
                     if invisible(source):problem='relationship_source_not_visible';break
-                    if p.get('order_known') is False:problem='unresolved_source_order';break
+                    if p.get('order_known') is False and p.get('id')!=order.event_id(a):problem='unresolved_source_order';break
                     end=a['properties'].get('source',{}).get('end',len(event(a)['properties'].get('text','')))
                     if type(source.get('event_index')) is not int or type(end) is not int:problem='unresolved_source_order';break
                     if (source['event_index'],hi)>(a['event_index'],end):problem='future_relationship_source';break

@@ -1,4 +1,18 @@
 'use strict';
+// A clipped shell keeps the scrollbar between the header and footer, away from rounded corners.
+window.WorkspaceDialog={prepare(dialog){
+ if(dialog.classList.contains('dialog-frame'))return;
+ const layout=dialog.querySelector(':scope > form')||dialog,head=layout.querySelector(':scope > .dialog-head');
+ if(!head)return;
+ const foot=layout.querySelector(':scope > .dialog-foot'),body=document.createElement('div');body.className='dialog-body';
+ for(const child of [...layout.childNodes])if(child!==head&&child!==foot)body.append(child);
+ head.after(body);dialog.classList.add('dialog-frame');
+ const close=head.querySelector('button');if(close){
+  close.setAttribute('aria-label',close.getAttribute('aria-label')||'Close dialog');close.title='Close';close.classList.add('dialog-close');
+  close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+ }
+}};
+for(const dialog of document.querySelectorAll('#monitor-dialog,#cases-dialog'))window.WorkspaceDialog.prepare(dialog);
 (()=>{
  // Locally bundled syntax rendering is optional; raw, copyable code remains usable if it fails.
  const syntax=document.createElement('script');syntax.src='/code-syntax.js';syntax.onload=()=>{
@@ -32,13 +46,14 @@
  const content=document.createElement('div');content.className='nav-content';content.id='workspace-navigation';
  const caption=document.createElement('span');caption.className='nav-caption';caption.textContent='WORKSPACE';content.append(caption);
  const links=document.createElement('div');links.className='nav-links';
- const icons=['M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z','M4 3h6v6H4z M14 15h6v6h-6z M4 15h6v6H4z M7 9v6 M7 12h10v3','M3 12h4l3-8 4 16 3-8h4','M4 4h16v4H4z M4 10h16v4H4z M4 16h16v4H4z','M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M15 15l6 6','M8 3v5 M16 3v5 M5 8h14v3a7 7 0 0 1-14 0z M12 18v4'];
- for(const [index,[label,href]]of [['Overview','/'],['Behavior map','/semantic-map'],['Monitors','/monitors'],['Rollouts','/runs'],['Investigations','/investigate'],['Data & workflows','/connections']].entries()){
+ const icons=['M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z','M4 3h6v6H4z M14 15h6v6h-6z M4 15h6v6H4z M7 9v6 M7 12h10v3','M3 12h4l3-8 4 16 3-8h4','M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6z M12 8v5 M12 16h.01','M4 4h16v4H4z M4 10h16v4H4z M4 16h16v4H4z','M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M15 15l6 6','M8 3v5 M16 3v5 M5 8h14v3a7 7 0 0 1-14 0z M12 18v4'];
+ for(const [index,[label,href]]of [['Overview','/'],['Behavior map','/semantic-map'],['Monitors','/monitors'],['Reward hacking','/monitors?view=reward'],['Rollouts','/runs'],['Investigations','/investigate'],['Data & workflows','/connections']].entries()){
   const item=document.createElement('a');item.className='nav-link';item.href=href;item.title=label;
   const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('fill','none');icon.setAttribute('stroke','currentColor');icon.setAttribute('stroke-linecap','round');icon.setAttribute('stroke-linejoin','round');icon.setAttribute('aria-hidden','true');const path=document.createElementNS(icon.namespaceURI,'path');path.setAttribute('d',icons[index]);icon.append(path);item.append(icon,document.createTextNode(label));
   if(location.pathname===href||(href==='/'&&['/dashboard','/rollouts'].includes(location.pathname))||(href==='/runs'&&location.pathname==='/source')||(href==='/connections'&&location.pathname==='/integration-guide'))item.setAttribute('aria-current','page');links.append(item);
  }
  content.append(links);
+ if(location.pathname==='/monitors'&&new URLSearchParams(location.search).get('view')==='reward'){links.querySelector('[aria-current]')?.removeAttribute('aria-current');links.querySelector('[href="/monitors?view=reward"]').setAttribute('aria-current','page');}
  const workspaceLabel=document.createElement('div');workspaceLabel.className='nav-workspace';workspaceLabel.append(document.createTextNode('RL behavior inspector'));const local=document.createElement('span');local.textContent='Local workspace';workspaceLabel.append(local);brandRow.after(workspaceLabel);
  // Research tools belong to their workflow, not a second set of competing pages.
  const help=document.createElement('a');help.className='nav-help';help.href='/integration-guide';help.textContent='Integration guide';content.append(help);nav.append(content);
@@ -53,6 +68,7 @@
  const close=node('button','Esc');close.type='button';close.setAttribute('aria-label','Close workspace search');close.onclick=()=>launcher.close();launchHead.append(search,close);
  const results=node('div',undefined,'launcher-results');launcher.append(launchHead,results,node('p','↑ ↓ to choose · Enter to open · Esc to close','launcher-help'));document.body.append(launcher);
  const actions=[['Overview','Monitor behavior across rollouts','/'],['Behavior map','Inspect activity units, relationships and work paths','/semantic-map'],['Monitors','Configure measures and evidence requirements','/monitors'],['Rollouts','Search and inspect recorded trajectories','/runs'],['Investigations','Compare a focus set with a reference','/investigate'],['Connections','Import files or connect a running job','/connections'],['Integration guide','Capture from your training code','/integration-guide']];
+ actions.push(['Reward hacking','Findings, scan budgets, common checks and custom detectors','/monitors?view=reward']);
  function recent(){try{return JSON.parse(localStorage.getItem('jev-recent-rollouts')||'[]').filter(r=>typeof r.url==='string'&&r.url.startsWith('/semantic-map?')).slice(0,8);}catch{return [];}}
  let selectedLaunch=0;
  function highlight(){[...results.querySelectorAll('a')].forEach((a,i)=>a.classList.toggle('launcher-selected',i===selectedLaunch));}
@@ -63,6 +79,7 @@
  launchButton.onclick=()=>{search.value='';launchResults();launcher.showModal();search.focus();};search.oninput=launchResults;
  search.onkeydown=e=>{const rows=[...results.querySelectorAll('a')];if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();selectedLaunch=Math.max(0,Math.min(rows.length-1,selectedLaunch+(e.key==='ArrowDown'?1:-1)));highlight();rows[selectedLaunch]?.scrollIntoView({block:'nearest'});}if(e.key==='Enter'&&rows[selectedLaunch]){e.preventDefault();rows[selectedLaunch].click();}};
  document.querySelector('.workspace-bar .bar-actions')?.prepend(launchButton);if(!launchButton.isConnected)document.querySelector('.workspace-bar')?.append(launchButton);
+ const alerts=document.createElement('script');alerts.src='/workspace-alerts.js';document.head.append(alerts);
  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();launcher.open?launcher.close():launchButton.click();}if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.target.closest('input,textarea,select,[contenteditable=true]')){const field=document.querySelector('#monitor-search:not([hidden]),#run-search,#map-search');if(field?.getClientRects().length){e.preventDefault();field.focus();}}});
  window.addEventListener('jev:recent-rollout',event=>{const r=event.detail;if(!r.url?.startsWith('/semantic-map?'))return;try{localStorage.setItem('jev-recent-rollouts',JSON.stringify([{title:r.title,url:r.url},...recent().filter(v=>v.url!==r.url)].slice(0,8)));}catch{}});
  window.addEventListener('jev:scope',event=>{const scope=event.detail;for(const a of links.querySelectorAll('a')){const url=new URL(a.href);if(!['/','/monitors','/runs'].includes(url.pathname))continue;for(const key of ['experiment','environment'])scope[key]?url.searchParams.set(key,scope[key]):url.searchParams.delete(key);a.href=url.pathname+url.search;}});

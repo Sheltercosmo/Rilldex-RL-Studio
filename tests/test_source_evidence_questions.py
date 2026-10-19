@@ -8,6 +8,23 @@ from test_source_evidence import chat, basic_run, records_by_id
 
 
 class QuestionEvidenceTests(unittest.TestCase):
+    def test_compact_matches_precede_optional_context_for_each_question(self):
+        run = chat([
+            dict(role='assistant', content='alphaone ' + 'background ' * 150),
+            dict(role='assistant', content='betatwo ' + 'background ' * 150),
+            dict(role='assistant', content='Review both records.')])
+        result = search(run, dict(anchor={'event_id': run['events'][-1]['id']}, limit=2,
+            max_chars=2000, questions=[dict(id='a', text='alphaone'), dict(id='b', text='betatwo')]))
+        self.assertEqual([q['status'] for q in result['questions']],
+                         ['candidates_retained', 'candidates_retained'])
+        self.assertEqual(len(result['matches']), 2)
+        self.assertLessEqual(result['coverage']['source_text_chars'], 2000)
+        self.assertIsNone(result['pagination']['next_cursor'])
+        events = {e['id']: e for e in run['events']}
+        for record in result['records']:
+            for f in record['fragments']:
+                self.assertEqual(f['text'], events[record['event_id']]['text'][f['start']:f['end']])
+
     def test_independent_questions_share_slots_without_score_comparison(self):
         run = chat([{'role': 'assistant', 'content': 'compile failure repeated explanation'} for _ in range(10)] + [
             {'role': 'assistant', 'content': 'Archive fingerprint changed.'},

@@ -68,9 +68,19 @@ def packet(graph, unit_ids):
 
 
 def quote(value, unit):
-    require(isinstance(value,dict) and set(value) in ({'text'},{'text','start'}),'quote requires text and optional relative start')
+    require(isinstance(value,dict) and set(value) in ({'text'},{'text','start'},{'text','within'}),
+            'quote requires text and optional relative start or unique surrounding quote')
     text=value['text'];source=unit['source'];require(isinstance(text,str) and text.strip(),'nonempty quote required')
     start=value.get('start')
+    if 'within' in value:
+        context=value['within']
+        require(isinstance(context,str) and context.strip(),'nonempty surrounding quote required')
+        outer=source['text'].find(context);inner=context.find(text)
+        require(outer>=0 and source['text'].find(context,outer+1)<0,
+                'surrounding quote must occur exactly once')
+        require(inner>=0 and context.find(text,inner+1)<0,
+                'text must occur exactly once inside its surrounding quote')
+        start=outer+inner
     if start is None:
         start=source['text'].find(text)
         require(start>=0 and source['text'].find(text,start+1)<0,'quote must occur exactly once, or provide its relative start')

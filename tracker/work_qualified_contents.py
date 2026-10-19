@@ -6,12 +6,77 @@ replace stored observations or certify the semantics of model selections.
 from copy import deepcopy
 
 from . import work_content_bindings as contents, work_content_targets as details
+from . import work_argument_pairs as argument_pairs
 from . import work_scope_interpretations as scopes, work_mentions
 from .jev import DEFAULT_MODEL, SELECTION_POLICY, validate_answers
 from .schema import digest, dumps
 
 VERSION = 'qualified-work-contents/1'
 require = contents.require
+
+
+def review(prepared, bound, *, syntax, send, feature_ids=None, inventory_selection=None,
+           scope_version=scopes.VERSION, target_version=None, argument_roles=False,
+           argument_version=details.ARGUMENT_HEAD_VERSION, on_progress=None):
+    """Review qualifications using syntax candidates and a caller-owned transport.
+
+    ``send(request)`` returns a Jev response. Supply a cached, budgeted transport
+    for resumable jobs; this function never retries or changes the caller's
+    budget. ``on_progress`` receives a fresh snapshot after each selection.
+    Syntax proposes alternatives; argmax selects scope and detail. No work is
+    added, and partial reviews are useful without certifying completeness.
+    """
+    from . import work_syntax_evidence
+    contents.checked(prepared,bound)
+    work_syntax_evidence.checked(prepared,bound,syntax)
+    require(callable(send),'qualification review requires a response transport')
+    require(on_progress is None or callable(on_progress),'progress callback must be callable')
+    require(scope_version in (scopes.LEGACY_VERSION,scopes.VERSION),'unknown scope interpretation version')
+    require(target_version in (None,details.VERSION,details.SELECTOR_VERSION),'unknown detail selector version')
+    require(type(argument_roles) is bool,'argument_roles must be boolean')
+    require(argument_version in (*details.ARGUMENT_VERSIONS,*argument_pairs.VERSIONS),
+            'unknown argument selector version')
+    require(argument_roles or argument_version==details.ARGUMENT_HEAD_VERSION,
+            'an argument selector requires argument_roles=True')
+    known={f['id'] for f in bound['features']}
+    ids=sorted(known) if feature_ids is None else feature_ids
+    require(isinstance(ids,(list,tuple)) and all(isinstance(fid,str) and fid in known for fid in ids)
+            and len(ids)==len(set(ids)), 'unique known feature IDs required')
+    # Validate supplied inventory evidence before any paid request.
+    reviews=dict(inventory_selection=inventory_selection,scope_reviews=[],target_reviews=[])
+    project(prepared,bound,**reviews)
+    completed=0
+    def snapshot(stage,feature_id=None,content_id=None):
+        result = dict(schema=VERSION+'/review',stage=stage,feature_id=feature_id,content_id=content_id,
+            requested_feature_ids=sorted(ids),scope_version=scope_version,completed_requests=completed,
+            reviews=deepcopy(reviews),view=project(prepared,bound,**reviews),
+            publication='review_only',
+            limit='Completed requests include cache reuse, not HTTP or token usage. Transport owns billing and resume.')
+        if argument_roles:
+            result['argument_roles']=True
+            result['argument_version']=argument_version
+        return result
+    for fid in sorted(ids):
+        req=scopes.request(prepared,bound,fid,syntax=syntax,version=scope_version)
+        selected=scopes.resolve(prepared,bound,fid,send(req),syntax=syntax,version=scope_version)
+        reviews['scope_reviews'].append(dict(decision=selected,syntax=deepcopy(syntax)));completed+=1
+        if on_progress:on_progress(snapshot('scope',fid))
+        if selected['selected'] is None or selected['selected']['application']=='joint':continue
+        for cid in selected['selected']['content_ids']:
+            feature=next(f for f in bound['features'] if f['id']==fid)
+            is_argument=argument_roles and feature['type'] in {'subject','target'}
+            targets=(details.argument_targets_from_syntax if is_argument else details.from_syntax)(prepared,bound,cid,syntax)
+            version=argument_version if is_argument else target_version
+            if version in argument_pairs.VERSIONS:
+                req=argument_pairs.request(prepared,bound,fid,targets,syntax,version=version)
+                decision=argument_pairs.resolve(prepared,bound,fid,targets,syntax,send(req),version=version)
+            else:
+                extra={'syntax_record':syntax} if version==details.ARGUMENT_SYNTAX_VERSION else {}
+                req=details.request(prepared,bound,fid,targets,version=version,**extra)
+                decision=details.resolve(prepared,bound,fid,targets,send(req),version=version,**extra)
+            reviews['target_reviews'].append(dict(targets=targets,decision=decision));completed+=1
+            if on_progress:on_progress(snapshot('target',fid,cid))
+    return snapshot('complete')
 
 
 def project(prepared, bound, *, inventory_selection=None, scope_reviews=(), target_reviews=()):
@@ -47,7 +112,8 @@ def project(prepared, bound, *, inventory_selection=None, scope_reviews=(), targ
         require(isinstance(review, dict) and set(review) == {'targets','decision'} and
                 isinstance(review['decision'], dict), 'target candidates and decision required')
         decision = review['decision']; fid = decision.get('feature_id')
-        view = details.project(prepared, bound, fid, review['targets'], decision)
+        is_pairs=decision.get('schema') in argument_pairs.VERSIONS
+        view = (argument_pairs.project if is_pairs else details.project)(prepared, bound, fid, review['targets'], decision)
         key = (fid, decision['content_id'])
         require(key not in target_index, 'duplicate content-target review')
         target_index[key] = (decision, view)
@@ -80,9 +146,25 @@ def project(prepared, bound, *, inventory_selection=None, scope_reviews=(), targ
                 row['targets'].append(dict(content_id=cid, status='not_reviewed', target=None))
                 issues.append(dict(type='target_not_reviewed', feature_id=fid, content_id=cid)); continue
             target_decision, view = pair
+            if target_decision['schema'] in argument_pairs.VERSIONS:
+                row['feature']={k:deepcopy(v) for k,v in feature.items() if k not in {'scopes','type','form'}}
+                row['feature'].update(type='argument',proposed_type=feature['type'],proposed_form=feature['form'])
+                row.setdefault('predicate_reviews',[]).append(dict(content_id=cid,coverage=view['coverage'],
+                    relations=deepcopy(view['relations']),target_review_hash=digest(target_decision)))
+                for qualification in view['qualifications']:
+                    row['targets'].append(dict(content_id=cid,status='selected',target=deepcopy(qualification['target']),
+                        role=qualification['role'],form=view['form'],target_review_hash=digest(target_decision)))
+                if view['issues']:
+                    row['status']='target_review_incomplete'
+                    issues.extend(dict(type=issue,feature_id=fid,content_id=cid) for issue in view['issues'])
+                continue
             target = view['qualification']['target'] if view['qualification'] else None
             row['targets'].append(dict(content_id=cid, status=view['status'], target=deepcopy(target),
                 target_review_hash=digest(target_decision)))
+            if target_decision['schema'] in details.ARGUMENT_VERSIONS:
+                row['feature']={k:deepcopy(v) for k,v in feature.items() if k not in {'scopes','type','form'}}
+                row['feature'].update(type='argument',proposed_type=feature['type'],proposed_form=feature['form'])
+                row['targets'][-1].update(role=target_decision['role'],form=target_decision['form'])
             if target is None:
                 row['status'] = 'target_review_incomplete'
                 issues.append(dict(type='target_'+view['status'], feature_id=fid, content_id=cid))
@@ -91,13 +173,25 @@ def project(prepared, bound, *, inventory_selection=None, scope_reviews=(), targ
         fid,cid = key
         issues.append(dict(type='target_scope_disagreement', feature_id=fid, content_id=cid,
             target_review_hash=digest(target_index[key][0])))
-    return dict(schema=VERSION, packet_hash=digest(prepared), bound_hash=digest(bound),
+    # Do not describe a mixed old/new target set as fully role-reviewed.
+    for row in rows:
+        if row['feature']['type']=='argument':
+            for target in row['targets']:
+                if 'role' not in target:
+                    issues.append(dict(type='argument_role_not_reviewed',feature_id=row['feature']['id'],
+                        content_id=target.get('content_id')))
+    result = dict(schema=VERSION, packet_hash=digest(prepared), bound_hash=digest(bound),
         unit=deepcopy(unit), contents=deepcopy(bound['contents']), qualifications=rows,
         inventory_assessment=inventory, inventory_review_hash=digest(inventory_selection) if inventory_selection else None,
         issues=issues, ready_for_relationships=not issues,
         coverage=dict(features=len(bound['features']), scope_reviews=len(scope_index), target_reviews=len(target_index)),
         execution_status='not_established_by_prose', publication='review_only',
         limit='Review completeness is a stage requirement, not independent semantic accuracy. No new activities or live graph edges.')
+    if any(d['schema'] in details.ARGUMENT_VERSIONS for d,_ in target_index.values()):
+        result['argument_role_questions']=deepcopy(details.ARGUMENT_ROLES)
+    if any(d['schema'] in argument_pairs.VERSIONS for d,_ in target_index.values()):
+        result['argument_role_questions']=deepcopy(argument_pairs.ROLE_QUESTIONS)
+    return result
 
 
 def relationship_request(prepared, bound, **reviews):
@@ -115,6 +209,9 @@ def relationship_request(prepared, bound, **reviews):
             content_issues=[dict(mention_ids=['content ID, or empty for missing content'],
                 evidence=dict(text='Exact source quote'),issue='Content or qualification defect preventing relationships')]),
         publication='review_only')
+    if 'argument_role_questions' in view:
+        request['argument_role_questions']=view['argument_role_questions']
+        request['rule']+=' Argument targets carry selected predicate-specific roles and forms. proposed_type and proposed_form are historical generator labels, not selected meanings.'
     require(len(dumps(request).encode('utf-8')) <= contents.MAX_SELECTION_BYTES,
             'qualified relationship request exceeds byte budget; do not truncate reviews or source')
     return request
@@ -160,6 +257,8 @@ def selection_request(prepared, bound, links, **reviews):
         review_hash=req['review_hash'],contents=req['contents'],qualifications=req['qualifications'],
         links=links['links'],link_meanings=req['link_meanings'],cutoff_event_id=req['unit']['source']['event_id'],
         missingness=dict(truncated_event_ids=[])),questions=questions)
+    if 'argument_role_questions' in req:
+        request['state']['argument_role_questions']=req['argument_role_questions']
     require(len(dumps(request).encode('utf-8')) <= contents.MAX_SELECTION_BYTES,
             'qualified link selection exceeds byte budget; do not truncate')
     return request
@@ -170,7 +269,7 @@ def observation(prepared, bound, links, response, **reviews):
     require(isinstance(response,dict) and response.get('model') == req['model'], 'relationship selector model differs')
     answers = validate_answers(response,req)
     rows = [dict(**deepcopy(link),choice=answers[link['id']]['value']) for link in links['links']]
-    return dict(schema=VERSION,stage='shadow_observation',packet_hash=digest(prepared),bound_hash=digest(bound),
+    result = dict(schema=VERSION,stage='shadow_observation',packet_hash=digest(prepared),bound_hash=digest(bound),
         review_hash=req['state']['review_hash'],links_hash=digest(links),request_hash=digest(req),response=deepcopy(response),
         unit=deepcopy(req['state']['unit']),contents=deepcopy(req['state']['contents']),
         qualifications=deepcopy(req['state']['qualifications']),links=rows,
@@ -178,3 +277,6 @@ def observation(prepared, bound, links, response, **reviews):
         relationship_coverage=answers['coverage']['value'],selection_policy=SELECTION_POLICY,
         execution_status='not_established_by_prose',publication='review_only',
         limit='Selected local reading; no native execution, cross-unit identity, hierarchy or semantic accuracy guarantee.')
+    if 'argument_role_questions' in req['state']:
+        result['argument_role_questions']=req['state']['argument_role_questions']
+    return result

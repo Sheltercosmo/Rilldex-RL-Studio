@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .observe import analyze
+from .observe import analyze, HARNESS_VERSION
 from .schema import dumps, digest
 from .schema import InputError
 from . import reviews as review_logic
@@ -426,7 +426,7 @@ class Store:
         run = json.loads(row["document"])
         revision = reviews[-1]["id"] if reviews else 0
         analysis = json.loads(row["analysis"])
-        if analysis.get("review_revision", 0) != revision:
+        if analysis.get("review_revision", 0) != revision or analysis.get("harness_version") != HARNESS_VERSION:
             self.refresh(run_id)
             return self.get(run_id, raw=raw)
         if not raw:
@@ -509,7 +509,9 @@ class Store:
             review_versions = dict(c.execute("SELECT run_id,MAX(id) FROM reviews GROUP BY run_id").fetchall())
         # A reviewer can commit an annotation immediately before the materialized
         # view refresh. Do not compare its old unreviewed counts in that window.
-        stale = [r['id'] for r in rows if json.loads(r['analysis']).get('review_revision',0)!=review_versions.get(r['id'],0)]
+        stale = [r['id'] for r in rows if
+                 (json.loads(r['analysis']).get('review_revision',0)!=review_versions.get(r['id'],0) or
+                  json.loads(r['analysis']).get('harness_version')!=HARNESS_VERSION)]
         if stale:
             for run_id in stale:
                 self.refresh(run_id)

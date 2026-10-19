@@ -199,23 +199,29 @@ def catalog(store, *, run_id=None):
 
 
 def matrices(graph):
+    from .graph_sequence import Ordering,VERSION as ORDER_VERSION
+    order=Ordering(graph)
     by_id = {n['id']:n for n in graph['nodes']}; relation = Counter(); transitions = Counter()
     for e in graph['edges']:
         if e['type'] in {'grounded_in','next_record'}: continue
         a,b = by_id[e['source']],by_id[e['target']]
         relation[(a.get('activity') or a['kind'],e['type'],b.get('activity') or b['kind'])] += 1
-    previous = {}
+    previous = {};excluded=Counter();possible=0
     units = sorted((n for n in graph['nodes'] if n['kind']=='unit' and n['event_index'] is not None),
                    key=lambda n:(n['event_index'],n['properties'].get('source',{}).get('start',0),n['id']))
     for n in units:
-        t = n['trajectory_id']; old = previous.get(t)
+        t = order.scope(n); old = previous.get(t)
         # Unknown activities break the sequence; never bridge omitted labels.
         if old and old.get('activity') and n.get('activity'):
-            transitions[(old['activity'], n['activity'])] += 1
+            possible+=1;reason=order.before(old,n)
+            if reason:excluded[reason]+=1
+            else:transitions[(old['activity'], n['activity'])] += 1
         previous[t] = n
     return {'relations':[{'source':a,'relation':r,'target':b,'count':n} for (a,r,b),n in sorted(relation.items())],
             'transitions':[{'source':a,'target':b,'count':n} for (a,b),n in sorted(transitions.items())],
-            'note':'Transition counts describe adjacent annotated units within one trajectory. Relation counts describe directed stored edges; neither implies causation.'}
+            'transition_coverage':dict(policy=ORDER_VERSION,possible_pairs=possible,observed_pairs=sum(transitions.values()),
+                                       excluded_pairs=sum(excluded.values()),reasons=dict(sorted(excluded.items()))),
+            'note':'Transition counts describe adjacent annotated units with established source order within one trajectory and recorded context. Unknown order, parallel dispatches and overlapping spans do not form transitions. Relation counts describe directed stored edges; neither implies causation.'}
 
 
 def status(store):

@@ -96,3 +96,18 @@ test('evaluator template uses pinned reports without a scalar reward threshold',
  assert.equal($('#download-custom-monitor').disabled,false);
  assert.match($('#custom-callback-help').textContent,/ctx.evaluations/);
 });
+
+test('artifact template is discoverable, configurable and needs no reward threshold',()=>{
+ const code=script({template:'artifacts',artifactPath:'/raw/files',artifactNames:'grader.py\r\nanswer.json\ngrader.py',rewardDefinition:'eval/v2'});
+ for(const part of ['from rilldex.reward_checks import check_artifacts, snapshot_artifact','"artifacts": "/raw/files"','"grader.py": {"nonempty": True}','"answer.json": {"nonempty": True}','monitor.follow(check_artifacts'])assert.ok(code.includes(part),part);
+ assert.equal(code.match(/"grader.py":/g).length,1);
+ assert.throws(()=>script({template:'artifacts',artifactNames:'  '}),/artifact names/);
+ const {$,ctx}=editorHarness();$('#custom-monitor-template').value='artifacts';$('#custom-artifact-names').value='answer.json';ctx.updateCustomScript();
+ assert.equal($('#custom-artifact-fields').hidden,false);
+ assert.equal($('#custom-recorded-check-fields').hidden,true);
+ assert.equal($('#custom-evaluation-fields').hidden,true);
+ assert.equal($('#download-custom-monitor').disabled,false);
+ assert.match($('#custom-callback-help').textContent,/trusted sha256/);
+ $('#custom-artifact-names').value='';ctx.updateCustomScript();assert.equal($('#download-custom-monitor').disabled,true);
+ $('#custom-monitor-template').value='metric';ctx.updateCustomScript();assert.equal($('#custom-artifact-fields').hidden,true);
+});

@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import json
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 
 from .schema import digest
+from .capabilities import recorded_scope
+from .work_order import Evidence as OrderEvidence
 
-GOAL_VERSION = "goals/2"
+GOAL_VERSION = "goals/4"
 UNRESOLVED = "unresolved"
 NO_CANDIDATE = "no_suitable_candidate"
 PLAN_PATTERN = re.compile(
@@ -56,19 +58,21 @@ def catalog(run):
 
     def add(text, e, kind, selector=None, basis=None):
         key = (e["trajectory_id"], kind, " ".join(text.split()).casefold())
+        if e.get("context_id") is not None: key = (*key, e["context_id"])
         reference = {"event_id": e["id"], "index": e["index"], "source_pointer": e["source_pointer"],
                      "selector": selector, "copied_context": e["copied_context"]}
         if key in by_key:
             by_key[key]["references"].append(reference)
             return by_key[key]
         goal = {"id": "g-" + digest(key)[:14], "text": text, "trajectory_id": e["trajectory_id"],
+                "context_id": e.get("context_id"),
                 "kind": kind, "basis": basis, "first_index": e["index"], "references": [reference],
                 "attainment": "unobserved"}
         goals.append(goal); by_key[key] = goal
         return goal
 
-    for e in run["events"]:
-        actor = e["trajectory_id"]
+    for e in sorted(run["events"], key=lambda e: e["index"]):
+        actor = recorded_scope(e)
         if e["kind"] == "instruction" and e["text"].strip():
             if actor not in roots:
                 g = add(e["text"], e, "recorded_objective", basis="retained initial instruction" if e["copied_context"] else "initial source instruction")
@@ -77,18 +81,25 @@ def catalog(run):
                 g = add(e["text"], e, "retained_context" if e["copied_context"] else "additional_instruction",
                         basis="source user-role context; supersession not inferred")
             instructions.append({"goal_id": g["id"], "event_id": e["id"], "index": e["index"],
-                                 "trajectory_id": actor, "kind": g["kind"], "copied_context": e["copied_context"]})
+                                 "trajectory_id": e["trajectory_id"], "context_id": e.get("context_id"), "kind": g["kind"], "copied_context": e["copied_context"]})
         if e["actor"] == "agent" and e["kind"] in {"message", "reasoning"} and not e["copied_context"]:
             for text, selector, basis in _plan_spans(e):
                 add(text, e, "expressed_plan", selector, basis)
-    return {"version": GOAL_VERSION, "goals": goals, "roots": roots, "instruction_ledger": instructions}
+    return {"version": GOAL_VERSION, "goals": goals,
+            "roots": {actor:gid for (actor,context),gid in roots.items() if context is None},
+            "context_roots": [dict(trajectory_id=actor,context_id=context,goal_id=gid)
+                              for (actor,context),gid in roots.items() if context is not None],
+            "instruction_ledger": instructions}
 
 
-def applicable_root(registry, actor):
+def applicable_root(registry, actor, context_id=None):
     """A delegated agent can inherit an ancestor task if no local task is recorded."""
     while actor:
-        if actor in registry["roots"]:
+        if context_id is None and actor in registry["roots"]:
             return registry["roots"][actor]
+        for root in registry.get("context_roots", []):
+            if (root["trajectory_id"],root["context_id"]) == (actor,context_id):
+                return root["goal_id"]
         actor = actor.rpartition("/")[0]
     return None
 
@@ -96,9 +107,10 @@ def applicable_root(registry, actor):
 def focus_candidates(run, action_id, registry=None, limit=16):
     registry = registry or catalog(run)
     action = action_id if isinstance(action_id, dict) else next(e for e in run["events"] if e["id"] == action_id)
-    root_id = applicable_root(registry, action["trajectory_id"])
+    root_id = applicable_root(registry, action["trajectory_id"], action.get("context_id"))
     available = []
     for g in registry["goals"]:
+        if g.get("context_id") != action.get("context_id"): continue
         refs = [r for r in g["references"] if r["index"] < action["index"]]
         if not refs or g["kind"] in {"retained_context", "additional_instruction"}:
             continue
@@ -108,6 +120,7 @@ def focus_candidates(run, action_id, registry=None, limit=16):
     # Root plus current explicit plans and recent older plans. No future reference
     # may leak into this action's packet, even when a phrase occurs again later.
     roots = [g for g in available if g["id"] == root_id]
+    if not roots: root_id = None
     plans = sorted((g for g in available if g["id"] != root_id), key=lambda g: g["last_index"], reverse=True)
     included = roots + plans[:max(0, limit-len(roots))]
     return {"candidates": included, "omitted_count": len(available)-len(included), "root_id": root_id,
@@ -127,9 +140,10 @@ def track(run, actions, registry=None):
     registry = registry or catalog(run)
     goals = {g["id"]: {**g, "event_ids": [], "pursuit_status": "candidate" if g["kind"] == "expressed_plan" else "recorded",
                         "visits": 0, "returns": 0, "modes": Counter()} for g in registry["goals"]}
-    previous, seen, transitions, assignments = {}, defaultdict(set), [], []
+    transitions, assignments, points = [], [], []
+    order = OrderEvidence({e['id']: e for e in run['events'] if not e.get('copied_context')})
     edges = Counter()
-    for action in actions:
+    for action in sorted(actions, key=lambda a: a['index']):
         actor, eid = action["trajectory_id"], action["event_id"]
         observation = action["semantic"].get("focus_goal", {})
         candidates = focus_candidates(run, action, registry)
@@ -138,48 +152,52 @@ def track(run, actions, registry=None):
         status = "decided" if gid else "no_suitable_candidate" if observation.get("status") == NO_CANDIDATE else "unresolved"
         assignment = {"event_id": eid, "goal_id": gid, "status": status,
                       "root_id": candidates["root_id"], "trajectory_id": actor,
+                      "context_id": action.get("context_id"), "order_known": order.is_ordered(eid),
                       "source": observation.get("source", "jev") if observation else "unobserved",
                       "candidate_set_hash": candidates["candidate_set_hash"], "omitted_candidates": candidates["omitted_count"]}
         assignments.append(assignment)
         action["focus_goal_id"] = gid
         action["goal_id"] = candidates["root_id"]
+        points.append({'event_id': eid, 'unit_id': eid, 'group_id': gid,
+                       'identity_status': 'assigned' if gid else 'unresolved'})
         if gid:
             goal = goals[gid]; goal["event_ids"].append(eid); goal["modes"][action["mode"]] += 1
-            before = previous.get(actor)
-            if before == gid:
-                transition = "continue"
-            elif before is None and gid in seen[actor]:
-                transition = "focus_reobserved"
-                goal["visits"] += 1
-            elif gid in seen[actor]:
-                transition = "return"
-                goal["returns"] += 1; goal["visits"] += 1
-            else:
-                transition = "first_focus" if before is None else "switch"
-                goal["visits"] += 1
-            transitions.append({"event_id": eid, "from": before, "to": gid, "kind": transition,
-                                "trajectory_id": actor, "basis": "action-to-goal assignments, not inferred intention"})
-            if before:
-                edges[(before, gid)] += 1
-            previous[actor] = gid; seen[actor].add(gid)
-        else:
-            # Do not draw a continuous goal edge through unobserved behavior.
-            previous[actor] = None
-    for actor, gid in previous.items():
-        if gid:
-            goals[gid]["pursuit_status"] = "last_observed_focus"
+    labels = {'first': 'first_focus', 'switch': 'switch', 'returned': 'return',
+              'continued': 'continue', 'resumed': 'continue', 'reobserved': 'focus_reobserved',
+              'unordered': 'focus_observed_order_unknown'}
+    tails = {}
+    for row in order.recurrences(points):
+        event = order.events[row['event_id']]
+        tails[recorded_scope(event)] = row
+        gid, before = row['group_id'], row['previous_group_id']
+        if not gid: continue
+        transition = labels[row['kind']]
+        goal = goals[gid]
+        goal['returns'] += int(transition == 'return')
+        goal['visits'] += int(row['order_known'] and transition != 'continue')
+        transitions.append({'event_id': row['event_id'], 'from': before, 'to': gid, 'kind': transition,
+                            'trajectory_id': event['trajectory_id'], 'context_id': event.get('context_id'),
+                            'previous_event_id': row['previous_event_id'], 'order_evidence': row['order_evidence'],
+                            'basis': 'action-to-goal assignments with source order evidence; attainment is unobserved'})
+        if before: edges[(before, gid)] += 1
+    for row in tails.values():
+        if row['group_id'] and row['order_known']:
+            goals[row['group_id']]['pursuit_status'] = 'last_observed_focus'
     for g in goals.values():
         if g["event_ids"] and g["pursuit_status"] != "last_observed_focus":
-            g["pursuit_status"] = "previously_pursued"
+            g["pursuit_status"] = "observed_focus"
     unresolved_ids = [a["event_id"] for a in assignments if not a["goal_id"]]
+    root_ids = set(registry["roots"].values()) | {r['goal_id'] for r in registry.get('context_roots',[])}
     graph_nodes = [{"id": g["id"], "label": "Initial task · " + g["trajectory_id"] if g["kind"] == "recorded_objective" else g["text"], "event_ids": g["event_ids"], "modes": g["modes"],
-                    "goal_status": g["pursuit_status"]} for g in goals.values() if g["event_ids"] or g["id"] in registry["roots"].values()]
+                    "goal_status": g["pursuit_status"]} for g in goals.values() if g["event_ids"] or g["id"] in root_ids]
     if unresolved_ids:
         graph_nodes.append({"id": "unresolved-focus", "label": "Unresolved work objective", "event_ids": unresolved_ids,
                             "modes": {"unresolved": len(unresolved_ids)}, "goal_status": "unresolved"})
     return {**registry, "goals": list(goals.values()), "assignments": assignments, "transitions": transitions,
             "coverage": {"eligible": len(actions), "assigned": len(actions)-len(unresolved_ids), "unresolved": len(unresolved_ids),
+                         "unordered_assignments": sum(bool(a['goal_id']) and not a['order_known'] for a in assignments),
+                         "unresolved_recurrences": sum(t['kind'] == 'focus_reobserved' for t in transitions),
                          "plan_candidates": sum(g["kind"] == "expressed_plan" for g in goals.values()),
                          "pursued_plans": sum(g["kind"] == "expressed_plan" and bool(g["event_ids"]) for g in goals.values())},
             "graph": {"nodes": graph_nodes, "edges": [{"source": s, "target": t, "count": count} for (s,t),count in edges.items()]},
-            "definition": "Goals come from recorded instructions or exact model-authored plans. Focus requires a semantic selection or review. Return means a previously selected goal is selected again; attainment remains unobserved without verification."}
+            "definition": "Goals come from recorded instructions or exact model-authored plans. Focus requires a semantic selection or review. Returns require ordered endpoints and observed intervening work on another goal in the same context; complete bracketed parallel dispatches are allowed. Unknown order preserves assignments without inventing edges or returns. Attainment remains unobserved without verification."}

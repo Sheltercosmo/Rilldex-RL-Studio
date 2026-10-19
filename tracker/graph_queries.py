@@ -7,7 +7,7 @@ from . import graph_store
 
 VERSION = 'graph-requirement/1'
 PATH_VERSION = 'graph-requirement/2'
-ENGINE_VERSION = 'graph-pattern-evaluation/3'
+ENGINE_VERSION = 'graph-pattern-evaluation/4'
 MAX_PATH_EDGE_VISITS = 50000
 PRESETS = {
  'assessment_of_inspection_feedback': {'schema':PATH_VERSION,
@@ -85,7 +85,7 @@ def edge_available(edge, later, event_indices):
     return position is not None and (position,cutoff['end'])<=(later['event_index'],node_end(later))
 
 
-def path_witness(spec, relation, anchor, later, by_id, adjacency, budget, event_indices, context):
+def path_witness(spec, relation, anchor, later, by_id, adjacency, budget, event_indices, context,order):
     """Return one complete witness, not a sum of all combinatorial paths.
 
     Every hop must use a stored edge and materialized same-trajectory object
@@ -98,6 +98,7 @@ def path_witness(spec, relation, anchor, later, by_id, adjacency, budget, event_
         return (n is not None and n['kind']!='unresolved_reference' and n['event_index'] is not None
                 and n['trajectory_id']==later['trajectory_id']
                 and context(n)==context(later)
+                and (n['id']==later['id'] or order.before(n,later,at_end=True) is None)
                 and (n['event_index'],node_end(n))<=cutoff)
     if not available(by_id.get(start)): return None
     def visit(current, depth, nodes, traversals):
@@ -120,6 +121,8 @@ def path_witness(spec, relation, anchor, later, by_id, adjacency, budget, event_
 
 
 def evaluate(graph, raw):
+    from .graph_sequence import Ordering
+    order=Ordering(graph)
     q=validate(raw); by_id={n['id']:n for n in graph['nodes']}; streams=defaultdict(list)
     from . import map_relationships
     audit=map_relationships.inspect(graph)
@@ -140,7 +143,7 @@ def evaluate(graph, raw):
     event_indices={n['properties']['id']:n['event_index'] for n in graph['nodes'] if n['kind']=='event' and 'id' in n['properties']}
     event_indices.update({n['properties']['source']['event_id']:n['event_index'] for n in graph['nodes']
                           if n['event_index'] is not None and n['properties'].get('source',{}).get('event_id')})
-    cases=[]; missing_newness=0
+    cases=[]; unavailable=[];missing_newness=0
     for nodes in streams.values():
         for i,anchor in enumerate(nodes):
             if anchor.get('activity')!=q['anchor_activity']: continue
@@ -149,7 +152,8 @@ def evaluate(graph, raw):
                 if novelty is not True:
                     if novelty is not False: missing_newness+=1
                     continue
-            later=nodes[i+1:i+1+q['within_units']]; matches=[]
+            candidates=nodes[i+1:i+1+q['within_units']]
+            later,blocker=order.prefix(anchor,candidates);matches=[]
             for n in later:
                 for e in outgoing[n['id']]:
                     if e['type']!=q['relation']: continue
@@ -161,26 +165,33 @@ def evaluate(graph, raw):
                     nstart=n['properties'].get('source',{}).get('start',0)
                     tend=node_end(target)
                     if (target['event_index'],tend)>(n['event_index'],nstart): continue
-                    witness=path_witness(spec,e,anchor,n,by_id,adjacency,budget,event_indices,context) if spec else None
+                    if order.before(target,n) is not None:continue
+                    witness=path_witness(spec,e,anchor,n,by_id,adjacency,budget,event_indices,context,order) if spec else None
                     if spec and witness is None: continue
                     anchors=[x for x in outgoing[n['id']] if x['target']==anchor['id'] and x['type'] in {'uses_evidence','responds_to'}]
                     matches.append({'edge_id':e['id'],'source':e['source'],'target':e['target'],
                                     'evidence_links':witness['edge_ids'] if witness else [x['id'] for x in anchors],
                                     **({'evidence_path':witness} if witness else {})})
-            cases.append({'anchor':anchor['id'],'matches':matches,'status':'matched' if matches else 'no_recorded_match',
-                          'inspected_window':[n['id'] for n in later]})
+            case={'anchor':anchor['id'],'matches':matches,'status':'matched' if matches else 'no_recorded_match',
+                  'inspected_window':[n['id'] for n in later],
+                  'window_status':'ordered_prefix' if blocker else 'ordered','order_blocker':blocker}
+            if blocker and not matches:
+                unavailable.append({**case,'status':'order_unavailable'})
+            else:cases.append(case)
     positive=sum(bool(c['matches']) for c in cases)
     return {'graph_id':graph['id'],'run_id':graph['run_id'],'observer':graph['observer'],'metadata':graph['metadata'],
         'requirement_hash':digest(q),'requirement':q,'anchors':len(cases),'matched_anchors':positive,
         'without_recorded_match':len(cases)-positive,'unclassified_newness':missing_newness,
         'recorded_match_fraction':positive/len(cases) if cases else None,
         'behavior_rate':None,'status':'recorded_matches_only' if cases else 'required_evidence_unavailable',
-        'cases':cases,'engine_version':ENGINE_VERSION,'path_edge_visits':budget[0],'rejected_relationships':list(rejected.values()),
+        'cases':cases,'unavailable_windows':unavailable,'candidate_anchors':len(cases)+len(unavailable),
+        'engine_version':ENGINE_VERSION,'path_edge_visits':budget[0],'rejected_relationships':list(rejected.values()),
         'association':'stored_evidence_path' if spec else 'temporal_only',
         'limitations':['The fraction counts recorded graph matches, not all actual behavior. Missing semantic edges are not negatives.',
             'The question text is a saved research note. The explicit fields below it are the executed definition.',
             'An explicit path binds the later relationship to the starting unit. Without a path, the match is temporal association only. Neither proves causation.',
             'Each matched relationship retains one complete path witness, not every possible path. Intermediate objects must be materialized in the same trajectory by the later unit cutoff.',
+            'Windows stop at unknown source order, parallel dispatches or overlapping spans. Earlier positive witnesses remain valid; incomplete windows without a witness are excluded from the denominator.',
             'New exploration requires an explicit new_exploration facet. Inspect is not automatically a new direction.']}
 
 
@@ -216,7 +227,8 @@ def run(store, body):
             denominator=sum(r['anchors'] for r in rows); numerator=sum(r['matched_anchors'] for r in rows)
             bins.append({'step':step,'numerator':numerator,'denominator':denominator,
                 'value':numerator/denominator if denominator else None,'rollouts':len(rows),
-                'missing_newness':sum(r['unclassified_newness'] for r in rows)})
+                'missing_newness':sum(r['unclassified_newness'] for r in rows),
+                'unavailable_windows':sum(len(r['unavailable_windows']) for r in rows)})
         series.append({'cohort':json.loads(key),'bins':bins})
     return {'schema':q['schema'],'engine_version':ENGINE_VERSION,'requirement':q,'requirement_hash':digest(q),'results':results,'training':series,
             'missing_training_coordinates':excluded,'incomplete_snapshots':incomplete,'historical_graphs':historical}

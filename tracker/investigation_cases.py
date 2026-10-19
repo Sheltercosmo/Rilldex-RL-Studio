@@ -11,7 +11,7 @@ from .schema import InputError, digest
 
 VERSION = 'investigation-cases/1'
 FAMILIES = {
-    'recurrence': {'key':'episodes', 'schema':'work-episodes/3', 'items':'episodes',
+    'recurrence': {'key':'episodes', 'schema':'work-episodes/4', 'legacy_schemas':('work-episodes/3',), 'items':'episodes',
         'label':'Returns and repeated work',
         'statuses':{'continued':'Consecutive same-work recurrence', 'returned':'Return after other work',
                     'interrupted':'Recurrence across an observation gap'}},
@@ -37,7 +37,7 @@ def material(doc, family, cohort='all'):
               'missing_projection_rollouts':len(sources), 'ambiguous_projection_rollouts':0,
               'recorded_actions':0, 'represented_actions':0, 'first_or_unresolved_actions':0,
               'identity_reviewed_actions':0, 'recorded_checks':0, 'captured_checks':0}
-    if not wrapper or wrapper.get('schema')!=spec['schema']:
+    if not wrapper or wrapper.get('schema') not in (spec['schema'],*spec.get('legacy_schemas',())):
         return [],coverage,'not_recorded',[]
     groups=defaultdict(dict)
     for record in wrapper['records']:
@@ -50,7 +50,7 @@ def material(doc, family, cohort='all'):
         if len(variants)!=1:
             coverage['ambiguous_projection_rollouts']+=1;continue
         record=next(iter(variants.values()))
-        if record.get('schema')!=spec['schema']:continue
+        if record.get('schema')!=wrapper['schema']:continue
         coverage['projected_rollouts']+=1
         if family=='recurrence':
             c=record['counts']

@@ -95,12 +95,12 @@ class ScopeInterpretationTests(unittest.TestCase):
         for case in json.loads(path.read_text(encoding='utf-8'))['cases']:
             with self.subTest(case=case['case']):
                 p,b,f=case['packet'],case['bound'],case['feature_id']
-                req=readings.request(p,b,f)
+                req=readings.request(p,b,f,version=readings.LEGACY_VERSION)
                 self.assertEqual(req,case['request'])
                 self.assertEqual(case['receipt']['request_hash'],digest(req))
                 self.assertEqual(case['receipt']['response_hash'],digest(case['response']))
                 self.assertEqual(case['receipt']['status'],'response_received')
-                decision=readings.resolve(p,b,f,case['response'])
+                decision=readings.resolve(p,b,f,case['response'],version=readings.LEGACY_VERSION)
                 self.assertEqual(decision,case['result'])
                 view=readings.project(p,b,f,decision)
                 self.assertEqual(digest(view),case['projection_hash'])

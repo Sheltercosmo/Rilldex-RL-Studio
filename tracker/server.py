@@ -280,6 +280,12 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                     from .strategy_profiles import read as read_strategy
                     return self.response(200,read_strategy(store,path.rsplit('/',1)[-1]),download_name='strategy-evidence.json' if params.get('download')==['1'] else None)
                 if path == '/api/monitoring/status':return self.response(200,monitor_service.status())
+                if path == '/api/monitoring/alerts':
+                    from .monitor_alerts import snapshot as alert_snapshot
+                    return self.response(200,alert_snapshot(store))
+                if path == '/api/monitoring/scans':
+                    from .scan_progress import snapshot as scan_snapshot
+                    return self.response(200,scan_snapshot(store,**{k:params[k][0] for k in ('experiment','environment') if k in params}))
                 if path == '/api/monitoring/comparisons':
                     from .monitor_comparisons import listing
                     return self.response(200,listing(store,params.get('experiment',[None])[0]))
@@ -525,6 +531,8 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 allowed_files['/population-evidence.js']='population-evidence.js'
                 allowed_files['/custom-monitor-setup.js']='custom-monitor-setup.js'
                 allowed_files['/reward-checks.js']='reward-checks.js'
+                allowed_files['/workspace-alerts.js']='workspace-alerts.js'
+                allowed_files['/reward-scan-progress.js']='reward-scan-progress.js'
                 allowed_files.update({'/custom-monitor-evidence.js':'custom-monitor-evidence.js','/custom-monitor-evidence.css':'custom-monitor-evidence.css'})
                 allowed_files['/POPULATION_READINESS.md']='population-readiness.md'
                 allowed_files.update({'/geist-sans.woff2':'geist-sans.woff2','/geist-mono.woff2':'geist-mono.woff2','/geist-LICENSE.txt':'geist-LICENSE.txt'})

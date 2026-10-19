@@ -113,17 +113,18 @@ body.workspace .active-captures{padding:16px 18px;margin:12px 0 20px;border:1px 
 @media(max-width:900px){.registry-monitor{grid-template-columns:minmax(0,1fr) minmax(145px,.6fr)}.registry-monitor-actions{grid-column:1/-1;justify-content:flex-start;border-top:1px solid #edf0f5;padding-top:8px}}
 @media(max-width:560px){.registry-monitor{grid-template-columns:minmax(0,1fr);gap:9px;padding:12px}.registry-monitor-actions{grid-column:auto}.registry-monitor-coverage{max-width:100%}.registry-tools .muted{margin-left:0}.monitor-starters,.metric-catalog-results{grid-template-columns:1fr}}
 .advanced-monitor-setup[hidden],.monitor-discovery[hidden],#save-monitor[hidden]{display:none!important}
-.workspace .monitor-authoring-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:18px}
-.workspace .monitor-authoring-modes button{display:flex;flex-direction:column;gap:5px;padding:12px 14px;text-align:left;white-space:normal;min-width:0;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);box-shadow:none}
+.workspace .monitor-authoring-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;margin-bottom:18px;background:var(--surface-subtle);border-radius:9px}
+.workspace .monitor-authoring-modes button{display:flex;flex-direction:column;gap:3px;padding:9px 12px;text-align:left;white-space:normal;min-width:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ink);box-shadow:none}
 .workspace .monitor-authoring-modes strong{font-size:13px;font-weight:600}
 .workspace .monitor-authoring-modes span{font-size:11px;line-height:1.45;color:#5c697d}
-.workspace .monitor-authoring-modes button[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.workspace .monitor-authoring-modes button[aria-pressed=true]{border-color:var(--line);background:var(--surface);box-shadow:0 1px 2px #19212f08}
 .workspace .monitor-authoring-modes button[aria-pressed=true] strong{color:var(--accent)}
 .workspace #monitor-kind-field[hidden]{display:none!important}
 .workspace #monitor-type-fields.code-mode{grid-template-columns:minmax(0,1fr)}
 @media(max-width:420px){.workspace .monitor-authoring-modes{gap:7px}.workspace .monitor-authoring-modes button{padding:10px}.workspace .monitor-authoring-modes span{font-size:10px}}
 .advanced-monitor-setup{border-color:#dbe2f5;background:#fafbff;margin:14px 0}
 .advanced-monitor-setup h3{font-size:15px;margin:0 0 8px;color:#233b66}
+.workspace .dialog-frame #editor-custom-guide{padding:18px 0 0;margin:18px 0 0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
 .custom-monitor-steps{padding-left:20px;color:#5a6477;font-size:12px;line-height:1.6}
 .custom-monitor-steps li+li{margin-top:7px}
 .custom-code-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
@@ -134,6 +135,34 @@ body.workspace .active-captures{padding:16px 18px;margin:12px 0 20px;border:1px 
 @media(max-width:560px){.advanced-monitor-setup .form-pair{grid-template-columns:minmax(0,1fr)}}
 
 .workspace .reward-check-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:10px;margin:16px 0}
+.workspace .reward-hub{margin-bottom:28px}.workspace .reward-hub-actions{display:flex;gap:12px 20px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:24px 0;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.workspace .reward-section-links,.workspace .reward-setup-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.workspace .reward-section-links a{padding:7px 10px;border-radius:6px;color:var(--muted);font-weight:500}
+.workspace .reward-section-links a:hover{background:var(--accent-soft);color:var(--accent);text-decoration:none}
+.workspace .reward-setup-actions{gap:8px}.workspace .reward-setup-actions>a{padding:7px 10px}
+.workspace .reward-setup-actions button{padding:7px 10px;min-height:34px}
+.workspace #reward-findings-section,.workspace #reward-checks{scroll-margin-top:86px}
+.workspace .reward-hub-actions a,.workspace .reward-hub-actions button{font-size:12px}.workspace .reward-hub-shortcut{font-weight:600;font-size:13px;margin-right:8px}
+.workspace .reward-findings{display:grid;gap:0;max-height:560px;overflow:auto;scrollbar-width:thin;scrollbar-color:#c6ccd6 transparent}
+.workspace .reward-findings .finding-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px 24px;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:18px 0}
+.workspace .reward-findings .finding-row:last-child{border-bottom:0}
+.workspace .reward-findings .finding-actions{flex-direction:column;align-items:flex-end;gap:8px;margin:0;padding:0;white-space:nowrap}
+.workspace .reward-findings .finding-label{font-size:10px;font-weight:500;color:var(--warning)}
+.workspace .reward-findings .finding-label::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:currentColor;margin:0 6px 1px 0}
+.workspace #reward-hub>section{padding:20px 24px;margin:20px 0}
+.workspace #reward-hub .section-heading{margin-bottom:6px}.workspace #reward-hub .field-note{margin:4px 0 12px}
+.workspace #reward-check-options{border:0;background:transparent;margin:0;box-shadow:none}
+@container workspace (max-width:600px){.workspace #reward-hub>section{padding:16px}.workspace .reward-findings .finding-row{grid-template-columns:minmax(0,1fr);gap:10px}.workspace .reward-findings .finding-actions{flex-direction:row;align-items:center;gap:16px}.workspace .reward-section-links{width:100%;justify-content:space-between}.workspace .reward-section-links a{padding-inline:7px}.workspace .reward-hub-actions{gap:10px}.workspace .reward-findings{max-height:none}}
+.workspace .reward-scan-dialog{width:min(800px,calc(100vw - 24px));max-height:90vh;overflow:auto;padding:24px;border-radius:12px}
+.workspace .reward-scan-dialog p{font-size:13px;line-height:1.6}.workspace .reward-scan-dialog h3{margin:18px 0 8px;font-size:14px}
+.workspace .reward-scan-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0}
+.workspace .reward-scan-dialog .reward-scan-fields label{display:flex;flex-direction:column;gap:6px;min-width:0;margin:0;font-size:12px;color:var(--muted)}
+.workspace .reward-scan-dialog .dialog-body>section{padding:12px 0;margin:0;border:0;border-radius:0;background:none;box-shadow:none}
+.workspace .reward-scan-dialog .dialog-body>p{margin:10px 0}
+.workspace .reward-scan-fields :is(input,select){width:100%;min-width:0;color:var(--ink)}
+.workspace .reward-scan-dialog pre{padding:14px;background:var(--surface-subtle);border:1px solid var(--line);border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 var(--font-mono)}
+.workspace .reward-scan-dialog code{font:inherit}
+@media(max-width:560px){.workspace .reward-scan-fields{grid-template-columns:1fr}.workspace .reward-scan-dialog{padding:16px}}
 .workspace .reward-check-option{display:flex;align-items:flex-start;gap:10px;padding:14px;border:1px solid #dce2ee;border-radius:10px;background:#fff;min-width:0}
 .workspace .reward-check-option input{width:16px;height:16px;flex:0 0 16px;margin:3px 0;accent-color:#3d54df}
 .workspace .reward-check-option span{display:grid;gap:5px;min-width:0}.workspace .reward-check-option small{font-size:12px;line-height:1.5;color:#59677e}
@@ -144,3 +173,19 @@ body.workspace .active-captures{padding:16px 18px;margin:12px 0 20px;border:1px 
 .workspace #cases-dialog .custom-feedback-info{border-color:#dce2f5;background:#f7f8fe}
 .workspace #cases-dialog .dialog-head{flex-direction:row;align-items:flex-start}
 @container registry (max-width:600px){.workspace #case-table td:nth-child(4),.workspace #case-table td:nth-child(5){grid-column:1/-1}.workspace #case-table td:nth-child(5){display:flex;gap:8px 16px;flex-wrap:wrap;align-items:center}.workspace #case-table td:nth-child(5)::before{display:none}.workspace #case-table td:nth-child(5) a{margin-top:0!important}}
+.workspace .scan-worker{padding:18px 0;border-top:1px solid var(--line)}
+.workspace .scan-worker:first-child{border-top:0;padding-top:0}
+.workspace .scan-worker-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.workspace .scan-worker-head strong,.workspace .scan-worker-head small{display:block}.workspace .scan-worker-head small{margin-top:4px;color:var(--muted)}
+.workspace .scan-counts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:20px 0}
+.workspace .scan-counts dt{font-size:11px;color:var(--muted)}.workspace .scan-counts dd{font-size:22px;font-weight:600;margin:4px 0 0;color:var(--ink);font-variant-numeric:tabular-nums}
+.workspace .scan-counts [data-state=partial] dd{color:var(--accent)}
+.workspace .scan-worker details{margin-top:16px}.workspace .scan-worker summary{font-size:12px;color:var(--muted);cursor:pointer}
+.workspace .scan-workspace{display:grid;gap:6px;font-size:12px;margin:16px 0}.workspace .scan-workspace span{color:var(--muted)}.workspace .scan-workspace code{overflow-wrap:anywhere;white-space:normal}
+.workspace .scan-rollouts{max-height:360px;overflow:auto;scrollbar-width:thin}
+.workspace .scan-rollout{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;padding:12px 0;border-top:1px solid var(--line);font-size:12px}
+.workspace .scan-rollout a{overflow-wrap:anywhere}.workspace .scan-rollout small{display:block;color:var(--muted);margin-top:3px}.workspace .scan-row-note{grid-column:1/-1}
+.workspace .scan-state{font-size:11px;color:var(--muted)}.workspace .scan-state[data-state=partial]{color:var(--accent)}.workspace .scan-state[data-state=failed]{color:#ae4238}
+.workspace #reward-scans-section{scroll-margin-top:86px}.workspace #reward-scan-progress[data-error=true]::before{content:'Updates disconnected · showing last saved response';display:block;color:#ae4238;font-size:12px;margin-bottom:12px}
+.workspace .reward-scan-fields .check-label{display:flex;flex-direction:row;align-items:center;gap:8px}.workspace .reward-scan-fields .check-label input{width:15px}
+@media(max-width:900px){.workspace .scan-counts{grid-template-columns:repeat(3,minmax(0,1fr))}}

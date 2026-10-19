@@ -37,6 +37,25 @@ class WorkerTests(unittest.TestCase):
         r=normalize(harbor(),'harbor',{'experiment':'worker-test','training_step':step})[0]
         self.store.add([r]);return r
 
+    def test_protocol_upgrade_reuses_exact_page_decisions_without_provider_calls(self):
+        from tracker import diagnostic_search as search
+        self.fixture();selector=w.selection(experiment='worker-test')
+        original=search.protocol
+        with patch.object(search,'protocol',lambda version=search.PAYLOAD_VERSION:original(version)):
+            w.initialize(self.store,self.work,selector,'search')
+        def clear(req):
+            return dict(model=req['model'],answers={k:dict(type='choice',probabilities={v:float(v=='none') for v in q['criteria']}) for k,q in req['questions'].items()})
+        old=w.execute(self.store,self.work,clear,selector=selector,protocol_name='search',max_new_calls=10)
+        self.assertEqual(old['coverage']['counts'],{'complete':1})
+        upgraded=self.root/'upgraded'
+        new=w.execute(self.store,upgraded,lambda _:self.fail('Unchanged request must use exact cache'),
+                      selector=selector,protocol_name='search',max_new_calls=0)
+        self.assertEqual(new['protocol']['schema'],search.CONTRACT_VERSION)
+        self.assertEqual(new['new_calls'],0)
+        self.assertEqual(new['coverage']['counts'],{'complete':1})
+        self.assertTrue(list(upgraded.glob('runs/*/*/reuse/*.json')))
+        self.assertTrue(w.audit(self.store,upgraded)['runs'][0]['validation']['exact_replay'])
+
     def metrics(self):
         with self.store.connect() as c:return c.execute('SELECT * FROM rollout_measurements WHERE observer LIKE ?',('diagnostic-chains-%',)).fetchall()
 

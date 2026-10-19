@@ -32,6 +32,26 @@ window.trackerDetails = (() => {
     return goal ? goal.kind === 'recorded_objective' ? 'Initial task' : goal.text : humanize(id);
   }
 
+  function goalLanes(tracking) {
+    const lanes = new Map();
+    const transitions = new Map(tracking.transitions.map(t => [t.event_id, t]));
+    for (const assignment of tracking.assignments) {
+      const laneKey = JSON.stringify([assignment.trajectory_id, assignment.context_id ?? null]);
+      if (!lanes.has(laneKey)) lanes.set(laneKey, {trajectory_id: assignment.trajectory_id,
+        context_id: assignment.context_id ?? null, segments: []});
+      const segments = lanes.get(laneKey).segments;
+      const key = assignment.goal_id || assignment.status;
+      const transition = transitions.get(assignment.event_id);
+      const last = segments.at(-1);
+      if (last?.key === key && last.order_known && assignment.order_known === true &&
+          transition?.kind === 'continue' && transition.previous_event_id === last.ids.at(-1)) {
+        last.ids.push(assignment.event_id);
+      } else segments.push({key, goal: assignment.goal_id, ids: [assignment.event_id],
+        order_known: assignment.order_known === true});
+    }
+    return [...lanes.values()];
+  }
+
   function renderGoals() {
     const tracking = bundle.analysis.goal_tracking;
     const container = $('#goal-tracking');
@@ -44,23 +64,15 @@ window.trackerDetails = (() => {
     container.append(node('p', `${c.assigned} of ${c.eligible} actions have an assigned goal · ${c.pursued_plans} of ${c.plan_candidates} expressed plans have observed pursuit`, 'goal-coverage'));
     container.append(node('p', 'Goal focus follows action evidence. A mentioned plan is a candidate; pursuit does not establish completion. Gaps stay unresolved.', 'muted'));
 
-    const byActor = new Map();
-    for (const assignment of tracking.assignments) {
-      const list = byActor.get(assignment.trajectory_id) || [];
-      const key = assignment.goal_id || assignment.status;
-      if (list.at(-1)?.key === key) list.at(-1).ids.push(assignment.event_id);
-      else list.push({key, goal: assignment.goal_id, ids: [assignment.event_id]});
-      byActor.set(assignment.trajectory_id, list);
-    }
     const transitions = new Map(tracking.transitions.map(t => [t.event_id, t.kind]));
-    for (const [actor, segments] of byActor) {
+    for (const {trajectory_id: actor, context_id, segments} of goalLanes(tracking)) {
       const lane = node('div', undefined, 'focus-lane');
-      lane.append(node('h3', actor));
+      lane.append(node('h3', context_id === null ? actor : `${actor} · ${context_id}`));
       const sequence = node('div', undefined, 'focus-sequence');
       for (const segment of segments) {
         const label = segment.goal ? goalName(segment.goal) : humanize(segment.key);
         const kind = transitions.get(segment.ids[0]);
-        const button = actionButton('', segment.ids[0], 'focus-segment' + (segment.goal ? '' : ' uncertain'));
+        const button = actionButton('', segment.ids[0], 'focus-segment' + (segment.goal && segment.order_known ? '' : ' uncertain'));
         button.append(node('span', label.length > 90 ? label.slice(0,87) + '…' : label),
           node('small', `${segment.ids.length} actions${kind && kind !== 'continue' ? ' · ' + humanize(kind) : ''}`));
         button.title = `${label}\n${segment.ids[0]} to ${segment.ids.at(-1)}`;
@@ -75,7 +87,7 @@ window.trackerDetails = (() => {
       const item = node('details', undefined, 'goal-record');
       const title = goal.kind === 'recorded_objective' ? 'Initial task' : goal.text;
       item.append(node('summary', `${title.slice(0,120)}${title.length > 120 ? '…' : ''} · ${goal.event_ids.length} actions · ${humanize(goal.pursuit_status)}`));
-      item.append(node('pre', goal.text), node('p', `${goal.trajectory_id} · ${humanize(goal.kind)} · ${goal.visits} visits · ${goal.returns} returns · attainment ${goal.attainment}`, 'muted'));
+      item.append(node('pre', goal.text), node('p', `${goal.trajectory_id} · ${humanize(goal.kind)} · ${goal.visits} ordered focus segments · ${goal.returns} returns · attainment ${goal.attainment}`, 'muted'));
       for (const reference of goal.references) {
         const source = bundle.run.events.find(e => e.id === reference.event_id);
         const detail = node('details');
@@ -377,5 +389,6 @@ window.trackerDetails = (() => {
     render(nextBundle) { bundle = nextBundle; renderCapabilities(); renderGoals(); renderQueue(); renderVerification(); },
     select,
     comparison,
+    goalLanes,
   };
 })();

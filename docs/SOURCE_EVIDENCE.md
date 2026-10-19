@@ -1,10 +1,65 @@
 # Earlier source evidence
 
-Current implementation: `source-evidence-search/7`. Version 7 preserves recorded
-command-group context even when the parent message has no commentary. Version 6
-enforces recorded session/order boundaries and reserves each explicit question's
-matching passage before optional context. Version 5 added bounded continuation.
+Graph transitions and sequence links now respect sessions and native parallel
+dispatches. Relationship queries retain matches before an order gap; unresolved
+windows are excluded and inspectable in monitor evidence. Existing graph snapshots
+remain unchanged. HTTP, receipt and renderer checks are in `test_graph_order_http.py`.
+The captured 245-record Harbor fixture contains 16 parallel actions; 24 adjacent
+record pairs cannot establish serial order. This tests ordering, not semantic accuracy.
+
+Feedback assessment now respects unknown source order and native parallel batches.
+Existing v2 workspaces upgrade without recalculating unchanged model decisions;
+prior results remain replayable. Validation and unsuccessful attachment trials.
+
+`work_content_stages` separates work and feature proposals. Pass `syntax=` to
+`scoped_feature_request` and `bind_scoped_features` for exact token addressing and
+candidate scope groups; repeated words retain separate occurrences. Quote-based
+requests still support `within`. Three public development passages
+now bind without citation repair and recover shared intent. Participant-role errors
+remain; this experimental path does not replace live annotations.
+
+Source analysis now shares the work map's order evidence. Explicitly unknown order,
+native message groups and incomplete parallel batches no longer create ordered
+transitions, feedback-response opportunities or verification-closure claims.
+Stored summaries refresh on read without model calls; recorded checks remain visible.
+Reference exports now retain the same session and order evidence for evaluation.
+
+Current implementation: `source-evidence-search/9`. Explicit searches prioritize
+exact phrases in quotes or backticks, preserving negation and filename punctuation.
+The UI distinguishes exact excerpts, omitted passages and keyword fallback.
+Matching chunks across the
+page and explicit questions are reserved before surrounding context. This prevents
+one long excerpt from consuming the budget before another question's match.
+Recorded command groups, session/order boundaries and continuation remain supported.
+The accuracy check records improvements
+and context losses at tight budgets; retrieval does not establish semantic completeness.
 Historical evaluations below retain their original implementation and evidence boundaries.
+
+The latest accuracy check
+improved exact-string retrieval on recorded public traces and tested independent
+qualifier attachment. That semantic trial remains research-only; two scope errors remain.
+
+The existing experimental scope selector now states each reading's consequences
+for individual targets, preserving genuinely joint qualifications. A live comparison
+improved 4/8 → 7/8 on prior probes and matched 5/5 additional probes. Missing target
+combinations still cause errors; these are development references, not general
+accuracy estimates. Existing receipts remain replayable.
+
+For connected review, call `tracker.work_qualified_contents.review(packet, bound,
+syntax=syntax_record, send=transport, on_progress=save_progress)`. The transport
+owns caching and call budgets. The function proposes syntax-based scope groups,
+selects scope and detail, and returns `reviews` plus a readable `view`.
+`feature_ids=[...]` limits work to selected qualifiers. Intention targets preserve
+the intended operation/state rather than just its resource name. Validation.
+
+Use `argument_roles=True` to select an actor, state bearer or object together with
+its predicate and reference form. Selected roles reach relationship inputs;
+original proposer labels remain provenance. Add `argument_version="work-argument-pairs/2"`
+to retain multiple predicate-specific roles, including request recipients, in one
+request per content owner. Positive relations remain visible when coverage is partial.
+Development comparison:
+29/31 role decisions and 12/15 full cases matched; repeated mentions and coverage
+still cause errors. This remains opt-in and experimental.
 
 For code-based source review, `tracker.criterion_review.make_request` compares
 an exact criterion with a selected source range. Specify `basis="dispatch"`,

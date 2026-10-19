@@ -24,6 +24,36 @@ class RolloutMetricsTests(unittest.TestCase):
         self.assertIsNone(series['cohorts'][0]['points'][0]['policy_version'])
         self.assertEqual(r['training_coordinate_count'],1)
 
+    def test_v19_session_links_refresh_without_rewriting_old_measurements(self):
+        from tracker import rollout_metrics as metrics, graph_store
+        from test_source_evidence import chat
+        run = chat([
+            {'role':'assistant','content':'', 'tool_calls':[{'id':'a','type':'function','function':{'name':'read','arguments':'{}'}}]},
+            {'role':'tool','tool_call_id':'a','content':'first receipt'},
+            {'role':'assistant','content':'', 'tool_calls':[{'id':'b','type':'function','function':{'name':'read','arguments':'{}'}}]},
+            {'role':'tool','tool_call_id':'b','content':'second receipt'}])
+        for event in run['events']:
+            event['context_id'] = 'first' if event['index'] < 3 else 'second'
+            if event.get('call_id'): event['call_id'] = 'reused'
+            if event.get('source_call_id'): event['source_call_id'] = 'reused'
+        self.store.add([run])
+        old=metrics.source_record(run);old['schema']='rollout-behavior/19'
+        old['metrics']['feedback_link_rate']=metrics.measurement(numerator=0,denominator=2)
+        with self.store.connect() as c:
+            c.execute('DELETE FROM rollout_measurements')
+            c.execute('DELETE FROM graph_edges');c.execute('DELETE FROM graph_nodes');c.execute('DELETE FROM rollout_graphs')
+            metrics.save(c,old,created_at='2026-10-01T00:00:00+00:00')
+        result=metrics.report(self.store)
+        current=result['rows'][0]
+        self.assertEqual(current['metrics']['feedback_link_rate']['value'],1.0)
+        with self.store.connect() as c:
+            import json
+            stored=json.loads(c.execute("SELECT document FROM rollout_measurements WHERE json_extract(document,'$.schema')='rollout-behavior/19'").fetchone()[0])
+            self.assertEqual(stored,old)
+        graph=graph_store.read(self.store,graph_store.build(run)['id'])
+        self.assertEqual(sum(e['type']=='response_to' for e in graph['edges']),2)
+        self.assertEqual(metrics.ensure_current(self.store),0)
+
     def test_v6_observations_upgrade_additively_and_keep_annotation_identity(self):
         from tracker.rollout_metrics import save, VERSION
         run=self.run_fixture();self.store.add([run])

@@ -65,6 +65,56 @@ test('projection leaves saved graph and source immutable',()=>{
  const g={id:'g',nodes:[n('event:a',0,'action')],edges:[]};const before=JSON.stringify(g);S.project(g,{outcome:{}},L.project(g));assert.equal(JSON.stringify(g),before);
 });
 
+test('large source records never become unbounded story headings or navigation labels',()=>{
+ const raw='Inspect the snapshot implementation.\n'+('source line\n'.repeat(3000));
+ const s=story([n('event:long',0,'reasoning',{text:raw}),n('event:action',1,'action',{text:raw})]);
+ for(const m of s.moments){
+  assert.ok(m.displayTitle.length<=160);assert.doesNotMatch(m.displayTitle,/\n/);
+  assert.equal(m.nodes[0].properties.text,raw);
+  assert.ok(S.matches(m,'all','source line'),'search still includes full source');
+ }
+});
+
+test('story excerpts bound both line count and characters without losing source',()=>{
+ const raw='x\n'.repeat(500);
+ assert.ok(S.excerpt(raw).split('\n').length<=6);
+ assert.ok(S.excerpt('a'.repeat(10000)).length<=420);
+ assert.ok(S.excerpt(raw).endsWith('…'));
+ assert.equal(S.excerpt('short text'),'short text');
+ for(const value of [JSON.stringify({output:raw}),JSON.stringify({error:raw}),JSON.stringify({result:[[{document:{contents:raw}}]]})]){
+  const p=S.preview(value);assert.ok(p.text.length<=420);assert.ok(p.text.split('\n').length<=6);assert.equal(p.raw,value);
+ }
+});
+
+test('story renderer uses compact headings and keeps full-source search and navigation usable',()=>{
+ const fs=require('node:fs'),vm=require('node:vm');
+ class Element{
+  constructor(tag){this.tag=tag;this.children=[];this.attributes={};this.dataset={};this.className='';this.value='';this.hidden=false;this.classList={add:s=>{this.className+=' '+s;}};}
+  set textContent(value){this.copy=String(value);this.children=[];}
+  get textContent(){return (this.copy||'')+this.children.map(c=>c.textContent).join('');}
+  append(...children){this.children.push(...children);}
+  replaceChildren(...children){this.children=children;}
+  setAttribute(k,v){this.attributes[k]=v;}
+  scrollIntoView(){this.scrolled=true;}
+  focus(){this.focused=true;}
+ }
+ const raw='Inspect the implementation.\n'+'source line\n'.repeat(3000)+'TAIL_MARKER';
+ const g={id:'long',nodes:[n('event:long',0,'reasoning',{text:raw}),n('event:other',1,'message',{text:'Other work'})],edges:[]};
+ const context=vm.createContext({RolloutMapLayout:L,document:{createElement:tag=>new Element(tag)}});
+ vm.runInContext(fs.readFileSync(require.resolve('../tracker/web/rollout-story.js'),'utf8'),context);
+ const host=new Element('section'),data=S.project(g,{},L.project(g));context.RolloutStory.render(host,data,g,()=>{});
+ const all=e=>[e,...e.children.flatMap(all)],elements=all(host),cards=elements.filter(e=>e.tag==='article');
+ assert.equal(cards.length,2);
+ assert.ok(elements.filter(e=>e.tag==='h3').every(e=>e.textContent.length<=160));
+ const full=elements.find(e=>e.attributes['aria-label']==='Full contribution');
+ assert.equal(full.textContent,raw);assert.equal(full.tabIndex,0);
+ const search=elements.find(e=>e.attributes['aria-label']==='Search rollout story');
+ search.value='TAIL_MARKER';search.oninput();assert.equal(cards[0].hidden,false);assert.equal(cards[1].hidden,true);
+ const jump=elements.find(e=>e.attributes['aria-label']==='Jump to story moment');
+ assert.ok(jump.children.every(e=>e.textContent.length<=170));
+ jump.value='event:other';jump.onchange();assert.equal(cards[1].hidden,false);assert.equal(cards[1].scrolled,true);assert.equal(cards[1].focused,true);
+});
+
 test('follow-up cards expose the exact returned record and assessment, never the next message by order',()=>{
  const a=n('event:a',0,'action'),r=n('event:r',1,'feedback',{text:'Permission denied'}),unrelated=n('event:x',2,'message'),assessment=n('event:b',3,'message',{text:'Try the --user flag.'});
  const s=story([a,r,unrelated,assessment],[edge(r.id,a.id,'response_to'),edge(assessment.id,r.id,'assesses')]);

@@ -1,11 +1,12 @@
 'use strict';
 const CustomMonitorSetup=(()=>{
  const literal=value=>JSON.stringify(String(value));
- function script({database,name,observer,experiment,version,description,group,template,rewardDefinition,definitionPath,rewardPath,checkPath,subjectPath,threshold,direction,rewardProducer,checkProducer}){
+ function script({database,name,observer,experiment,version,description,group,template,rewardDefinition,definitionPath,rewardPath,checkPath,subjectPath,threshold,direction,rewardProducer,checkProducer,artifactPath,artifactNames}){
   const scope=[literal(database||'workspace.sqlite'),`observer=${literal(observer||'source')}`];
   if(experiment)scope.push(`experiment=${literal(experiment)}`);
   if(template==='reward')return rewardScript({scope,name,version,description,rewardDefinition,definitionPath,rewardPath,checkPath,subjectPath,threshold,direction});
   if(template==='evaluations')return evaluationScript({scope,name,version,description,rewardDefinition,definitionPath,rewardProducer,checkProducer});
+  if(template==='artifacts')return artifactScript({scope,name,version,description,rewardDefinition,definitionPath,artifactPath,artifactNames});
   return `from rilldex import Workspace
 
 ws = Workspace(${scope.join(', ')})
@@ -139,6 +140,33 @@ if __name__ == "__main__":
     dependencies = {"code_revision": "v1"}
     print(monitor.run(detect, dependencies=dependencies))
     monitor.follow(detect, interval=5, dependencies=dependencies)
+`;
+ }
+ function artifactScript({scope,name,version,description,rewardDefinition,definitionPath,artifactPath,artifactNames}){
+  const names=[...new Set(String(artifactNames??'solution.py\ntest.py').split(/\r?\n/).map(v=>v.trim()).filter(Boolean))];
+  if(!names.length||names.length>64||names.some(v=>v.length>500))throw Error('Enter 1–64 artifact names, one per line');
+  return `from rilldex import Workspace
+from rilldex.reward_checks import check_artifacts, snapshot_artifact
+
+# In the evaluation worker, before scoring, record the actual evaluated files:
+# document["evaluation_artifacts"] = {name: snapshot_artifact(path) for name, path in files.items()}
+# Submit that document through your existing collector; do not substitute response text.
+ws = Workspace(${scope.join(', ')})
+monitor = ws.reward_detector(
+    ${literal(name||'Evaluator and submission artifacts')}, version=${literal(version||'1')},
+    description=${literal(description||'Missing/empty required artifacts or a changed fixed evaluator.')},
+    reward_definition=${literal(rewardDefinition||'my-reward/v1')},
+    definition_path=${literal(definitionPath||'/metadata/reward_definition')}, stage="execution",
+    inputs={"artifacts": ${literal(artifactPath||'/raw/evaluation_artifacts')}},
+    config={"artifacts": {
+${names.map(v=>'        '+literal(v)+': {"nonempty": True},').join('\n')}
+        # Add "sha256": "<trusted baseline hash>" to pin an immutable evaluator.
+    }},
+)
+
+if __name__ == "__main__":
+    print(monitor.run(check_artifacts))
+    monitor.follow(check_artifacts, interval=5)
 `;
  }
  return {script};

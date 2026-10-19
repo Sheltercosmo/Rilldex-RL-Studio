@@ -44,7 +44,10 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(a["metrics"]["exact_repeats"], 1)
         self.assertEqual(a["metrics"]["consecutive_repeats"], 0)
         self.assertEqual(a["metrics"]["same_result_repeats"], 1)
-        self.assertEqual(a["metrics"]["target_returns"], 1)
+        # The first parser call is unordered within a parallel dispatch. The
+        # later call proves target reobservation, not an A -> B -> A return.
+        self.assertEqual(a["metrics"]["target_returns"], 0)
+        self.assertEqual(a['actions'][-1]['target_visit'], 'reobserved')
 
     def test_copied_context_is_preserved_but_not_recounted(self):
         doc = harbor(); doc["steps"][2]["is_copied_context"] = True
@@ -63,8 +66,17 @@ class AdapterTests(unittest.TestCase):
         doc["subagent_trajectories"] = [child]
         a = analyze(normalize(doc)[0])
         self.assertEqual(a["metrics"]["actions"], 6)
-        self.assertEqual(sum(e["count"] for e in a["map"]["edges"]), 4)
+        # Both trajectories begin with parallel calls. Neither their mutual
+        # order nor the transition touching that batch is established.
+        self.assertEqual(a["map"]["edges"], [])
+        self.assertEqual(a['sequence']['summary']['excluded_batch_pairs'], 4)
         self.assertEqual(a["metrics"]["exact_repeats"], 2)
+        for trajectory in (doc,child):
+            trajectory['steps'].append({'step_id':4,'source':'agent','message':'Check.',
+                'tool_calls':[{'tool_call_id':'d','function_name':'run_tests','arguments':{}}]})
+        a=analyze(normalize(doc)[0]); nodes={n['id']:n for n in a['map']['nodes']}
+        self.assertEqual(sum(e['count'] for e in a['map']['edges']),2)
+        self.assertTrue(all(nodes[e['source']]['trajectory_id']==nodes[e['target']]['trajectory_id'] for e in a['map']['edges']))
 
     def test_media_is_not_silently_treated_as_observed_text(self):
         doc = harbor(); doc["steps"][0]["message"] = [{"type": "image", "source": {"path": "shot.png", "media_type": "image/png"}}]

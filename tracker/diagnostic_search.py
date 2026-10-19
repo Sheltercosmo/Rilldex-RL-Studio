@@ -24,9 +24,16 @@ TASK_CONTEXT_VERSION = 'diagnostic-search/9'
 SCOPED_VERSION = 'diagnostic-search/10'
 LINKED_VERSION = 'diagnostic-search/11'
 ACCESS_VERSION = 'diagnostic-search/12'
+PAYLOAD_VERSION = 'diagnostic-search/14'
+FLOW_PROBE_VERSION = 'diagnostic-search/15'
+FLOW_VERSION = 'diagnostic-search/16'
+CONTRACT_PROBE_VERSION = 'diagnostic-search/17'
+CONTRACT_REFINED_VERSION = 'diagnostic-search/18'
+CONTRACT_VERSION = 'diagnostic-search/19'
+FLOW_VERSIONS = {FLOW_PROBE_VERSION, FLOW_VERSION, CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION}
 # Keep the historical LATEST_VERSION alias stable for frozen evaluation scripts.
-DEFAULT_VERSION = ACCESS_VERSION
-DIRECT_VERSIONS = {DIRECT_VERSION, NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION}
+DEFAULT_VERSION = CONTRACT_VERSION
+DIRECT_VERSIONS = {CONTRACT_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_PROBE_VERSION, DIRECT_VERSION, NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}
 FRAGMENT_CHARS = 1800
 PAGE_CHARS = 16000
 PAGE_SERIALIZED_CHARS = 32000
@@ -38,6 +45,16 @@ SENTINELS = {'none': 'No remaining fragment in this page supplies a candidate fo
 
 
 def protocol(version=DEFAULT_VERSION):
+    if version in {CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION}:
+        from . import diagnostic_contract as contract
+        value = {**protocol(FLOW_VERSION), 'schema': version,
+                 'artifact_contract': dict(schema=contract.CURRENT_VERSION if version != CONTRACT_PROBE_VERSION else contract.VERSION, max_views=contract.MAX_VIEWS,
+                     max_payload_chars=contract.MAX_PAYLOAD_CHARS, opening_chars=contract.OPENING_CHARS,
+                     max_packet_chars=contract.MAX_PACKET_CHARS,
+                     selection='raw_argmax:target_required AND substitute AND delivered')}
+        if version == CONTRACT_VERSION: value['artifact_contract']['routing'] = 'preserve-existing-code-flow-page/1'
+        value.pop('id')
+        return {**value, 'id': 'diagnostic-search-' + digest(value)[:20]}
     if version not in {LEGACY_VERSION, VERSION, CURRENT_VERSION, *DIRECT_VERSIONS}:
         raise InputError('Unknown diagnostic search version')
     value = {'schema': version, 'model': base.DEFAULT_MODEL,
@@ -61,11 +78,11 @@ def protocol(version=DEFAULT_VERSION):
                      direct_rule=rule(version), context_limit=CONTEXT_LIMIT, page_order='detector-bm25/1',
                      publication='incremental-behavior-flags/1',
                      scope='Behavior flags selected directly with source context; not independently verified reward hacking.')
-    if version in {NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION}:
+    if version in {NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         value['fragment_boundaries'] = 'nested-message-envelope/1'
-    if version in {MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION}:
+    if version in {MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         value.update(definition_revision='mechanism-and-target/1', context_order='instructions-then-neighbors/1')
-    if version in {LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION}:
+    if version in {LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         from .diagnostic_direct import exclusions
         value.update(exclusion_options=exclusions(version), context_order='instructions-or-opening-then-neighbors/1')
     if version == CONTEXT_VERSION:
@@ -76,15 +93,15 @@ def protocol(version=DEFAULT_VERSION):
         from . import diagnostic_context as context
         value['task_context'] = {'schema':context.VERSION, 'task_limit':context.TASK_LIMIT,
                                  'representation':'complete-native-user-instructions/1'}
-    if version in {SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION}:
+    if version in {SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         from . import diagnostic_relations as relations
         value['recorded_relations'] = {'schema':relations.VERSION, 'task_limit':10000,
                                        'linked_record_limit':relations.LINK_LIMIT}
-    if version in {LINKED_VERSION, ACCESS_VERSION}:
+    if version in {LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         from . import diagnostic_linked_evidence as linked
         value['linked_passages'] = {'schema':linked.VERSION, 'chunk_chars':linked.CHUNK_CHARS,
                                     'overlap_chars':linked.OVERLAP_CHARS, 'ranking':'requirement-page-order/1'}
-    if version == ACCESS_VERSION:
+    if version in {ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         from .diagnostic_access import PAIR_LIMIT
         value['definition_revision'] = 'access-and-explicit-restriction/2'
         value['restriction_pairs'] = {'construction':'prior-native-instructions/1','choice_char_limit':PAIR_LIMIT,
@@ -92,6 +109,20 @@ def protocol(version=DEFAULT_VERSION):
         value['roles'] = {**value['roles'],
             'evaluation_material_access': {'action':'The actual read/probe dispatch.', 'material':'Recorded evidence of the task-evaluator role; permission is separate.'},
             'restricted_evaluation_access': {'action':'The actual evaluator read/probe.', 'rule':'An applicable prior instruction explicitly restricting this access.'}}
+    if version in {PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
+        from . import diagnostic_payloads as payloads
+        value['payload_boundaries'] = dict(schema=payloads.VERSION, max_record_chars=payloads.MAX_RECORD_CHARS,
+                                           max_payload_chars=PAGE_CHARS, scope='Citation grouping only; source attribution is unchanged.')
+    if version in FLOW_VERSIONS:
+        from . import diagnostic_code_flow as flow
+        value['code_flow'] = dict(schema=flow.VERSION, max_code_chars=flow.MAX_CODE_CHARS,
+            max_view_chars=flow.MAX_VIEW_CHARS,max_packet_chars=flow.MAX_PACKET_CHARS,max_views=flow.MAX_VIEWS,
+            selection='raw_argmax:test AND sample_labels AND answer_field',
+            scope='Static Python source arrays/code fields and explicit Python heredocs; not runtime verification.')
+        value['page_order'] = 'detector-bm25-with-test-answer-code-slot/1'
+        if version == FLOW_VERSION:
+            value['unchanged_page_request'] = PAYLOAD_VERSION
+            value['code_flow_page_request'] = FLOW_PROBE_VERSION
     return {**value, 'id': 'diagnostic-search-' + digest(value)[:20]}
 
 
@@ -203,12 +234,17 @@ def _nested_regions(text):
 
 def index(source, version=VERSION):
     """Partition exact original ranges; event labels are structural, not verdicts."""
+    if version in {CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION}: version = FLOW_VERSION
     validate_input(source)
     fragments = []
     for origin in ('trace', 'task'):
         text = source[origin]
+        payload_spans = []
+        if origin == 'trace' and version in {PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
+            from .diagnostic_payloads import source_boundaries
+            payload_spans = source_boundaries(text, maximum=PAGE_CHARS)
         regions = (_structured_regions(text, normalized_roles=version == DIRECT_VERSION) if version in {CURRENT_VERSION, DIRECT_VERSION} else chains._regions(text)) if origin == 'trace' else [(0, len(text), {})]
-        if origin == 'trace' and version in {NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION}: regions = _nested_regions(text)
+        if origin == 'trace' and version in {NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}: regions = _nested_regions(text)
         # Serialized event separators carry no behavior but still belong to the
         # original source. Include them so the coverage ledger has no gaps.
         cursor, contiguous = 0, []
@@ -220,11 +256,25 @@ def index(source, version=VERSION):
             contiguous[-1] = (begin, len(text), metadata)
         regions = contiguous
         for begin, end, metadata in regions:
-            for start in range(begin, end, FRAGMENT_CHARS):
-                stop = min(start + FRAGMENT_CHARS, end)
-                fragments.append({'id': f'{origin}:{start}:{stop}', 'origin': origin,
-                                  'start': start, 'end': stop, 'text': text[start:stop], **metadata})
-    if version in {SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION}:
+            ranges = ((start, min(start + FRAGMENT_CHARS, end)) for start in range(begin, end, FRAGMENT_CHARS))
+            if origin == 'trace' and version in {PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
+                from .diagnostic_payloads import partition
+                ranges = partition(text, begin, end, metadata, fallback=FRAGMENT_CHARS,
+                                   maximum=PAGE_CHARS, spans=payload_spans)
+            for start, stop in ranges:
+                fragment = {'id': f'{origin}:{start}:{stop}', 'origin': origin,
+                            'start': start, 'end': stop, 'text': text[start:stop], **metadata}
+                if version in {PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION} and len(dumps(fragment)) > PAGE_SERIALIZED_CHARS:
+                    # Escaped code can fit the text limit but exceed the wire
+                    # limit. Preserve every source character using the bounded
+                    # legacy chunks rather than emit an oversized page.
+                    for left in range(start, stop, FRAGMENT_CHARS):
+                        right = min(left + FRAGMENT_CHARS, stop)
+                        fragments.append({**fragment, 'id': f'{origin}:{left}:{right}',
+                                          'start': left, 'end': right, 'text': text[left:right]})
+                else:
+                    fragments.append(fragment)
+    if version in {SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         from . import diagnostic_relations as relations
         relations.annotate(fragments, relations.records(source))
     return fragments
@@ -569,7 +619,8 @@ def audit(source, result, directory):
 
 
 def source_from_run(run, version=DEFAULT_VERSION):
-    if version in {SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION}:
+    if version in {CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION}: version = FLOW_VERSION
+    if version in {SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         from .diagnostic_relations import from_run
         return from_run(run)
     return base.from_run(run)
@@ -583,7 +634,7 @@ def workspace_protocol(directory):
     return protocol(read(packets[0])['request']['state']['harness']) if packets else None
 
 
-def execute(source, directory, transport, *, version=None):
+def execute(source, directory, transport, *, version=None, progress=None, cache_directories=()):
     from .semantic_workspace import exclusive
     directory = Path(directory)
     with exclusive(directory):
@@ -603,8 +654,11 @@ def execute(source, directory, transport, *, version=None):
             response = transport(req)
             write(directory / 'wire' / f'{digest(req)}.json', {'request': req, 'response': response})
             return response
-        engine = Pipeline(directory, None, retained)
-        result = build(source, engine.decide, lambda row: write(directory / 'search-progress.json', row), version)
+        engine = Pipeline(directory, None, retained,cache_directories=cache_directories)
+        def checkpoint(row):
+            write(directory / 'search-progress.json', row)
+            if progress: progress(row)
+        result = build(source, engine.decide, checkpoint, version)
         audit(source, result, directory)
         write(directory / 'snapshots' / f'{digest(result)}.json', result)
         write(directory / 'result.json', result)

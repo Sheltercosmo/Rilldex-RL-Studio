@@ -6,7 +6,7 @@ from pathlib import Path
 
 from tracker.adapters import normalize
 from tracker.observe import analyze
-from tracker.reference import prepare, evaluate, _read_jsonl, _write_jsonl
+from tracker.reference import prepare, evaluate, _read_jsonl, _write_jsonl, _closure
 from tracker.schema import InputError
 from tracker.schema import digest
 from tracker.jev import packet, JEV_HARNESS, JevClient
@@ -48,6 +48,42 @@ class ReferenceTests(unittest.TestCase):
         self.assertEqual(result["status"], "no_reference_labels")
         self.assertIsNone(result["metrics"]["mode"]["selective_accuracy"])
         self.assertEqual(evaluate(self.root)["selected_cases"], 0)
+
+    def test_export_and_evaluation_preserve_recorded_sessions(self):
+        b=bundle(['edit a','pytest'])
+        actions=analyze(b['run'])['actions']
+        ids={a['event_id']:i for i,a in enumerate(actions)}
+        context='session-0'
+        for event in b['run']['events']:
+            if event['id'] in ids:context='session-'+str(ids[event['id']])
+            event['context_id']=context
+        prepare([b],self.root,per_run=0)
+        cases=_read_jsonl(self.root/'cases.jsonl')
+        self.assertTrue(all(all(e.get('context_id')==c['context_id'] for e in c['available_prefix']) for c in cases))
+        fill_labels(self.root,['apply','verify'])
+        macro=evaluate(self.root,split='development')['macro'][0]
+        self.assertEqual(macro['eligible_pairs'],0)
+        self.assertEqual(set(macro['closure']['reference'].values()),{'no_check_observed','no_later_application_observed'})
+        self.assertEqual(macro['closure']['prediction'],macro['closure']['reference'])
+
+    def test_export_does_not_lose_explicit_unknown_or_parallel_order(self):
+        for i,native in enumerate(({'order_known':False},{'batch_size':2},{'source_message_index':17})):
+            with self.subTest(native=native):
+                b=bundle(['pytest','edit a'])
+                for event in b['run']['events']:
+                    if event['kind']=='action':event.update(native)
+                target=self.root/str(i)
+                prepare([b],target,per_run=0)
+                fill_labels(target,['verify','apply'])
+                macro=evaluate(target,split='development')['macro'][0]
+                self.assertEqual(macro['eligible_pairs'],0)
+                self.assertEqual(set(macro['closure']['reference'].values()),{'unresolved'})
+                self.assertEqual(macro['closure']['prediction'],macro['closure']['reference'])
+
+    def test_closure_uses_native_order_not_file_position(self):
+        actions=[dict(event_id='check',trajectory_id='t',index=2,mode='verify'),
+                 dict(event_id='edit',trajectory_id='t',index=1,mode='apply')]
+        self.assertEqual(_closure(actions),{'t':'no_later_application_observed'})
 
     def test_packet_blinding_cutoff_and_current_feedback_exclusion(self):
         b = bundle()

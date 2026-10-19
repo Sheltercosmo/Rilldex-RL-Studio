@@ -65,7 +65,7 @@ class ContextTests(unittest.TestCase):
         req=next(direct.requests(s,search.DEFAULT_VERSION))
         self.assertEqual(req['state']['complete_recorded_task']['text'],'Repair the application')
         self.assertNotIn('coherent_evidence',req['state'])
-        self.assertEqual(search.protocol()['schema'],search.ACCESS_VERSION)
+        self.assertEqual(search.protocol()['schema'],search.CONTRACT_VERSION)
         self.assertEqual(search.protocol(search.LATEST_VERSION)['id'],'diagnostic-search-d21a5f0431df1bfac0d1')
 
     def test_task_keeps_prior_steering_and_excludes_future_changes_on_same_page(self):

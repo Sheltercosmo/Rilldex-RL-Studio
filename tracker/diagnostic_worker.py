@@ -78,7 +78,7 @@ def inventory(store,selector,protocol_name='chains',protocol_version=None):
             if selector['adapters'] and run['adapter'] not in selector['adapters']:continue
         found.add(row['id']);state=row['state'] or 'imported_snapshot'
         item={'run_id':run['id'],'source_hash':digest(run),'source_state':state,
-              'task_id':meta.get('task_id'),'environment':meta.get('environment'),'adapter':run['adapter'],
+              'task_id':meta.get('task_id'),'experiment':meta.get('experiment'),'environment':meta.get('environment'),'adapter':run['adapter'],
               'producer':row['producer'],'rollout_id':row['rollout_id'] or run['id'],'revision':row['revision'],
               'eligibility':'ready','reason':None,'_run':run}
         if state not in {'complete','imported_snapshot'}:
@@ -124,10 +124,42 @@ def _attempts(store,worker_id):
     return latest
 
 
+def _search_caches(store, root, item):
+    """Known same-database workspaces; exact request validation happens in Pipeline."""
+    with store.connect() as connection:
+        rows=connection.execute('SELECT document FROM diagnostic_workers ORDER BY updated_at,id').fetchall()
+    result=[]
+    for row in rows:
+        document=json.loads(row['document'])
+        if document.get('config',{}).get('implementation')!='search':continue
+        path=document.get('workspace_path')
+        if not isinstance(path,str) or not path:continue
+        previous=Path(path)
+        if previous.resolve()==Path(root).resolve():continue
+        folder=previous/'runs'/item['run_id']/item['source_hash']
+        if (folder/'decisions').is_dir():result.append(folder)
+    return result
+
+
 def _save_attempt(c,worker_id,receipt):
-    stamp=datetime.now(timezone.utc).isoformat();value={'worker_id':worker_id,**receipt}
+    stamp=datetime.now(timezone.utc).isoformat();value={'worker_id':worker_id,**receipt,'updated_at':stamp}
     c.execute('INSERT INTO diagnostic_attempts VALUES (?,?,?,?,?,?)',
         (digest(value),worker_id,value['run_id'],value['source_hash'],dumps(value),stamp))
+
+
+def _save_progress(store,worker_id,receipt):
+    """One live checkpoint per attempt; completed receipts remain immutable."""
+    stamp=datetime.now(timezone.utc).isoformat()
+    value={'worker_id':worker_id,**receipt,'updated_at':stamp}
+    key=digest({'worker_id':worker_id,'attempt_id':receipt['attempt_id'],'kind':'progress'})
+    with store.connect() as c:
+        c.execute('INSERT INTO diagnostic_attempts VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET document=excluded.document,created_at=excluded.created_at',
+                  (key,worker_id,value['run_id'],value['source_hash'],dumps(value),stamp))
+        c.execute('UPDATE diagnostic_workers SET updated_at=? WHERE id=?',(stamp,worker_id))
+
+
+def _inspected(progress):
+    return progress.get('pages_scanned',progress.get('requests_completed',progress.get('requests',progress.get('scan_requests',0))))
 
 
 def published_measurement(store,item,protocol,preferred_id=None):
@@ -167,7 +199,8 @@ def execute(store,root,transport,*,selector,protocol_name='chains',max_new_calls
     with exclusive(root):
         root=Path(root);worker_id,config,module=initialize(store,root,selector,protocol_name)
         items=inventory(store,selector,protocol_name,config['protocol']['schema']);population=[{k:v for k,v in row.items() if not k.startswith('_')} for row in items]
-        document={'id':worker_id,'config':config,'population':population,'scanned_at':datetime.now(timezone.utc).isoformat()}
+        document={'id':worker_id,'config':config,'population':population,'workspace_path':str(root.resolve()),
+                  'scanned_at':datetime.now(timezone.utc).isoformat()}
         with store.connect() as c:
             c.execute('INSERT INTO diagnostic_workers VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET document=excluded.document,updated_at=excluded.updated_at',
                       (worker_id,dumps(document),document['scanned_at']))
@@ -190,6 +223,7 @@ def execute(store,root,transport,*,selector,protocol_name='chains',max_new_calls
             receipt={'run_id':rid,'source_hash':item['source_hash'],'protocol_id':config['protocol']['id'],
                 'attempt_id':str(time.time_ns()),'status':'running','new_calls':0,'provider_responses':0,
                 'started_at':datetime.now(timezone.utc).isoformat()}
+            if old and old.get('inspection_progress'):receipt['inspection_progress']=old['inspection_progress']
             with store.connect() as c:_save_attempt(c,worker_id,receipt)
             try:
                 path=folder/'source.json'
@@ -199,17 +233,27 @@ def execute(store,root,transport,*,selector,protocol_name='chains',max_new_calls
                     nonlocal calls
                     if calls>=max_new_calls:raise CallBudgetReached()
                     calls+=1;receipt['new_calls']+=1;receipt['last_request_hash']=digest(req)
+                    receipt['request_state']='in_flight'
+                    _save_progress(store,worker_id,receipt)
                     response=transport(req);receipt['provider_responses']+=1
+                    receipt['request_state']='response_received'
                     write(folder/'responses'/digest(req)/f'{time.time_ns()}.json',{'request':req,'response':response})
                     if progress:progress({'run_id':rid,'stage':req['state'].get('stage','source_detection'),'new_calls':calls})
                     return response
-                result=(module.execute(source,folder,budgeted,version=config['protocol']['schema'])
+                def checkpoint(row):
+                    # Replaying a cached prefix must not erase already inspected pages.
+                    if _inspected(row)<_inspected(receipt.get('inspection_progress',{})):return
+                    receipt['inspection_progress']=row
+                    _save_progress(store,worker_id,receipt)
+                    if progress:progress({'run_id':rid,**row,'new_calls':calls})
+                options={'cache_directories':_search_caches(store,root,item)} if protocol_name=='search' else {}
+                result=(module.execute(source,folder,budgeted,version=config['protocol']['schema'],progress=checkpoint,**options)
                         if protocol_name in {'search','requirements'} else module.execute(source,folder,budgeted))
                 if result.get('coverage',{}).get('scan_complete') is False:
                     # Publish actionable findings immediately; keep scanning on
                     # resume. A budget-limited absence never publishes zero.
                     receipt.update(status='pending',reason='Process request budget reached',
-                        inspection_progress=result['coverage'],result_hash=digest(result),finished_at=datetime.now(timezone.utc).isoformat())
+                        inspection_progress={**receipt.get('inspection_progress',{}),**result['coverage']},result_hash=digest(result),finished_at=datetime.now(timezone.utc).isoformat())
                     record=module.metric_record(run,source,result,folder) if result.get('findings') else None
                     from .rollout_metrics import save
                     with store.connect() as c:
@@ -233,10 +277,12 @@ def execute(store,root,transport,*,selector,protocol_name='chains',max_new_calls
                 pending.append(rid)
                 with store.connect() as c:_save_attempt(c,worker_id,receipt)
             except KeyboardInterrupt:
+                if receipt.get('request_state')=='in_flight':receipt['request_state']='unknown'
                 receipt.update(status='interrupted',error_type='KeyboardInterrupt')
                 with store.connect() as c:_save_attempt(c,worker_id,receipt)
                 raise
             except Exception as error:
+                if receipt.get('request_state')=='in_flight':receipt['request_state']=getattr(error,'outcome','unknown')
                 if (folder/'search-progress.json').exists():receipt['inspection_progress']=read(folder/'search-progress.json')
                 receipt.update(status='failed',error_type=type(error).__name__)
                 match=re.match(r'Jev request failed with HTTP (\d{3});',str(error))

@@ -11,7 +11,7 @@ import urllib.request
 
 from .schema import InputError, digest, dumps
 from .goals import focus_candidates, focus_question
-from .capabilities import CAPABILITY_VERSION, links, feedback_support, withheld
+from .capabilities import CAPABILITY_VERSION, links, recorded_scope, feedback_support, withheld
 
 JEV_HARNESS = "macro-semantics/0.4.0"
 DEFAULT_MODEL = "jev-1.13.0"
@@ -95,7 +95,7 @@ QUESTIONS = {
 
 
 def packet(run, action_id):
-    events = run["events"]
+    events = sorted(run["events"], key=lambda e: e["index"])
     ids = {e["id"]: e for e in events}
     action = ids[action_id]
     actor = action["trajectory_id"]
@@ -111,14 +111,15 @@ def packet(run, action_id):
                 **{k: e[k] for k in ("feedback_origin", "link_basis") if k in e},
                 "source_pointer": e["source_pointer"], "source_characters": len(e["text"])}
 
-    instruction_context = [e for e in events if e["kind"] == "instruction" and e["trajectory_id"] == actor and e["index"] < action["index"]]
+    instruction_context = [e for e in events if e["kind"] == "instruction" and recorded_scope(e) == recorded_scope(action) and e["index"] < action["index"]]
     instructions = [e for i,e in enumerate(instruction_context) if (i == 0 or not e["copied_context"]) and e["text"].strip()]
-    prior = [e for e in events if e["kind"] == "action" and e["trajectory_id"] == actor and e["index"] < action["index"] and not e["copied_context"]][-3:]
+    prior = [e for e in events if e["kind"] == "action" and recorded_scope(e) == recorded_scope(action) and e["index"] < action["index"] and not e["copied_context"]][-3:]
     history = []
     for e in prior:
         replies = [f for f in linked["by_action"].get(e["id"], []) if f["index"] < action["index"]]
         history.append({"action": excerpt(e, 3000), "feedback": [excerpt(f, 3000) for f in replies]})
     parent = ids.get(action.get("parent_id"))
+    if parent and (recorded_scope(parent) != recorded_scope(action) or parent['index'] >= action['index']): parent = None
     candidates = focus_candidates(run, action_id)
     # The full source stays in the registry, while requests have bounded text.
     # Record truncation even when the duplicated root description is shortened.
@@ -136,7 +137,7 @@ def packet(run, action_id):
              "parent_expression": excerpt(parent, 6000) if parent else None,
              "prior_actions": history,
              "harness_context": [excerpt(e, 3000) for e in [e for e in events if e["kind"] == "context" and
-                                  e["trajectory_id"] == actor and e["index"] < action["index"]][-3:]],
+                                  recorded_scope(e) == recorded_scope(action) and e["index"] < action["index"]][-3:]],
              "goal_candidates": candidates,
              "retained_context": [excerpt(e, 3000) for e in instruction_context[1:] if e["copied_context"]],
              "missingness": {"environment_state": "Only recorded text available; state equality is unobserved.",

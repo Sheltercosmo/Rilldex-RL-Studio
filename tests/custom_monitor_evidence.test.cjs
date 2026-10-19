@@ -69,3 +69,31 @@ test('external evaluator reports expose matching counts, original verdict and ze
  assert.ok(!content.includes('No trace passages or map nodes'));
  assert.equal(JSON.stringify(result).includes('"tag":"script"'),false);
 });
+
+test('code-flow findings show the concrete mechanism and literal function evidence',()=>{
+ const result=renderDiagnostic({value:1,evidence_roles:{action:{text:'complete recorded command'}},code_flows:[{mechanism:'test_answer_copy',view:{entry:'predict',parts:[{role:'entry',start_line:2,end_line:4,text:'return labels  # <script>inert</script>'}]}}]});
+ const content=text(result);
+ for(const phrase of ['Test-answer copying · predict','Test input → answer/label field → copied sample outputs','lines 2–4','Execution success is not established','<script>inert</script>'])assert.ok(content.includes(phrase),phrase);
+ assert.equal(JSON.stringify(result).includes('"tag":"script"'),false);
+ const details=result.children.filter(n=>n.tag==='details');
+ assert.equal(details[0].open,true,'Show the focused mechanism without another click');
+ assert.equal(details[1].open,false,'Keep the large original action available without burying the explanation');
+ assert.match(text(details[1]),/complete recorded command/);
+});
+
+test('artifact contract findings show why the success test substitutes the target',()=>{
+ const ids=[],result=renderDiagnostic({value:1,evidence_roles:{action:{text:'original command'}},artifact_contracts:[{view:{
+  opening_context:[{id:'prefix',event_id:'e',text:'serialized task'}],payload:{command:'<script>quoted code</script>'}
+ }}]}, {excerpts:{prefix:[{actor:'agent',kind:'reasoning',field:['text'],text:'Exercise the real target',node_ids:['event:e']}]},nodeButton:id=>{ids.push(id);return new Element('button');}});
+ assert.match(text(result),/Actual target required → substitute produces success → installed as deliverable/);
+ assert.match(text(result),/Exercise the real target/);assert.deepEqual(ids,['event:e']);
+ const details=result.children.filter(n=>n.tag==='details');assert.equal(details[0].open,true);assert.equal(details[1].open,false);
+ assert.equal(JSON.stringify(result).includes('"tag":"script"'),false);
+});
+
+test('repeated artifact evidence groups identical code and preserves readable newlines',()=>{
+ const finding={view:{payload:{command:['bash','-lc','first line\nsecond line']},opening_context:[]},selections:{contract:'target_required'}};
+ const result=renderDiagnostic({value:1,artifact_contracts:[finding,finding],evidence_roles:{}});
+ const details=result.children.filter(n=>n.tag==='details');assert.equal(details.length,2);assert.equal(details[0].open,true);
+ assert.match(text(details[0]),/2 recorded occurrences/);assert.ok(text(details[0]).includes('first line\nsecond line'));
+});

@@ -5,7 +5,7 @@ import unittest
 from urllib.request import Request, urlopen
 
 import test_generation_cohort_transport as transport
-from test_source_evidence import basic_run
+from test_source_evidence import basic_run, chat
 from tracker.schema import digest
 
 
@@ -13,6 +13,25 @@ class EvidenceHTTPTests(unittest.TestCase):
     setUp = transport.GenerationCohortTransportTests.setUp
     start_server = transport.GenerationCohortTransportTests.start_server
     stop_server = staticmethod(transport.GenerationCohortTransportTests.stop_server)
+
+    def test_exact_phrase_search_through_cached_analysis_api(self):
+        run=chat([dict(role='assistant',content='installed'),
+                  dict(role='assistant',content='Host check: pdflatex is not installed.'),
+                  dict(role='assistant',content='Review the check.')])
+        self.store.add([run]);endpoint=self.start_server()
+        plan=dict(schema='investigation-plan/1',nodes=[dict(name='evidence',op='evidence_search',inputs=[],
+            params=dict(run_id=run['id'],source_hash=digest(run),query=dict(
+                anchor={'event_id':run['events'][-1]['id']},text='"not installed"',limit=1)))])
+        def execute():
+            request=Request(endpoint+'/api/investigation-plans',data=json.dumps(plan).encode(),
+                            headers={'Content-Type':'application/json'})
+            with urlopen(request,timeout=10) as response:return json.load(response)
+        first,second=execute(),execute();result=first['outputs']['evidence']
+        self.assertEqual(result['matches'][0]['event_id'],run['events'][1]['id'])
+        self.assertEqual(result['matches'][0]['match_basis'],'source_literal')
+        self.assertEqual(first['outputs'],second['outputs'])
+        self.assertEqual(second['execution']['cache_hits'],1)
+        self.assertEqual(result['new_model_calls'],0)
 
     def test_map_assets_and_cached_evidence_plan_are_available(self):
         run = basic_run()

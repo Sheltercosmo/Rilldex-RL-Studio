@@ -27,11 +27,11 @@ class EvidencePageTests(unittest.TestCase):
         self.assertEqual(search(self.run,packets[2]['query']),packets[2])
 
     def test_short_budget_does_not_skip_deferred_candidates(self):
-        run=chat([dict(role='assistant',content='quasar '+str(i)+'x'*1400) for i in range(7)]+[
+        run=chat([dict(role='assistant',content='quasar '+str(i)+'x'*1400) for i in range(9)]+[
             dict(role='assistant',content='Review.')])
-        query=dict(anchor={'event_id':run['events'][-1]['id']},text='quasar',limit=4,max_chars=2000)
+        query=dict(anchor={'event_id':run['events'][-1]['id']},text='quasar',limit=8,max_chars=2000)
         first=search(run,query);second=search(run,dict(query,cursor=first['pagination']['next_cursor']))
-        self.assertEqual(first['pagination']['next_cursor']['offset'],1)
+        self.assertEqual(first['pagination']['next_cursor']['offset'],6)
         omitted=next(x['event_id'] for x in first['coverage']['deferred'] if x['reason']['kind']=='lexical_match')
         self.assertEqual(second['matches'][0]['event_id'],omitted)
 

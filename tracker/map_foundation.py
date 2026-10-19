@@ -1,6 +1,7 @@
 """Reproducible map foundation checks, separate from semantic correctness."""
 from . import annotation_changes, map_relationships
 from .schema import InputError, digest
+from .graph_sequence import Ordering
 
 VERSION='map-foundation/2'
 
@@ -58,6 +59,7 @@ def inspect(graph, run=None):
             checks=['unique identities','exact source spans','non-overlapping units','source actor and position','matching activity fields','relationship endpoints']),
         relationships=relationships,
         content_sources=contents,
+        source_order=Ordering(graph).projection(graph),
         excluded_edge_ids=[r['edge_id'] for r in relationships['relationships'] if r['status']=='incompatible'],
         semantic_review=dict(status='not_independently_validated',named_review_unit_ids=named,
             unreviewed_unit_count=len(units)-len(named)),

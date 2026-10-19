@@ -47,7 +47,7 @@ CONTRACTS = {
 
 def catalog():
     return {"version": CONTRACT_VERSION, "contracts": deepcopy(CONTRACTS),
-            "runtime_support": "Each analyzed run includes measurement-evidence/1 availability, denominators and source-link coverage. Available evidence does not mean validated accuracy. Unsupported Jev questions are withheld before inference.",
+            "runtime_support": "Each analyzed run includes measurement-evidence/3 availability, denominators and source-link coverage. Available evidence does not mean validated accuracy. Unsupported Jev questions are withheld before inference.",
             "aggregation": "Compute rollout rates, average within task, then give matched tasks equal weight. Keep no-opportunity cases distinct from zero.",
             "comparison_requirements": ["Compatible tasks, environment, budgets and sampling", "Recorded policy identity", "Same measurement version or a reviewed bridge on frozen data", "Coverage and measurement error reported beside change"],
             "promotion_gate": "A human reference benchmark and practical investigation must support each intended use. These definitions are not validation results."}

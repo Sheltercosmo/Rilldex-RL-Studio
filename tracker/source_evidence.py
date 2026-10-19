@@ -13,7 +13,7 @@ from .feedback_retrieval import terms
 from .readable_context import DATA_URI, merged, subtract
 from .schema import InputError, digest
 
-VERSION = 'source-evidence-search/7'
+VERSION = 'source-evidence-search/9'
 SEARCH_CHARS = 320
 SEARCH_STRIDE = 256
 CONTEXT_CHARS = 1200
@@ -110,12 +110,35 @@ def query_tokens(text):
             if term not in {'what', 'which', 'where', 'when', 'how', 'why'}]
 
 
+def query_literals(text):
+    """Explicit search phrases, not inferred synonyms or semantic labels."""
+    values = []
+    for match in re.finditer(r'`([^`\n]+)`|"([^"\n]+)"|“([^”\n]+)”', DATA_URI.sub(' ',text)):
+        value = next(g for g in match.groups() if g is not None).strip()
+        # Retain long phrases without silently shortening their meaning.
+        if value and value not in values:
+            values.append(value)
+            if len(values)==32: break
+    return values
+
+
+def literal_ranges(text, literal):
+    # Character boundaries prevent file.py from matching file.pyc. File path
+    # separators remain valid boundaries. Offsets refer to the original source.
+    pattern = (r'(?<!\w)' if literal[0].isalnum() or literal[0]=='_' else '') + re.escape(literal)
+    if literal[-1].isalnum() or literal[-1]=='_':
+        path_like=not re.search(r'\s',literal) and bool(re.search(r'[./\\]',literal))
+        pattern += r'(?![\w-]|\.[\w])' if path_like else r'(?!\w)'
+    return [(m.start(),m.end()) for m in re.finditer(pattern,text,re.IGNORECASE)]
+
+
 def diverse(candidates, lookup, limit):
     """Preserve native source-type diversity, without inferring activities."""
-    selected = set()
+    selected = {hit['event_id'] for hit in [h for h in candidates if h.get('literal_matches')][:limit]}
     for kind in ('action', 'feedback', 'prose'):
         matching = [hit for hit in candidates if source_type(lookup[hit['event_id']]) == kind]
-        selected.update(hit['event_id'] for hit in matching[:min(2, limit // 3)])
+        for hit in matching[:min(2, limit // 3)]:
+            if len(selected) < limit: selected.add(hit['event_id'])
     for hit in candidates:
         if len(selected) >= limit: break
         selected.add(hit['event_id'])
@@ -273,10 +296,14 @@ def search(run, query):
         for question in questions:
             ranked = {}; rankings[question['id']] = ranked
             tokens = query_tokens(question['text'])
-            if not tokens: continue
+            literals = query_literals(question['text']) if 'text' in query or 'questions' in query else []
+            if not tokens and not literals: continue
             kinds = question.get('source_types', ['action', 'feedback', 'prose'])
             expression = ' OR '.join('"' + term.replace('"', '""') + '"' for term in tokens)
-            for rowid, score in db.execute('SELECT rowid,bm25(evidence) FROM evidence WHERE evidence MATCH ? ORDER BY 2,rowid', (expression,)):
+            # A phrase consisting entirely of ordinary stop words still has
+            # exact meaning. No FTS query is needed for that candidate channel.
+            source_rows=db.execute('SELECT rowid,bm25(evidence) FROM evidence WHERE evidence MATCH ? ORDER BY 2,rowid', (expression,)) if expression else ()
+            for rowid, score in source_rows:
                 eid, a, b, first, last = chunk_refs[rowid]
                 if source_type(lookup[eid]) not in kinds: continue
                 left, right = context_range(a, b, first, last)
@@ -286,7 +313,8 @@ def search(run, query):
                                             match_basis='source_text'))
             source_ranks = {eid: i for i, eid in enumerate(ranked, 1)}
             context_ranks = {}
-            for rowid, score in db.execute('SELECT rowid,bm25(context_evidence) FROM context_evidence WHERE context_evidence MATCH ? ORDER BY 2,rowid', (expression,)):
+            context_rows=db.execute('SELECT rowid,bm25(context_evidence) FROM context_evidence WHERE context_evidence MATCH ? ORDER BY 2,rowid', (expression,)) if expression else ()
+            for rowid, score in context_rows:
                 eid = context_refs[rowid]
                 if source_type(lookup[eid]) not in kinds or eid not in first_chunks: continue
                 context_ranks[eid] = len(context_ranks) + 1
@@ -298,7 +326,31 @@ def search(run, query):
                 hit['source_rank'] = source_ranks.get(eid)
                 hit['context_rank'] = context_ranks.get(eid)
                 hit['retrieval_score'] = sum(1/(60 + ranks[eid]) for ranks in (source_ranks, context_ranks) if eid in ranks)
-            rankings[question['id']] = dict(sorted(ranked.items(), key=lambda item: -item[1]['retrieval_score']))
+            for event in eligible if literals else ():
+                if source_type(event) not in kinds: continue
+                literal_hits=[]
+                readable=subtract([(0,len(event['text']))],[(m.start(),m.end()) for m in DATA_URI.finditer(event['text'])])
+                for literal in literals:
+                    for a,b in literal_ranges(event['text'],literal):
+                        interval=next(((first,last) for first,last in readable if first<=a and b<=last),None)
+                        if interval is None: continue
+                        literal_hits.append(dict(text=literal,start=a,end=b))
+                        # Keep the whole literal even when longer than the
+                        # normal chunk. It remains subject to the same budget.
+                        first,last=interval
+                        left,right=context_range(a,b,first,last) if b-a<=CONTEXT_CHARS else (a,b)
+                        matched_windows.setdefault(event['id'],[]).append((left,right))
+                        break
+                if not literal_hits: continue
+                first_hit=literal_hits[0];a,b=first_hit['start'],first_hit['end']
+                first,last=next((x,y) for x,y in readable if x<=a and b<=y)
+                left,right=context_range(a,b,first,last) if b-a<=CONTEXT_CHARS else (a,b)
+                hit=ranked.setdefault(event['id'],dict(event_id=event['id'],lexical_score=None,
+                    source_rank=None,context_rank=None,retrieval_score=0))
+                hit.update(start=left,end=right,matched_start=a,matched_end=b,
+                           match_basis='source_literal',literal_matches=literal_hits)
+            rankings[question['id']] = dict(sorted(ranked.items(), key=lambda item:
+                (-len(item[1].get('literal_matches',[])),-item[1]['retrieval_score'])))
     finally:
         db.close()
 
@@ -349,9 +401,14 @@ def search(run, query):
 
     matches = []
     for rank, hit in enumerate(chosen, offset+1):
-        reason = 'recorded_context_match' if hit['match_basis'] == 'recorded_context' else 'lexical_match'
-        if retain(hit['event_id'], hit['start'], hit['end'], dict(kind=reason, rank=rank)):
-            matches.append(dict(rank=rank, **hit))
+        reason = ('recorded_context_match' if hit['match_basis'] == 'recorded_context' else
+                  'literal_match' if hit['match_basis'] == 'source_literal' else 'lexical_match')
+        # Reserve exact matching chunks for the page before optional readable
+        # context. A 1,200-character window must not displace another question's
+        # 320-character evidence merely because it was ranked first.
+        compact_end=min(hit['matched_end'],hit['matched_start']+SEARCH_CHARS)
+        if retain(hit['event_id'], hit['matched_start'], compact_end, dict(kind=reason, rank=rank)):
+            matches.append(dict(hit, rank=rank, start=hit['matched_start'], end=compact_end))
         else:
             # Do not advance past a candidate omitted by this page's budget.
             # A later page can retain it with a fresh explicit budget.
@@ -361,14 +418,23 @@ def search(run, query):
     next_cursor={'search_id':search_id,'offset':next_offset} if next_offset<len(ordered) else None
     # Protect each supplied question's own matching passage before optional
     # request, native-call and surrounding-record context consumes the budget.
-    # Prefer its readable window; a bounded exact matching chunk is useful
-    # when the surrounding window does not fit. Neither is an answered claim.
+    # Reserve compact passages from all questions before expanding any window.
+    # Neither a retained chunk nor its surrounding context is an answered claim.
     for question in questions:
         for eid, hit in rankings[question['id']].items():
             if eid in chosen_by_id:
                 reason=dict(kind='question_match',question_id=question['id'])
-                if not retain(eid,hit['start'],hit['end'],reason):
-                    retain(eid,hit['matched_start'],hit['matched_end'],reason)
+                retain(eid,hit['matched_start'],hit['matched_end'],reason)
+                for literal in hit.get('literal_matches',[]):
+                    retain(eid,literal['start'],literal['end'],dict(kind='literal_match',question_id=question['id']))
+    for hit in matches:
+        original = ordered[hit['rank']-1]
+        if retain(hit['event_id'], original['start'], original['end'], dict(kind='matching_passage_context')):
+            hit.update(start=original['start'], end=original['end'])
+    for question in questions:
+        for eid, hit in rankings[question['id']].items():
+            if eid in chosen_by_id:
+                retain(eid,hit['start'],hit['end'],dict(kind='question_context',question_id=question['id']))
     # Task instructions are context, not a judgement of relevance or adoption.
     requests = [e for e in eligible if e['actor'] == 'user' and e['kind'] in {'instruction','message'}]
     request_ids = list(dict.fromkeys(e['id'] for e in (requests[:1] + requests[-1:])))
@@ -439,7 +505,13 @@ def search(run, query):
         hits = rankings[question['id']]
         retained = [eid for eid, hit in hits.items() if eid in records and any(
             a <= hit['matched_start'] and hit['matched_end'] <= b for a,b in records[eid]['ranges'])]
+        retained_literals=[eid for eid,hit in hits.items() if eid in records and any(
+            a<=literal['start'] and literal['end']<=b
+            for literal in hit.get('literal_matches',[]) for a,b in records[eid]['ranges'])]
         question_reports.append(dict(**question, query_terms=query_tokens(question['text']),
+            literal_phrases=query_literals(question['text']) if 'text' in query or 'questions' in query else [],
+            literal_matched_events=sum(bool(h.get('literal_matches')) for h in hits.values()),
+            retained_literal_event_ids=retained_literals,
             lexically_matched_events=len(hits), retained_match_event_ids=retained,
             retained_match_ranges=[dict(event_id=eid,source_pointer=lookup[eid]['source_pointer'],
                 start=hits[eid]['matched_start'],end=hits[eid]['matched_end'],
@@ -474,8 +546,8 @@ def search(run, query):
     body = dict(schema=VERSION, run_id=run['id'], source_hash=digest(run), query=deepcopy(query),
                 scope=scope,anchor=dict(event_id=anchor['id'], source_pointer=anchor['source_pointer'],
                             trajectory_id=anchor['trajectory_id'], start=start, end=end),
-                engine=('SQLite FTS5 porter/unicode61 BM25; reciprocal rank fusion of source and recorded context (k=60)' if use_context else 'SQLite FTS5 porter/unicode61 BM25'), sqlite_version=sqlite3.sqlite_version,
-                selection='Rank small passages independently for each supplied question; share match slots round-robin. Reserve matching question passages before optional context, using the exact matching chunk when its surrounding window does not fit. Retain source-type diversity and recorded parent, dispatch and response context within one page text budget. Continue with the returned cursor to inspect further ranked event candidates. Candidate retention does not establish that a question is answered.',
+                engine=('Exact quoted phrases; SQLite FTS5 porter/unicode61 BM25; reciprocal rank fusion of source and recorded context (k=60)' if use_context else 'Exact quoted phrases; SQLite FTS5 porter/unicode61 BM25'), sqlite_version=sqlite3.sqlite_version,
+                selection='Prioritize exact quoted or backtick phrases, then lexical rank, independently for each question; share match slots round-robin. Exact phrases ignore case but preserve punctuation and word boundaries. Loose matches remain candidates when exact phrases are absent. Reserve compact matching chunks across the page and questions before expanding readable context. Retain source-type diversity and recorded parent, dispatch and response context within one page text budget. Continue with the returned cursor to inspect further ranked event candidates. Candidate retention does not establish that a question is answered.',
                 pagination=dict(search_id=search_id,offset=offset,candidates_total=len(ordered),
                     retained_candidates=len(matches),next_cursor=next_cursor,exhausted=next_cursor is None,
                     boundary='Pages continue primary event candidates, not every passage in each event. Context can recur on different pages and costs characters again. Exhaustion is not evidence of absence or semantic completeness.'),
@@ -485,7 +557,8 @@ def search(run, query):
                                        max_index_chars_per_context_field=2 * CONTEXT_CHARS),
                 dispatch_group_context=dict(enabled=use_context,
                     boundary='Other commands recorded in the same source message. Membership is context, not execution order, dependency or result attribution.'),
-                query_terms=query_terms, query_term_limit=32, questions=question_reports, matches=matches, records=output,
+                query_terms=query_terms, query_term_limit=32, literal_phrase_limit=32,
+                questions=question_reports, matches=matches, records=output,
                 coverage=dict(eligible_events=len(eligible), lexically_matched_events=len(set().union(*(set(h) for h in rankings.values()))),
                     retained_matches=len(matches), retained_events=len(output), source_text_chars=used,
                     max_source_text_chars=budget, omitted_event_ids=[e['id'] for e in eligible if e['id'] not in records],

@@ -2,6 +2,32 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {project,route}=require('../tracker/web/map-layout.js');
 
+test('source-order projection separates sessions and never bridges unordered cards',()=>{
+ const nodes=[0,1,2].map(i=>({id:'u'+i,kind:'unit',event_index:i,trajectory_id:'main',properties:{kind:'action'}}));
+ const graph={nodes,edges:[]},rows=Object.fromEntries(nodes.map(n=>[n.id,{scope:['main','a'],event_id:n.id,index:n.event_index,start:0,end:5,reason:null,hidden:false}]));
+ const order={version:'graph-unit-order/1',nodes:rows},pairs=()=>project(graph,[],[],order).edges.map(e=>[e.source,e.target]);
+ assert.deepEqual(pairs(),[['u0','u1'],['u1','u2']]);
+ rows.u1.scope=['main','b'];assert.deepEqual(pairs(),[['u0','u2']]);
+ rows.u1.scope=['main','a'];rows.u1.reason='unresolved_source_order';assert.deepEqual(pairs(),[]);
+ rows.u1.reason='parallel_dispatch';rows.u0.reason='parallel_dispatch';assert.deepEqual(pairs(),[]);
+});
+
+test('stored row links cannot override parallel evidence or hide legitimate feedback links',()=>{
+ const nodes=[0,1].map(i=>({id:'event:'+i,kind:'event',event_index:i,trajectory_id:'main',properties:{id:String(i),kind:'action',text:'call'}}));
+ const graph={nodes,edges:[{id:'row',type:'next_record',source:nodes[0].id,target:nodes[1].id},{id:'feedback',type:'response_to',source:nodes[1].id,target:nodes[0].id}]};
+ const order={version:'graph-unit-order/1',nodes:Object.fromEntries(nodes.map(n=>[n.id,{scope:['main',null],event_id:n.properties.id,index:n.event_index,start:0,end:4,reason:'parallel_dispatch',hidden:false}]))};
+ const before=JSON.stringify(graph),view=project(graph,[],[],order);
+ assert.deepEqual(view.edges.map(e=>e.id),['feedback']);assert.equal(JSON.stringify(graph),before);
+});
+
+test('exact spans keep their internal order while overlapping spans and hidden records do not',()=>{
+ const nodes=[0,1].map(i=>({id:'u'+i,kind:'unit',event_index:0,trajectory_id:'main',properties:{kind:'semantic'}}));
+ const order={version:'graph-unit-order/1',nodes:{u0:{scope:['main',null],event_id:'e',index:0,start:0,end:5,reason:'unresolved_source_order'},u1:{scope:['main',null],event_id:'e',index:0,start:5,end:10,reason:'unresolved_source_order'}}};
+ const view=()=>project({nodes,edges:[]},[],[],order);
+ assert.equal(view().edges.length,1);order.nodes.u1.start=4;assert.equal(view().edges.length,0);
+ order.nodes.u1.start=5;order.nodes.u0.hidden=true;assert.equal(view().edges.length,0);
+});
+
 test('derived verification records do not become agent units and incompatible edges are not drawn',()=>{
  const graph={nodes:[{id:'a',kind:'event',event_index:1,trajectory_id:'t',properties:{kind:'action',actor:'agent',text:'check'}},
  {id:'b',kind:'event',event_index:2,trajectory_id:'t',properties:{kind:'feedback',actor:'environment',text:'result'}},
@@ -88,7 +114,7 @@ test('expressed scope nodes do not fabricate units or sequence steps',()=>{
 });
 
 test('prose-only rollouts omit empty action lanes without dropping cards or ordering',()=>{
- const nodes=['orient','verify','construct'].map((activity,i)=>({id:'u'+i,kind:'unit',activity,event_index:1,trajectory_id:'a',properties:{kind:'semantic',source:{start:i*10}}}));
+ const nodes=['orient','verify','construct'].map((activity,i)=>({id:'u'+i,kind:'unit',activity,event_index:1,trajectory_id:'a',properties:{kind:'semantic',source:{event_id:'prose',start:i*10,end:i*10+5}}}));
  const p=project({nodes,edges:[]});assert.deepEqual(p.lanes,[0]);assert.equal(p.width,400);assert.equal(p.nodes.length,3);assert.equal(p.edges.length,2);assert.ok(p.nodes.every(n=>n.x===60));
  for(const e of p.edges)assert.ok(!route(p.byId.get(e.source),p.byId.get(e.target)).includes('NaN'));
 });

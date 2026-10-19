@@ -7,7 +7,7 @@ python scripts/run_tests.py
 python scripts/run_tests.py --javascript
 ```
 
-The JavaScript suite requires Node.js. Runtime collection does not.
+Node.js is required for the JavaScript suite and the Python suite's renderer integration check. Runtime collection does not require it.
 
 The portable suite uses repository fixtures and synthetic controls. Some retained tests reference separately stored research datasets and observation receipts; those modules are listed in `scripts/run_tests.py` and excluded by default. Maintainers with those archives can use `--with-archives`. They are not shipped as user data or silently downloaded.
 

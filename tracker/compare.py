@@ -9,7 +9,7 @@ from .observe import MODES
 from .schema import digest, InputError
 from .sequence import SEQUENCE_VERSION, DEFINITION as SEQUENCE_DEFINITION
 
-COMPARISON_VERSION = 'matched-tasks/4'
+COMPARISON_VERSION = 'matched-tasks/5'
 BOOTSTRAP_SAMPLES = 2000
 MIN_INTERVAL_TASKS = 5
 SCOPES = ('connected', 'outside', 'conflicting', 'unresolved')
@@ -41,7 +41,7 @@ def _task_summary(task_id, rows):
                      for key in TRANSITIONS} if sequence_rows else None,
         'sequence_rollouts':len(sequence_rows),
         'sequence_coverage':{key:sum(r['metrics'].get('sequence',{}).get(key,0) for r in rows)
-                             for key in ('possible_pairs','observed_pairs','excluded_batch_pairs','unresolved_pairs')},
+                             for key in ('possible_pairs','observed_pairs','excluded_batch_pairs','excluded_order_pairs','unresolved_pairs')},
     }
 
 
@@ -92,7 +92,7 @@ def _paired_delta(before, after):
         sequence['coverage'][label] = {'eligible_rollouts':sum(source[t]['sequence_rollouts'] for t in sequence_ids),
                                      'total_rollouts':sum(source[t]['rollouts'] for t in sequence_ids),
                                      **{key:sum(source[t]['sequence_coverage'][key] for t in sequence_ids)
-                                        for key in ('possible_pairs','observed_pairs','excluded_batch_pairs','unresolved_pairs')}}
+                                        for key in ('possible_pairs','observed_pairs','excluded_batch_pairs','excluded_order_pairs','unresolved_pairs')}}
     return {'reference': before['checkpoint'], 'checkpoint': after['checkpoint'], 'metrics': estimates, 'sequence':sequence,
             'feedback_matched_tasks': feedback_ids,
             'feedback_excluded_tasks': [tid for tid in task_ids if tid not in feedback_ids],

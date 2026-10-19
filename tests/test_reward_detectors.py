@@ -193,9 +193,12 @@ class RewardDetectorTests(unittest.TestCase):
         added=detectors.activate(self.store,{'checks':list(diagnostics.DETECTORS),'observer':observer})
         self.assertEqual(len(added['added']),6)
         monitoring.sync(self.store)
+        snapshot=monitoring.snapshot(self.store)
         for identifier in added['added']:
             rows=monitoring.cases(self.store,identifier)['rows']
             self.assertEqual(rows[0]['measurement']['value'],0)
+            card=next(m for m in snapshot['monitors'] if m['id']==identifier)
+            self.assertEqual(card['observer_label'],displayed['label'],'Metric-only diagnostics still have a saved observer')
 
     def test_other_custom_monitor_config_is_not_interpreted_as_detector(self):
         self.add('a')

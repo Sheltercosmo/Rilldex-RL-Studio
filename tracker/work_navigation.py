@@ -10,8 +10,9 @@ from .schema import digest, InputError
 from . import work_subjects
 from . import work_route_context
 from . import work_order
+from .capabilities import recorded_scope
 
-VERSION = 'work-navigation/3|' + work_episodes.VERSION + '|' + work_subjects.NAV_VERSION + '|' + work_route_context.VERSION
+VERSION = 'work-navigation/4|' + work_episodes.VERSION + '|' + work_subjects.NAV_VERSION + '|' + work_route_context.VERSION
 LIMIT = ('Cards group consecutive observed attempts on the same immediate work only where a saved identity '
          'relation supports that grouping. Separate cards do not establish new work, alternatives, or exploration. '
          'Dashed arrows are recording order; return and correction links are recorded semantic relationships. '
@@ -48,7 +49,9 @@ def project(graph, *, target_relations=None, recurrence_order=None):
         unit = nodes[e['source']]['properties']; scope = scopes[e['target']]['properties']
         a, b = unit.get('source', {}), scope.get('source', {})
         ea, eb = events.get(a.get('event_id')), events.get(b.get('event_id'))
-        if (not ea or not eb or ea['trajectory_id'] != eb['trajectory_id'] or eb.get('copied_context') or
+        if (not ea or not eb or recorded_scope(ea)!=recorded_scope(eb) or eb.get('copied_context') or
+                any(ev.get('order_known') is False or ev.get('agent_visibility')=='not_established' for ev in (ea,eb)) or
+                ea['index']==eb['index'] and ea['id']!=eb['id'] or
                 type(a.get('end')) is not int or type(b.get('end')) is not int or
                 (eb['index'], b['end']) > (ea['index'], a['end'])):
             continue
@@ -71,7 +74,8 @@ def project(graph, *, target_relations=None, recurrence_order=None):
                          previous['stage_key'] == stage_key and recurrence and recurrence['category'] == 'continued' and
                          recurrence['previous_unit_id'] == previous['unit_ids'][-1])
             if not merge:
-                value = {'trajectory_id': path['trajectory_id'], 'actor': path['actor'], 'first_event_id': p['event_id']}
+                value = {'trajectory_id': path['trajectory_id'], 'context_id': path.get('context_id'),
+                         'actor': path['actor'], 'first_event_id': p['event_id']}
                 previous = {'id': 'work-visit-' + digest([graph['id'], value]), **value,
                             'group_id': p['group_id'], 'target': p['target'] or 'Action without a usable work observation',
                             'scope_ids': scope_ids, 'plan_stages': stages, 'stage_key': stage_key,
@@ -88,7 +92,8 @@ def project(graph, *, target_relations=None, recurrence_order=None):
             # claim for unordered batches. No transition crosses trajectories.
             links.append({'type': 'recorded_next', 'source': a['id'], 'target': b['id'],
                           'order_known': a['order_known'] and b['order_known'], 'edge_ids': []})
-        paths.append({'trajectory_id': path['trajectory_id'], 'actor': path['actor'], 'visit_ids': [v['id'] for v in route]})
+        paths.append({'trajectory_id': path['trajectory_id'], 'context_id': path.get('context_id'),
+                      'actor': path['actor'], 'visit_ids': [v['id'] for v in route]})
     for episode in episodes['episodes']:
         a, b = unit_visit.get(episode['previous_unit_id']), unit_visit.get(episode['current_unit_id'])
         if not a or not b: continue

@@ -10,9 +10,10 @@ from .jev import selection_profile
 from .goals import track as track_goals
 from .evidence import inspect as inspect_evidence
 from .sequence import observe as observe_sequence
-from .capabilities import links, feedback_support, withheld, inspect as inspect_capabilities
+from .capabilities import links, recorded_scope, feedback_support, withheld, inspect as inspect_capabilities
+from .work_order import Evidence as OrderEvidence
 
-HARNESS_VERSION = "macro/0.8.0"
+HARNESS_VERSION = "macro/0.11.0"
 MODES = ("explore", "apply", "verify", "coordinate", "report", "unresolved")
 MODE_LABELS = {"explore": "Explore", "apply": "Apply approach", "verify": "Verify",
                "coordinate": "Coordinate", "report": "Report", "unresolved": "Unresolved"}
@@ -80,24 +81,26 @@ def action_features(action: dict) -> dict:
 
 
 def analyze(run: dict, semantic: dict | None = None) -> dict:
-    events = run["events"]
+    events = sorted(run["events"], key=lambda e: e["index"])
     by_id = {e["id"]: e for e in events}
     linked = links(run)
+    order = OrderEvidence({e['id']: e for e in events if not e.get('copied_context')})
     goals = [{"id": f"g{i+1}", "text": e["text"], "evidence": [e["id"]],
-              "trajectory_id": e["trajectory_id"], "kind": "recorded instruction", "index": e["index"]}
+              "trajectory_id": e["trajectory_id"], "context_id": e.get("context_id"), "kind": "recorded instruction", "index": e["index"]}
              for i, e in enumerate(events) if e["kind"] == "instruction" and not e["copied_context"]]
     actions, seen, prior_by_actor, seen_feedback, targets = [], {}, {}, {}, {}
     for e in events:
         if e["kind"] != "action" or e["copied_context"]:
             continue
         actor = e["trajectory_id"]
+        lane = recorded_scope(e)
         feat = action_features(e)
         obs = linked["by_action"].get(e["id"], [])
         support = feedback_support(run, e, linked)
-        prior = prior_by_actor.get(actor)
-        key = (actor, feat["signature"])
+        prior = prior_by_actor.get(lane)
+        key = (lane, feat["signature"])
         previous_occurrence = seen.get(key)
-        latest_goal = next((g for g in reversed(goals) if g["trajectory_id"] == actor and g["index"] < e["index"]), None)
+        latest_goal = next((g for g in reversed(goals) if recorded_scope(g) == lane and g["index"] < e["index"]), None)
         semantic_observations = dict((semantic or {}).get(e["id"], {}))
         if support["status"] != "available":
             semantic_observations["feedback_response"] = withheld(support, semantic_observations.get("feedback_response"))
@@ -110,50 +113,58 @@ def analyze(run: dict, semantic: dict | None = None) -> dict:
             suggestion = feat["mode"]
             feat.update(mode="unresolved", mode_basis=f"{observer} abstained; heuristic suggestion was {suggestion}", observation_status="unresolved")
         exact_repeat = previous_occurrence is not None
-        consecutive = bool(prior and prior["signature"] == feat["signature"])
+        consecutive = bool(prior and prior["signature"] == feat["signature"]
+                           and order.is_ordered(prior['event_id']) and order.is_ordered(e['id']))
         prior_feedback = seen_feedback.get(key)
         current_feedback = [o["text"] for o in obs]
         # Equality of result text is deliberately not equality of environment state.
         same_result = bool(exact_repeat and current_feedback and prior_feedback == current_feedback)
-        target_key = (actor, feat["resource"])
+        target_key = (lane, feat["resource"])
         last_target = targets.get(target_key)
-        target_visit = "first" if last_target is None else "continued" if prior and prior["resource"] == feat["resource"] else "returned"
-        a = {"event_id": e["id"], "index": e["index"], "trajectory_id": actor,
+        a = {"event_id": e["id"], "index": e["index"], "trajectory_id": actor, "context_id": e.get("context_id"),
              **feat, "text": e["text"], "tool": e.get("tool"), "goal_id": latest_goal["id"] if latest_goal else None,
              "feedback_ids": [o["id"] for o in obs], "parent_id": e.get("parent_id"),
+             "actor": e.get("actor"), "source_message_index": e.get("source_message_index"),
+             "order_known": e.get("order_known"), "batch_size": e.get("batch_size"),
              "feedback_opportunity": support["opportunity"], "feedback_support": support,
              "exact_repeat": exact_repeat, "consecutive_repeat": consecutive,
              "previous_occurrence": previous_occurrence, "same_result_text": same_result,
              "consecutive_run_length": prior["consecutive_run_length"] + 1 if consecutive else 1,
-             "target_visit": target_visit, "previous_target_action": last_target,
+             "previous_target_action": last_target,
              "macro": {"goal_scope": scope}, "semantic": semantic_observations}
         actions.append(a)
         seen[key] = e["id"]
         seen_feedback[key] = current_feedback
-        prior_by_actor[actor] = a
+        prior_by_actor[lane] = a
         targets[target_key] = e["id"]
+    target_rows = order.recurrences([{'event_id': a['event_id'], 'unit_id': a['event_id'],
+                                     'group_id': a['resource'], 'identity_status': 'observed'} for a in actions])
+    for a, row in zip(actions, target_rows):
+        a['target_visit'] = {'switch': 'first', 'resumed': 'continued'}.get(row['kind'], row['kind'])
+        a['target_order_evidence'] = row['order_evidence']
     goal_tracking = track_goals(run, actions)
     episodes = []
     for a in actions:
         # Contiguous mode/goal episodes are a presentation grouping, not inferred intent.
-        if episodes and all(episodes[-1][k] == a[k] for k in ("mode", "goal_id", "focus_goal_id", "trajectory_id")):
+        if episodes and all(episodes[-1][k] == a[k] for k in ("mode", "goal_id", "focus_goal_id", "trajectory_id", "context_id")):
             episodes[-1]["event_ids"].append(a["event_id"])
         else:
             episodes.append({"id": f"p{len(episodes)+1}", "mode": a["mode"], "goal_id": a["goal_id"],
-                             "focus_goal_id": a["focus_goal_id"], "trajectory_id": a["trajectory_id"], "event_ids": [a["event_id"]]})
-    resources, modes, edges, prior_nodes = {}, {}, Counter(), {}
+                             "focus_goal_id": a["focus_goal_id"], "trajectory_id": a["trajectory_id"], "context_id": a.get("context_id"), "event_ids": [a["event_id"]]})
+    resources, modes = {}, {}
     for a in actions:
-        rid = digest({"actor": a["trajectory_id"], "resource": a["resource"]})[:12]
-        node = resources.setdefault(rid, {"id": rid, "label": a["resource"], "trajectory_id": a["trajectory_id"], "event_ids": [], "modes": Counter(), "revisits": 0})
+        identity = {"actor": a["trajectory_id"], "resource": a["resource"]}
+        if a.get("context_id") is not None: identity["context_id"] = a["context_id"]
+        rid = digest(identity)[:12]
+        node = resources.setdefault(rid, {"id": rid, "label": a["resource"], "trajectory_id": a["trajectory_id"], "context_id": a.get("context_id"), "event_ids": [], "modes": Counter(), "revisits": 0})
         node["event_ids"].append(a["event_id"]); node["modes"][a["mode"]] += 1
         node["revisits"] += int(a["exact_repeat"])
         a["resource_id"] = rid
-        actor = a["trajectory_id"]
-        if actor in prior_nodes:
-            edges[(prior_nodes[actor], rid)] += 1
-        prior_nodes[actor] = rid
         modes.setdefault(a["mode"], []).append(a["event_id"])
     sequence = observe_sequence(actions)
+    by_event = {a['event_id']:a for a in actions}
+    edges = Counter((by_event[p['from_event_id']]['resource_id'],by_event[p['to_event_id']]['resource_id'])
+                    for p in sequence['pairs'])
     transitions = Counter((p["source"],p["target"]) for p in sequence["pairs"])
     distribution = {m: len(modes.get(m, [])) for m in MODES}
     n = len(actions)
@@ -183,12 +194,9 @@ def analyze(run: dict, semantic: dict | None = None) -> dict:
                         selection_profile(o["_provenance"])) for o in (semantic or {}).values() if o.get("_provenance")})
     reviewed = any(o.get("_reviews") for o in (semantic or {}).values())
     scope_labels = {"connected": "Task connected", "outside": "Outside task", "conflicting": "Conflicting", "unresolved": "Unresolved"}
-    scope_transitions, prior_scope = Counter(), {}
-    for a in actions:
-        actor, value = a["trajectory_id"], a["macro"]["goal_scope"]["value"]
-        if actor in prior_scope:
-            scope_transitions[(prior_scope[actor], value)] += 1
-        prior_scope[actor] = value
+    scope_transitions = Counter((by_event[p['from_event_id']]['macro']['goal_scope']['value'],
+                                by_event[p['to_event_id']]['macro']['goal_scope']['value'])
+                               for p in sequence['pairs'])
     return {"harness_version": HARNESS_VERSION, "inspector_signature": digest({"profiles": profiles, "review": "review/1" if reviewed else None}) if profiles or reviewed else "heuristic",
             "inspector_profiles": profiles,
             "semantic_coverage": sum(bool(o.get("_provenance")) for o in (semantic or {}).values()),
@@ -201,10 +209,10 @@ def analyze(run: dict, semantic: dict | None = None) -> dict:
                      "edges": [{"source": s, "target": t, "count": v} for (s,t),v in transitions.items()]},
             "scope_flow": {"nodes": [{"id": m, "label": label, "event_ids": [a["event_id"] for a in actions if a["macro"]["goal_scope"]["value"] == m]} for m,label in scope_labels.items()],
                            "edges": [{"source": s, "target": t, "count": v} for (s,t),v in scope_transitions.items()]},
-            "definitions": {"repeat": "Exact tool, argument and command equality after a previous occurrence in the same agent trajectory. This does not establish wasted work.",
+            "definitions": {"repeat": "Exact tool, argument and command equality within the same trajectory and recorded context. Equality alone does not establish temporal repetition or wasted work; consecutive repeats additionally require ordered adjacent actions.",
                             "map": "Nodes are observed work targets. Edges follow recorded action order within an agent; spatial distance has no semantic meaning.",
                             "mode": "Conservative command/tool heuristics until Jev observations are present. Apply approach does not establish optimal exploitation.",
                             "sequence":sequence["definition"],
                             "goals": goal_tracking["definition"],
                             "goal_scope": "Task-connected maps a selected direct or supporting relationship. Grouped probabilities are descriptive and do not override the selected option. No probability or confidence floor is applied.",
-                            "target_return": "A target is revisited after at least one action on another target in the same agent. This is separate from repeating an identical command."}}
+                            "target_return": "Ordered visits to the same target bracket observed work on another target in the same agent and context. Complete intervening parallel dispatches are allowed; unknown order is retained as reobservation, not a return. This is separate from command equality."}}

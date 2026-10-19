@@ -8,8 +8,10 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter, defaultdict
+from .capabilities import recorded_scope
+from .work_order import Evidence as OrderEvidence
 
-EVIDENCE_VERSION = "verification-evidence/2"
+EVIDENCE_VERSION = "verification-evidence/4"
 PYTEST_COMMAND = re.compile(r"^(?:pytest\b|python\S*\s+-m\s+pytest\b)")
 PYTEST_SUMMARY = re.compile(r"(?m)^(?:=+\s*)?((?:\d+ (?:passed|failed|errors?|skipped|xfailed|xpassed|warnings?)(?:,?\s*))+)(?:in\s+[\d.]+s[^\n]*)?\s*(?:=+)?$")
 
@@ -61,24 +63,28 @@ def resources(run):
 
 def inspect(run, actions):
     events = {e["id"]:e for e in run["events"]}
+    ordering = OrderEvidence({k:v for k,v in events.items() if not v.get('copied_context')})
     checks, actors = [], defaultdict(list)
     for action in actions:
-        actors[action["trajectory_id"]].append(action)
+        actors[recorded_scope(action)].append(action)
         if action["mode"] == "verify":
             checks.append({"event_id":action["event_id"],"trajectory_id":action["trajectory_id"],"text":action["text"],
                 "basis":action["mode_basis"],"feedback_ids":action["feedback_ids"],"reported_summary":reported_summary(action,events),
                 "artifact_version":"unrecorded","scope":"the recorded check; task-wide coverage not established"})
     tails = []
-    for actor, rows in actors.items():
+    for (actor, context), rows in actors.items():
+        rows = sorted(rows, key=lambda a:a['index'])
+        unordered = [a['event_id'] for a in rows if not ordering.is_ordered(a['event_id'])]
         last_check = next((a for a in reversed(rows) if a["mode"]=="verify"),None)
+        if unordered: last_check = None
         after = [a["event_id"] for a in rows if a["mode"]=="apply" and (not last_check or a["index"]>last_check["index"])]
-        batch_sizes = Counter(a.get("parent_id") for a in rows if a.get("parent_id"))
-        uncertain = [a["event_id"] for a in rows if a["mode"] == "unresolved" or batch_sizes.get(a.get("parent_id"), 0) > 1]
-        tails.append({"trajectory_id":actor,"last_check":last_check["event_id"] if last_check else None,
+        if unordered: after = []
+        uncertain = [a["event_id"] for a in rows if a["mode"] == "unresolved" or a['event_id'] in unordered]
+        tails.append({"trajectory_id":actor,"context_id":context,"last_check":last_check["event_id"] if last_check else None,
                       "application_after_check":after,
                       "status":"unresolved" if uncertain else "no_check_observed" if not last_check else "application_after_check" if after else "no_later_application_observed",
-                      "unresolved_event_ids": uncertain, "scope": "recorded action sequence",
-                      "limitation":"Unknown purposes or ambiguous batches prevent closure classification. This recorded sequence does not establish a complete trajectory, verification freshness or premature stopping."})
+                      "unresolved_event_ids": uncertain, "unordered_event_ids":unordered, "scope": "recorded action sequence",
+                      "limitation":"Unknown purposes or order prevent closure classification. All observed checks remain listed separately. This recorded sequence does not establish a complete trajectory, verification freshness or premature stopping."})
     claims = [{"event_id":e["id"],"trajectory_id":e["trajectory_id"],"source_pointer":e["source_pointer"],
                "claim":"producer-recorded task_complete=true","support":"not established"}
               for e in run["events"] if e.get("completion_claim") is True and not e["copied_context"]]

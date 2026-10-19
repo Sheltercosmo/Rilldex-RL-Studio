@@ -84,7 +84,7 @@ def derive(record):
                           'reason': 'A missing selected return does not establish stopping, switching or no retry'})
         families['failure'] = cases
     feedback = record.get('feedback_assessment')
-    if feedback and feedback.get('schema') == 'feedback-assessment/2':
+    if feedback and feedback.get('schema') in {'feedback-assessment/2','feedback-assessment/3'}:
         cases = []; seen = set()
         for e in feedback['observations']:
             aid = e['action_event_id']

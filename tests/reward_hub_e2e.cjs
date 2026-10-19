@@ -1,0 +1,77 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const base=process.env.REWARD_UI_URL||JSON.parse(fs.readFileSync('.tracker/reward-ui-validation/server.json')).url;
+(async()=>{
+ const browser=await chromium.launch({headless:true,channel:'msedge'});
+ const page=await browser.newPage({viewport:{width:1360,height:1000}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ try{
+  await page.goto(base+'/monitors?view=reward');
+  await page.locator('#page-title').filter({hasText:'Reward hacking'}).waitFor();
+  await page.locator('#reward-check-options .reward-check-option').first().waitFor();
+  assert.equal(await page.locator('.nav-link[aria-current=page] svg').count(),1,'reward navigation uses a shared icon');
+  assert.equal(await page.locator('.nav-link[aria-current=page]').count(),1,'exactly one selected page');
+  assert.equal(await page.locator('#reward-checks').getAttribute('open'),'');
+  const original=await(await page.request.get(base+'/api/monitoring/alerts')).json();
+  if(await page.locator('.finding-popup').isVisible())await page.locator('.finding-popup').getByRole('button',{name:'Dismiss',exact:true}).click();
+  await page.screenshot({path:'.tracker/reward-ui-validation/hub-desktop.png',fullPage:false});
+  await page.locator('#reward-scan-open').click();
+  assert.ok(await page.locator('#reward-scan-dialog').evaluate(d=>{
+   const box=d.getBoundingClientRect(),body=d.querySelector('.dialog-body');
+   return box.top>=0&&box.bottom<=innerHeight&&getComputedStyle(d).overflow==='hidden'&&body.scrollHeight>body.clientHeight;
+  }),'dialog frame stays inside viewport; only its body scrolls');
+  await page.locator('#reward-scan-budget').fill('0');
+  await page.locator('#reward-scan-mode').selectOption('watch');
+  const command=await page.locator('#reward-scan-dialog pre').nth(1).innerText();
+  assert.match(command,/monitor-rollouts watch/);assert.match(command,/--max-new-calls 0/);assert.doesNotMatch(command,/--all-latest/);
+  await page.locator('#reward-scan-shell').selectOption('powershell');
+  await page.locator('#reward-scan-directory').fill("scan's workspace");
+  assert.match(await page.locator('#reward-scan-dialog pre').nth(1).innerText(),/'scan''s workspace'/);
+  await page.screenshot({path:'.tracker/reward-ui-validation/scan-desktop.png'});
+  await page.locator('#reward-scan-dialog').getByRole('button',{name:'Close dialog',exact:true}).click();
+  await page.locator('#reward-custom-open').click();
+  await page.locator('#editor-custom-guide').waitFor({state:'visible'});
+  assert.equal(await page.locator('#custom-monitor-template').inputValue(),'reward');
+  await page.locator('#close-editor').click();
+  await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'mobile page overflow');
+  await page.screenshot({path:'.tracker/reward-ui-validation/hub-mobile.png'});
+  await page.locator('#reward-scan-open').click();
+  assert.ok(await page.locator('#reward-scan-dialog').evaluate(d=>d.scrollWidth<=d.clientWidth+1),'mobile dialog overflow');
+  assert.ok(await page.locator('#reward-scan-dialog').evaluate(d=>{
+   const r=d.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;
+  }),'mobile dialog is not clipped vertically');
+  await page.locator('#reward-scan-dialog').getByRole('button',{name:'Close dialog',exact:true}).click();
+  const newAlert={id:'browser-arrival-1',monitor_id:'test',title:'Controlled reward finding',category:'reward',summary:'UI notification control',experiment:'arrival',task:'case',evidence_url:'/semantic-map?run=control',monitor_url:'/?monitor=control'};
+  let arrivals=[newAlert];
+  await page.route('**/api/monitoring/alerts',route=>route.fulfill({json:{...original,alerts:[...arrivals,...original.alerts],total:original.total+arrivals.length}}));
+  const tick=()=>page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+  await tick();await page.locator('.finding-popup').waitFor({state:'visible'});
+  assert.match(await page.locator('.finding-popup').innerText(),/Controlled reward finding/);
+  await page.screenshot({path:'.tracker/reward-ui-validation/notification-mobile.png'});
+  await page.locator('.finding-popup').getByRole('button',{name:'Dismiss',exact:true}).click();
+  await page.reload();await page.locator('#page-title').filter({hasText:'Reward hacking'}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('.workspace-findings')?.textContent.includes('·'));
+  assert.equal(await page.locator('.finding-popup').isVisible(),false,'reload must not repeat an acknowledged receipt');
+  await page.locator('.workspace-findings').click();
+  await page.locator('.findings-setting input').uncheck();
+  await page.locator('.findings-dialog').getByRole('button',{name:'Close',exact:true}).click();
+  arrivals=[{...newAlert,id:'browser-arrival-2'},...arrivals];await tick();
+  await page.waitForFunction(n=>document.querySelector('.workspace-findings').textContent==='Findings · '+n,original.total+2);
+  assert.equal(await page.locator('.finding-popup').isVisible(),false,'muted arrivals remain in the findings list without popup');
+  const isolated=await browser.newContext(),blocked=await isolated.newPage();
+  await blocked.addInitScript(()=>{
+   const get=Storage.prototype.getItem,set=Storage.prototype.setItem;
+   Storage.prototype.getItem=function(k){if(k.startsWith('rilldex-findings:'))throw Error('storage blocked');return get.call(this,k);};
+   Storage.prototype.setItem=function(k,v){if(k.startsWith('rilldex-findings:'))throw Error('storage blocked');return set.call(this,k,v);};
+  });
+  await blocked.goto(base+'/monitors?view=reward');
+  await blocked.locator('.finding-popup').waitFor({state:'visible'});
+  await blocked.locator('.finding-popup').getByRole('button',{name:'Dismiss',exact:true}).click();
+  const refreshed=blocked.waitForResponse('**/api/monitoring/alerts');
+  await blocked.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await refreshed;
+  assert.equal(await blocked.locator('.finding-popup').isVisible(),false,'blocked storage still deduplicates within the session');
+  await isolated.close();
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,checks:['reward shortcut','presets expanded','zero-budget watch command','PowerShell quoting','custom detector shortcut','desktop/mobile layout','new finding popup','reload deduplication','mute'],existing_findings:original.total}));
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

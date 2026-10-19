@@ -106,7 +106,7 @@ class CaseTests(unittest.TestCase):
             'assessment':'supports','conclusion':'There is a recorded recurrence witness','evidence':[ref]}})
         attached=r['follow_up']['checks'][0]['results'][0]['evidence'][0]
         self.assertEqual(attached['record']['case']['id'],row['id'])
-        self.assertEqual(attached['record']['projection_schema'],'work-episodes/3')
+        self.assertEqual(attached['record']['projection_schema'],'work-episodes/4')
         self.assertEqual(follow.bundle(self.store,r['id'])['linked_comparisons'],[doc])
         with self.assertRaises(InputError):cases.resolve(self.store,{**ref,'case_id':'outside'})
         with self.assertRaises(InputError):cases.resolve(self.store,{**ref,'case':{'forged':True}})

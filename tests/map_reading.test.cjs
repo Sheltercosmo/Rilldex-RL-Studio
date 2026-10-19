@@ -2,6 +2,17 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const L=require('../tracker/web/map-layout.js');
 const S=require('../tracker/web/rollout-story.js');
+test('source actions and feedback retain type colors without becoming semantic contributions',()=>{
+ const source={kind:'event',properties:{kind:'message'},lane:0};
+ const action={kind:'event',properties:{kind:'action'},lane:1};
+ const feedback={kind:'event',properties:{kind:'feedback'},lane:2};
+ assert.equal(L.cardStyle(source).key,'source');
+ assert.equal(L.cardStyle(action).key,'action');
+ assert.equal(L.cardStyle(feedback).key,'feedback');
+ assert.equal(new Set([source,action,feedback].map(n=>L.cardStyle(n).color)).size,3);
+ assert.equal(L.cardStyle({...action,kind:'unit'}).color,L.cardStyle(action).color);
+ assert.equal(L.cardStyle({...source,kind:'unit'}).key,'contribution');
+});
 const edges=[
  {id:'order',source:'a',target:'b',type:'source_order',family:'sequence'},
  {id:'response',source:'result',target:'a',type:'feedback_for',family:'feedback'},

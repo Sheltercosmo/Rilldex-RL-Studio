@@ -427,11 +427,13 @@ def _snapshot(store,experiment=None,environment=None):
     all_runs=population(store);runs=scoped(all_runs,experiment,environment);ids={r['id'] for r in runs};monitors=[]
     catalog=graph_store.catalog(store)
     from .reward_detectors import catalog as reward_catalog
-    diagnostic_definitions={row['id']:row['checks'] for row in reward_catalog(store)['observers']}
+    diagnostic_observers={row['id']:row for row in reward_catalog(store)['observers']}
+    diagnostic_definitions={key:row['checks'] for key,row in diagnostic_observers.items()}
     graph_counts=Counter(g['run_id'] for g in catalog['graphs'] if g['observer']!='source' and g['coverage'].get('semantic_relations')!='unavailable' and g['coverage'].get('observation_kind')!='feedback-assessment')
     for d in definitions(store):
         row={**d,'description':description(d,diagnostic_definitions)}
-        row['observer_label']=next((g['observer_label'] for g in catalog['graphs'] if g['observer']==d['observer']),None)
+        row['observer_label']=next((g['observer_label'] for g in catalog['graphs'] if g['observer']==d['observer']),
+            diagnostic_observers.get(d['observer'],{}).get('label'))
         notice=analysis_metrics.definition_notice(d)
         if notice:row['definition_notice']=notice
         if d['enabled']:
@@ -463,7 +465,7 @@ def _snapshot(store,experiment=None,environment=None):
     for row in facets:
         experiments.setdefault(row['experiment'],0)
         if row['environment']:environments.add(row['environment'])
-    return {'schema':VERSION,'captured_at':now(),'workspace':{'database':str(store.path),'rollouts':len(all_runs),'semantic_rollouts':sum(bool(graph_counts[r['id']]) for r in all_runs)},'monitors':monitors,'runs':[{**r,'semantic_graphs':graph_counts[r['id']],'metadata':{k:r['metadata'].get(k) for k in ('task_id','experiment','environment','training_step','source_line','model','policy_version','checkpoint')}} for r in runs],
+    return {'schema':VERSION,'captured_at':now(),'workspace':{'database':str(store.path.resolve()),'rollouts':len(all_runs),'semantic_rollouts':sum(bool(graph_counts[r['id']]) for r in all_runs)},'monitors':monitors,'runs':[{**r,'semantic_graphs':graph_counts[r['id']],'metadata':{k:r['metadata'].get(k) for k in ('task_id','experiment','environment','training_step','source_line','model','policy_version','checkpoint')}} for r in runs],
         'execution_context':execution_records.overview(store,experiment,environment),
         'declared_populations':generation_cohorts.project(store,experiment=experiment,environment=environment),
         'active_captures':active_captures.snapshot(store,experiment=experiment,environment=environment),

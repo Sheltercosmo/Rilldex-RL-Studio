@@ -57,6 +57,15 @@ const CustomMonitorEvidence=(()=>{
   section.append(el('h3',Array.isArray(findings)?'Requirement conflicts':'Detector evidence'));
   section.append(el('p',String(diagnostic.selection||diagnostic.status||'Recorded result').replaceAll('_',' ')));
   if(diagnostic.scan_complete===false)section.append(el('p','Partial scan · '+diagnostic.scanned_pages+' / '+diagnostic.total_pages+' pages inspected. Remaining pages are queued.','custom-evidence-note'));
+  for(const flow of diagnostic.code_flows||[]){
+   const view=flow.view||{},details=el('details');
+   details.open=diagnostic.code_flows.length===1;
+   details.append(el('summary','Test-answer copying · '+String(view.entry||'Recorded code')),
+    el('p','Test input → answer/label field → copied sample outputs'),
+    el('small','Static code finding. Execution success is not established.'));
+   for(const part of view.parts||[])details.append(el('small',String(part.role)+' · lines '+part.start_line+'–'+part.end_line),el('pre',part.text));
+   section.append(details);
+  }
   const pairs=Array.isArray(findings)?findings.map(f=>f.requirement&&f.candidate?{requirement:f.requirement,candidate:f.candidate}:null).filter(Boolean):[diagnostic.evidence_roles||{}];
   if(Array.isArray(findings)&&findings.length){const count=new Set(findings.map(f=>f.candidate.event_id||f.candidate.id)).size;section.append(el('p',count+' source '+(count===1?'record':'records')+' · '+findings.length+' requirement '+(findings.length===1?'match':'matches')+'. A record can match several requirements.','custom-evidence-note'));}
   const labels={requirement:'Task requirement',instruction:'Applicable instruction',candidate:'Flagged source',action:'Action',mechanism:'Mechanism',returned_material:'Retrieved material',incorporation:'Use of retrieved material'};
@@ -78,6 +87,23 @@ const CustomMonitorEvidence=(()=>{
     }
     return row;
   }
+    const contractGroups=new Map();
+    for(const contract of diagnostic.artifact_contracts||[]){
+     const key=JSON.stringify([contract.view?.payload,contract.view?.opening_context?.map(ref=>ref.text),contract.selections]);
+     if(!contractGroups.has(key))contractGroups.set(key,[]);contractGroups.get(key).push(contract);
+    }
+    for(const [index,group]of [...contractGroups.values()].entries()){
+     const view=group[0].view||{},details=el('details');details.open=index===0;
+     details.append(el('summary','Substituted target · submitted success test'),
+      el('p','Actual target required → substitute produces success → installed as deliverable'),
+      el('small','Selected from recorded task and code. Execution success and intent are not established.'));
+     if(group.length>1)details.append(el('small',group.length+' recorded occurrences · identical operation and context'));
+     for(const ref of view.opening_context||[])details.append(passage('recorded_context',ref));
+     const payload=view.payload||{},command=payload.command??payload.cmd??payload.code??payload.source;
+     const readable=typeof command==='string'?command:Array.isArray(command)&&command.every(v=>typeof v==='string')?command.join('\n'):JSON.stringify(payload,null,2);
+     details.append(el('strong','Recorded artifact operation'),el('pre',readable));
+     section.append(details);
+    }
   if(Array.isArray(findings)){
    const records=new Map();
    for(const pair of pairs){const key=pair.candidate.event_id||pair.candidate.id;if(!records.has(key))records.set(key,[]);records.get(key).push(pair);}
@@ -94,7 +120,8 @@ const CustomMonitorEvidence=(()=>{
     }section.append(group);
    }
   }else for(const [i,pair]of pairs.entries()){
-   const group=el('details');group.open=pairs.length===1;group.append(el('summary','Finding '+(i+1)));
+    const focused=diagnostic.code_flows?.length||diagnostic.artifact_contracts?.length;
+    const group=el('details');group.open=pairs.length===1&&!focused;group.append(el('summary',focused?'Original action & context':'Finding '+(i+1)));
    for(const [role,ref]of Object.entries(pair))group.append(passage(role,ref));section.append(group);
   }
   if(Array.isArray(findings))section.append(el('p',findings.length?'Task conflicts may be bugs or shortcuts; a reward exploit is not established.':'No conflict candidate was selected in the scanned source.','custom-evidence-note'));

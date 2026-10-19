@@ -6,9 +6,9 @@
  const colors={sequence:'#718096',execution:'#526176',feedback:'#3273c7',plan:'#98620e',review:'#b44976',return:'#7754c1',verification:'#158065',work:'#147b70',context:'#617087'};
  const patterns={sequence:'4 7',execution:'',feedback:'',plan:'10 4',review:'8 3 2 3',return:'12 5',verification:'',work:'3 4',context:'2 5'};
  function cardStyle(n){
-  if(n.kind==='event')return {key:'source',color:'#617080',tint:'#f1f4f6',symbol:'□',label:'Source record'};
   if(n.lane===2)return {key:'feedback',color:'#975b12',tint:'#fff5e5',symbol:'↳',label:'Returned feedback'};
   if(n.lane===1)return {key:'action',color:'#087b7b',tint:'#eaf8f5',symbol:'↗',label:'Action'};
+  if(n.kind==='event')return {key:'source',color:'#617080',tint:'#f1f4f6',symbol:'□',label:'Source record'};
   return {key:'contribution',color:'#4d5eb8',tint:'#eef1ff',symbol:'◇',label:'Contribution'};
  }
  function family(type){if(['next_record','source_order'].includes(type))return 'sequence';if(['recorded_with','parent_message'].includes(type))return 'execution';if(['feedback_for','response_to'].includes(type))return 'feedback';if(['same_work_target','overlapping_work_scope','different_work_same_subject','similar_operation_distinct_target'].includes(type))return 'work';if(type.includes('plan')||type.includes('declared_work')||type==='declares_same_work_as')return 'plan';if(['assesses','assesses_response_group','revises','uses_evidence','responds_to','changes_attempt_procedure','changes_attempt_prerequisite','attempts_declared_change','assesses_attempt_prerequisite','attempts_local_adjustment','adjustment_before_retry'].includes(type))return 'review';if(['same_action_target','revisits_after_error_report','completed_after_failed_call','same_procedure','reconfigured_procedure','alternative_procedure','uses_correction_from'].includes(type))return 'return';return 'context';}
@@ -92,7 +92,22 @@
   return {info,groups:[...groups.values()]};
  }
  function lane(n){const p=n.properties;if(n.kind==='plan_step')return 0;if(n.kind==='unit')return p.kind==='action'?1:p.kind==='feedback'?2:0;return p.kind==='action'?1:['observation','tool_result','feedback'].includes(p.kind)||p.role==='tool'?2:0;}
- function project(graph,excludedEdgeIds=[],excludedUnitIds=[]){
+ function project(graph,excludedEdgeIds=[],excludedUnitIds=[],sourceOrder=null){
+  const sourceEvents=new Map(graph.nodes.filter(n=>n.kind==='event').map(n=>[n.properties.id,n.properties]));
+  function orderInfo(n){
+   if(sourceOrder)return sourceOrder.nodes[n.id]||{scope:[],reason:'missing_source_order'};
+   const span=n.properties.source||{},p=sourceEvents.get(span.event_id)||n.properties;
+   return {scope:[n.trajectory_id??null,p.context_id??null],event_id:span.event_id||(n.kind==='event'?p.id:null),index:n.event_index,
+    start:span.start??0,end:n.kind==='event'?text(p.text).length:span.end,
+    hidden:!!(p.copied_context||p.agent_visible===false||p.agent_visibility==='not_established'||p.kind?.startsWith('external_')),
+    reason:p.order_known===false?'unresolved_source_order':p.batch_size>1?'parallel_dispatch':null};
+  }
+  function orderedPair(a,b){
+   const x=orderInfo(a),y=orderInfo(b);
+   if(JSON.stringify(x.scope)!==JSON.stringify(y.scope)||x.hidden||y.hidden)return false;
+   if(x.event_id!=null&&x.event_id===y.event_id)return Number.isInteger(x.end)&&Number.isInteger(y.start)&&x.end<=y.start;
+   return !x.reason&&!y.reason&&Number.isInteger(x.index)&&Number.isInteger(y.index)&&x.index<y.index;
+  }
   const excluded=new Set(excludedEdgeIds);
   const invalid=new Set(excludedUnitIds);
   for(const e of graph.edges)if(e.type==='contains_plan_step'&&invalid.has(e.source))invalid.add(e.target);
@@ -140,13 +155,14 @@
   }
   const projectedEdges=graph.edges.map(e=>e.type==='recorded_recheck_of'?{...e,stored_source:e.source,stored_target:e.target,
    source:checkOccurrence(e.source),target:checkOccurrence(e.target)}:e);
-  const edges=projectedEdges.filter(e=>byId.has(e.source)&&byId.has(e.target)&&e.type!=='grounded_in').map(e=>{
+  const edges=projectedEdges.filter(e=>byId.has(e.source)&&byId.has(e.target)&&e.type!=='grounded_in'&&
+   (!['next_record','source_order'].includes(e.type)||orderedPair(byId.get(e.source),byId.get(e.target)))).map(e=>{
    const stage=e.properties?.plan_step_id&&e.target+':'+e.properties.plan_step_id;
    const namespace=graph.semantic_context?.reference_annotation?.label_namespace;
    return {...e,family:namespace&&e.type.startsWith(namespace)?'context':e.type==='recorded_recheck_of'?'verification':family(e.type),display_target:stage&&byId.has(stage)?stage:e.target};
   });
   for(const n of nodes)for(const link of n.properties.plan_structure?.links||[]){const source=n.id+':'+link.from,target=n.id+':'+link.to;if(byId.has(source)&&byId.has(target))edges.push({id:'plan-link:'+source+':'+target,source,target,type:'plan_'+link.kind,family:'plan',properties:{...link,basis:'stored plan_structure.links',parent_unit:n.id}});}
-  if(semantic||folded.length){const previous=new Map();for(const n of nodes.filter(n=>n.kind!=='plan_step'&&n.kind!=='unresolved_reference')){const prev=previous.get(n.trajectory_id);if(prev&&!edges.some(e=>e.source===prev.id&&e.target===n.id&&e.family==='sequence'))edges.push({id:'order:'+prev.id+':'+n.id,source:prev.id,target:n.id,type:'source_order',family:'sequence',properties:{basis:'source order; not causality'}});previous.set(n.trajectory_id,n);}}
+  if(semantic||folded.length||sourceOrder){const previous=new Map();for(const n of nodes.filter(n=>n.kind!=='plan_step'&&n.kind!=='unresolved_reference')){const scope=JSON.stringify(orderInfo(n).scope),prev=previous.get(scope);if(prev&&orderedPair(prev,n)&&!edges.some(e=>e.source===prev.id&&e.target===n.id&&e.family==='sequence'))edges.push({id:'order:'+prev.id+':'+n.id,source:prev.id,target:n.id,type:'source_order',family:'sequence',properties:{basis:'recorded source order within the same session; not execution or causality'}});previous.set(scope,n);}}
   return {nodes,edges,byId,semantic,folded,lanes,width:Math.max(1,lanes.length)*370+30,height:Math.max(240,80+(lastRow+1)*142)};
  }
  function connectionRoute(a,b,index=0){

@@ -1,5 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {anchor,plan,questions,why,scopeNote,requestedPlan}=require('../tracker/web/source-evidence.js');
+const {anchor,plan,questions,why,scopeNote,requestedPlan,literalNote}=require('../tracker/web/source-evidence.js');
+
+test('phrase coverage distinguishes exact excerpts from fallback and omitted passages',()=>{
+ assert.equal(literalNote({}), '');
+ assert.match(literalNote({questions:[{literal_phrases:['not installed'],literal_matched_events:0}]}),/No exact phrase matched/);
+ assert.match(literalNote({questions:[{literal_phrases:['a phrase'],literal_matched_events:1}]}),/outside this page/);
+ const q={literal_phrases:['a phrase'],literal_matched_events:1,retained_literal_event_ids:['e1']};
+ assert.match(literalNote({questions:[q,q]}),/shown in 1 record\./);
+});
 test('source events leave Unicode length to the server; semantic units keep original offsets',()=>{
  assert.deepEqual(anchor({kind:'event',properties:{id:'e1',text:'A😀B'}}),{event_id:'e1'});
  assert.deepEqual(anchor({kind:'unit',properties:{source:{event_id:'e1',start:1,end:2,text:'😀'}}}),{event_id:'e1',start:1,end:2});
@@ -16,6 +24,8 @@ test('expanded source context is labeled separately from native correspondence',
  assert.equal(why({kind:'recorded_dispatch',of_event_id:'e40'}),'Recorded dispatch for e40');
  assert.equal(why({kind:'recorded_response',of_event_id:'e39'}),'Recorded response to e39');
  assert.equal(why({kind:'future-context-kind'}),'Additional source context');
+ assert.equal(why({kind:'literal_match',rank:1}),'Exact phrase match #1');
+ assert.equal(why({kind:'literal_match',question_id:'q'}),'Exact phrase passage');
  assert.equal(why({kind:'question_match',question_id:'term-opaque'}, {'term-opaque':'Check the balance'}),'Candidate for: Check the balance');
 });
 

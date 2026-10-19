@@ -1,0 +1,2086 @@
+{
+  "schema": "captured-source-order-fixture/1",
+  "graph_id": "graph-5b1da197b4939279b97dbd0dce2a8a4f8aec9b80baf407f0a6b2c90899d04079",
+  "source_hash": "f085b27c179281607fa7b5306c5f9ca49cf5c15e2518b3b6f044583629832730",
+  "adapter": "harbor/2",
+  "run_id": "af559f7f48525318a3e3082f",
+  "scope": "Ordering metadata only from the captured Harbor rollout; no semantic labels or ground-truth behavior judgments.",
+  "events": [
+    {
+      "id": "e1",
+      "index": 0,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "system",
+      "copied_context": false
+    },
+    {
+      "id": "e2",
+      "index": 1,
+      "kind": "instruction",
+      "trajectory_id": "main",
+      "actor": "user",
+      "copied_context": false
+    },
+    {
+      "id": "e3",
+      "index": 2,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e4",
+      "index": 3,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e3",
+      "copied_context": false
+    },
+    {
+      "id": "e5",
+      "index": 4,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e3",
+      "copied_context": false
+    },
+    {
+      "id": "e6",
+      "index": 5,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e7",
+      "index": 6,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e8",
+      "index": 7,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e9",
+      "index": 8,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e8",
+      "copied_context": false
+    },
+    {
+      "id": "e10",
+      "index": 9,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e8",
+      "copied_context": false
+    },
+    {
+      "id": "e11",
+      "index": 10,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e8",
+      "copied_context": false
+    },
+    {
+      "id": "e12",
+      "index": 11,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e13",
+      "index": 12,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e14",
+      "index": 13,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e15",
+      "index": 14,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e14",
+      "copied_context": false
+    },
+    {
+      "id": "e16",
+      "index": 15,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e14",
+      "copied_context": false
+    },
+    {
+      "id": "e17",
+      "index": 16,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e14",
+      "copied_context": false
+    },
+    {
+      "id": "e18",
+      "index": 17,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e19",
+      "index": 18,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e20",
+      "index": 19,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e21",
+      "index": 20,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e20",
+      "copied_context": false
+    },
+    {
+      "id": "e22",
+      "index": 21,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e20",
+      "copied_context": false
+    },
+    {
+      "id": "e23",
+      "index": 22,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e20",
+      "copied_context": false
+    },
+    {
+      "id": "e24",
+      "index": 23,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e25",
+      "index": 24,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e26",
+      "index": 25,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e27",
+      "index": 26,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e26",
+      "copied_context": false
+    },
+    {
+      "id": "e28",
+      "index": 27,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e26",
+      "copied_context": false
+    },
+    {
+      "id": "e29",
+      "index": 28,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e26",
+      "copied_context": false
+    },
+    {
+      "id": "e30",
+      "index": 29,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e31",
+      "index": 30,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e32",
+      "index": 31,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e33",
+      "index": 32,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e32",
+      "copied_context": false
+    },
+    {
+      "id": "e34",
+      "index": 33,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e32",
+      "copied_context": false
+    },
+    {
+      "id": "e35",
+      "index": 34,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e32",
+      "copied_context": false
+    },
+    {
+      "id": "e36",
+      "index": 35,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e37",
+      "index": 36,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e38",
+      "index": 37,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e39",
+      "index": 38,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e38",
+      "copied_context": false
+    },
+    {
+      "id": "e40",
+      "index": 39,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e38",
+      "copied_context": false
+    },
+    {
+      "id": "e41",
+      "index": 40,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e42",
+      "index": 41,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e43",
+      "index": 42,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e42",
+      "copied_context": false
+    },
+    {
+      "id": "e44",
+      "index": 43,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e42",
+      "copied_context": false
+    },
+    {
+      "id": "e45",
+      "index": 44,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e46",
+      "index": 45,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e47",
+      "index": 46,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e46",
+      "copied_context": false
+    },
+    {
+      "id": "e48",
+      "index": 47,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e46",
+      "copied_context": false
+    },
+    {
+      "id": "e49",
+      "index": 48,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e50",
+      "index": 49,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e51",
+      "index": 50,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e50",
+      "copied_context": false
+    },
+    {
+      "id": "e52",
+      "index": 51,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e53",
+      "index": 52,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e54",
+      "index": 53,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e53",
+      "copied_context": false
+    },
+    {
+      "id": "e55",
+      "index": 54,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e53",
+      "copied_context": false
+    },
+    {
+      "id": "e56",
+      "index": 55,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e57",
+      "index": 56,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e58",
+      "index": 57,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e57",
+      "copied_context": false
+    },
+    {
+      "id": "e59",
+      "index": 58,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e57",
+      "copied_context": false
+    },
+    {
+      "id": "e60",
+      "index": 59,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e61",
+      "index": 60,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e62",
+      "index": 61,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e61",
+      "copied_context": false
+    },
+    {
+      "id": "e63",
+      "index": 62,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e61",
+      "copied_context": false
+    },
+    {
+      "id": "e64",
+      "index": 63,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e65",
+      "index": 64,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e66",
+      "index": 65,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e65",
+      "copied_context": false
+    },
+    {
+      "id": "e67",
+      "index": 66,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e65",
+      "copied_context": false
+    },
+    {
+      "id": "e68",
+      "index": 67,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e69",
+      "index": 68,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e70",
+      "index": 69,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e69",
+      "copied_context": false
+    },
+    {
+      "id": "e71",
+      "index": 70,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e69",
+      "copied_context": false
+    },
+    {
+      "id": "e72",
+      "index": 71,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e73",
+      "index": 72,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e74",
+      "index": 73,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e73",
+      "copied_context": false
+    },
+    {
+      "id": "e75",
+      "index": 74,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e73",
+      "copied_context": false
+    },
+    {
+      "id": "e76",
+      "index": 75,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e77",
+      "index": 76,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e78",
+      "index": 77,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e77",
+      "copied_context": false
+    },
+    {
+      "id": "e79",
+      "index": 78,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e77",
+      "copied_context": false
+    },
+    {
+      "id": "e80",
+      "index": 79,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e81",
+      "index": 80,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e82",
+      "index": 81,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e81",
+      "copied_context": false
+    },
+    {
+      "id": "e83",
+      "index": 82,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e81",
+      "copied_context": false
+    },
+    {
+      "id": "e84",
+      "index": 83,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e85",
+      "index": 84,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e86",
+      "index": 85,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e85",
+      "copied_context": false
+    },
+    {
+      "id": "e87",
+      "index": 86,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e88",
+      "index": 87,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e89",
+      "index": 88,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e88",
+      "copied_context": false
+    },
+    {
+      "id": "e90",
+      "index": 89,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e88",
+      "copied_context": false
+    },
+    {
+      "id": "e91",
+      "index": 90,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e92",
+      "index": 91,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e93",
+      "index": 92,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e92",
+      "copied_context": false
+    },
+    {
+      "id": "e94",
+      "index": 93,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e92",
+      "copied_context": false
+    },
+    {
+      "id": "e95",
+      "index": 94,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e96",
+      "index": 95,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e97",
+      "index": 96,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e96",
+      "copied_context": false
+    },
+    {
+      "id": "e98",
+      "index": 97,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e99",
+      "index": 98,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e100",
+      "index": 99,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e99",
+      "copied_context": false
+    },
+    {
+      "id": "e101",
+      "index": 100,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e99",
+      "copied_context": false
+    },
+    {
+      "id": "e102",
+      "index": 101,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e99",
+      "copied_context": false
+    },
+    {
+      "id": "e103",
+      "index": 102,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e104",
+      "index": 103,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e105",
+      "index": 104,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e106",
+      "index": 105,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e105",
+      "copied_context": false
+    },
+    {
+      "id": "e107",
+      "index": 106,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e105",
+      "copied_context": false
+    },
+    {
+      "id": "e108",
+      "index": 107,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e109",
+      "index": 108,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e110",
+      "index": 109,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e109",
+      "copied_context": false
+    },
+    {
+      "id": "e111",
+      "index": 110,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e109",
+      "copied_context": false
+    },
+    {
+      "id": "e112",
+      "index": 111,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e113",
+      "index": 112,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e114",
+      "index": 113,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e113",
+      "copied_context": false
+    },
+    {
+      "id": "e115",
+      "index": 114,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e116",
+      "index": 115,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e117",
+      "index": 116,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e116",
+      "copied_context": false
+    },
+    {
+      "id": "e118",
+      "index": 117,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e116",
+      "copied_context": false
+    },
+    {
+      "id": "e119",
+      "index": 118,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e120",
+      "index": 119,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e121",
+      "index": 120,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e120",
+      "copied_context": false
+    },
+    {
+      "id": "e122",
+      "index": 121,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e120",
+      "copied_context": false
+    },
+    {
+      "id": "e123",
+      "index": 122,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e124",
+      "index": 123,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e125",
+      "index": 124,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e124",
+      "copied_context": false
+    },
+    {
+      "id": "e126",
+      "index": 125,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e127",
+      "index": 126,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e128",
+      "index": 127,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e127",
+      "copied_context": false
+    },
+    {
+      "id": "e129",
+      "index": 128,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e127",
+      "copied_context": false
+    },
+    {
+      "id": "e130",
+      "index": 129,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e131",
+      "index": 130,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e132",
+      "index": 131,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e131",
+      "copied_context": false
+    },
+    {
+      "id": "e133",
+      "index": 132,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e131",
+      "copied_context": false
+    },
+    {
+      "id": "e134",
+      "index": 133,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e135",
+      "index": 134,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e136",
+      "index": 135,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e135",
+      "copied_context": false
+    },
+    {
+      "id": "e137",
+      "index": 136,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e135",
+      "copied_context": false
+    },
+    {
+      "id": "e138",
+      "index": 137,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e139",
+      "index": 138,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e140",
+      "index": 139,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e139",
+      "copied_context": false
+    },
+    {
+      "id": "e141",
+      "index": 140,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e139",
+      "copied_context": false
+    },
+    {
+      "id": "e142",
+      "index": 141,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e143",
+      "index": 142,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e144",
+      "index": 143,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e143",
+      "copied_context": false
+    },
+    {
+      "id": "e145",
+      "index": 144,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e143",
+      "copied_context": false
+    },
+    {
+      "id": "e146",
+      "index": 145,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e147",
+      "index": 146,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e148",
+      "index": 147,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e147",
+      "copied_context": false
+    },
+    {
+      "id": "e149",
+      "index": 148,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e147",
+      "copied_context": false
+    },
+    {
+      "id": "e150",
+      "index": 149,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e151",
+      "index": 150,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e152",
+      "index": 151,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e151",
+      "copied_context": false
+    },
+    {
+      "id": "e153",
+      "index": 152,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e151",
+      "copied_context": false
+    },
+    {
+      "id": "e154",
+      "index": 153,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e155",
+      "index": 154,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e156",
+      "index": 155,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e155",
+      "copied_context": false
+    },
+    {
+      "id": "e157",
+      "index": 156,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e158",
+      "index": 157,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e159",
+      "index": 158,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e158",
+      "copied_context": false
+    },
+    {
+      "id": "e160",
+      "index": 159,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e158",
+      "copied_context": false
+    },
+    {
+      "id": "e161",
+      "index": 160,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e158",
+      "copied_context": false
+    },
+    {
+      "id": "e162",
+      "index": 161,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e163",
+      "index": 162,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e164",
+      "index": 163,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e165",
+      "index": 164,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e164",
+      "copied_context": false
+    },
+    {
+      "id": "e166",
+      "index": 165,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e164",
+      "copied_context": false
+    },
+    {
+      "id": "e167",
+      "index": 166,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e168",
+      "index": 167,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e169",
+      "index": 168,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e168",
+      "copied_context": false
+    },
+    {
+      "id": "e170",
+      "index": 169,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e168",
+      "copied_context": false
+    },
+    {
+      "id": "e171",
+      "index": 170,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e172",
+      "index": 171,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e173",
+      "index": 172,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e172",
+      "copied_context": false
+    },
+    {
+      "id": "e174",
+      "index": 173,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e172",
+      "copied_context": false
+    },
+    {
+      "id": "e175",
+      "index": 174,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e176",
+      "index": 175,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e177",
+      "index": 176,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e176",
+      "copied_context": false
+    },
+    {
+      "id": "e178",
+      "index": 177,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e176",
+      "copied_context": false
+    },
+    {
+      "id": "e179",
+      "index": 178,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e180",
+      "index": 179,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e181",
+      "index": 180,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e180",
+      "copied_context": false
+    },
+    {
+      "id": "e182",
+      "index": 181,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e180",
+      "copied_context": false
+    },
+    {
+      "id": "e183",
+      "index": 182,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e184",
+      "index": 183,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e185",
+      "index": 184,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e184",
+      "copied_context": false
+    },
+    {
+      "id": "e186",
+      "index": 185,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e184",
+      "copied_context": false
+    },
+    {
+      "id": "e187",
+      "index": 186,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e188",
+      "index": 187,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e189",
+      "index": 188,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e188",
+      "copied_context": false
+    },
+    {
+      "id": "e190",
+      "index": 189,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e188",
+      "copied_context": false
+    },
+    {
+      "id": "e191",
+      "index": 190,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e192",
+      "index": 191,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e193",
+      "index": 192,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e192",
+      "copied_context": false
+    },
+    {
+      "id": "e194",
+      "index": 193,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e192",
+      "copied_context": false
+    },
+    {
+      "id": "e195",
+      "index": 194,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e196",
+      "index": 195,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e197",
+      "index": 196,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e196",
+      "copied_context": false
+    },
+    {
+      "id": "e198",
+      "index": 197,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e196",
+      "copied_context": false
+    },
+    {
+      "id": "e199",
+      "index": 198,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e200",
+      "index": 199,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e201",
+      "index": 200,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e200",
+      "copied_context": false
+    },
+    {
+      "id": "e202",
+      "index": 201,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e203",
+      "index": 202,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e204",
+      "index": 203,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e203",
+      "copied_context": false
+    },
+    {
+      "id": "e205",
+      "index": 204,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e203",
+      "copied_context": false
+    },
+    {
+      "id": "e206",
+      "index": 205,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e207",
+      "index": 206,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e208",
+      "index": 207,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e207",
+      "copied_context": false
+    },
+    {
+      "id": "e209",
+      "index": 208,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e207",
+      "copied_context": false
+    },
+    {
+      "id": "e210",
+      "index": 209,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e211",
+      "index": 210,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e212",
+      "index": 211,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e211",
+      "copied_context": false
+    },
+    {
+      "id": "e213",
+      "index": 212,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e211",
+      "copied_context": false
+    },
+    {
+      "id": "e214",
+      "index": 213,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e215",
+      "index": 214,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e216",
+      "index": 215,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e215",
+      "copied_context": false
+    },
+    {
+      "id": "e217",
+      "index": 216,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e215",
+      "copied_context": false
+    },
+    {
+      "id": "e218",
+      "index": 217,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e219",
+      "index": 218,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e220",
+      "index": 219,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e219",
+      "copied_context": false
+    },
+    {
+      "id": "e221",
+      "index": 220,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e219",
+      "copied_context": false
+    },
+    {
+      "id": "e222",
+      "index": 221,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e223",
+      "index": 222,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e224",
+      "index": 223,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e223",
+      "copied_context": false
+    },
+    {
+      "id": "e225",
+      "index": 224,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e223",
+      "copied_context": false
+    },
+    {
+      "id": "e226",
+      "index": 225,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e227",
+      "index": 226,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e228",
+      "index": 227,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e227",
+      "copied_context": false
+    },
+    {
+      "id": "e229",
+      "index": 228,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e230",
+      "index": 229,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e231",
+      "index": 230,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e230",
+      "copied_context": false
+    },
+    {
+      "id": "e232",
+      "index": 231,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e230",
+      "copied_context": false
+    },
+    {
+      "id": "e233",
+      "index": 232,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e234",
+      "index": 233,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e235",
+      "index": 234,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e234",
+      "copied_context": false
+    },
+    {
+      "id": "e236",
+      "index": 235,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e234",
+      "copied_context": false
+    },
+    {
+      "id": "e237",
+      "index": 236,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e238",
+      "index": 237,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e239",
+      "index": 238,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e240",
+      "index": 239,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e239",
+      "copied_context": false
+    },
+    {
+      "id": "e241",
+      "index": 240,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    },
+    {
+      "id": "e242",
+      "index": 241,
+      "kind": "message",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "copied_context": false
+    },
+    {
+      "id": "e243",
+      "index": 242,
+      "kind": "reasoning",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e242",
+      "copied_context": false
+    },
+    {
+      "id": "e244",
+      "index": 243,
+      "kind": "action",
+      "trajectory_id": "main",
+      "actor": "agent",
+      "parent_id": "e242",
+      "copied_context": false
+    },
+    {
+      "id": "e245",
+      "index": 244,
+      "kind": "feedback",
+      "trajectory_id": "main",
+      "actor": "environment",
+      "copied_context": false
+    }
+  ]
+}

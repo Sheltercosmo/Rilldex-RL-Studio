@@ -49,7 +49,7 @@ function harness(){
  const context=vm.createContext({
   make:(tag,text,cls)=>new Element(tag,text,cls),opt:(value,label)=>{const option=new Element('option',label);option.value=value;return option;},
   $:id=>{if(!nodes.has(id))nodes.set(id,new Element('div'));return nodes.get(id);},
-  state:{monitors:[]},options:{metrics:{},analysis_measures:{},observers:[],graph_observers:[]},view:'monitors',
+  state:{monitors:[]},options:{metrics:{},analysis_measures:{},observers:[],graph_observers:[]},view:'monitors',rewardView:false,inDashboardScope:()=>true,
   human:value=>String(value||'').replaceAll('_',' '),short:value=>String(value),failed:error=>{throw error;},
   configureKind:()=>{},applyPattern:()=>{},number:value=>String(value),
   URLSearchParams,location:{search:'',hash:'',href:''},history:{replaceState(){}},api:async()=>({added:[],existing:[]}),load:async()=>{},
@@ -93,6 +93,12 @@ test('coverage filters safely include paused snapshots with no coverage without 
  nodes.get('#monitor-availability').value='missing';
  assert.equal(c.filterMonitors([paused]).length,1);
  assert.equal(c.coverageView(paused).label,'Paused · saved values retained');
+});
+
+test('reward view keeps only reward checks in the selected scope',()=>{
+ const {context:c}=harness();c.rewardView=true;c.inDashboardScope=m=>m.id!=='other-scope';
+ const rows=[{id:'reward',group:'Reward integrity'},{id:'training',group:'Training'},{id:'other-scope',group:'Reward integrity'}];
+ assert.deepEqual(Array.from(c.filterMonitors(rows),r=>r.id),['reward']);
 });
 
 test('custom dashboard setup actions open the publisher guide instead of the monitor editor',()=>{

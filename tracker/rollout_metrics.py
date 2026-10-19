@@ -10,12 +10,12 @@ import math
 from .schema import digest, dumps, InputError
 from .capabilities import links
 
-VERSION = 'rollout-behavior/19'
+VERSION = 'rollout-behavior/20'
 DEFINITIONS = {
  'actions': ('Dispatched actions', 'Count of non-copied agent action events. Does not measure success.'),
  'agent_text_chars': ('Agent text characters', 'Characters in recorded non-copied agent prose; not tokens or hidden reasoning.'),
  'feedback_link_rate': ('Actions with a recorded response', 'Unique actions with source-linked feedback / all agent actions. A response is not success.'),
- 'exact_dispatch_repeat_rate': ('Repeated dispatch fraction', 'Actions whose tool, arguments and text appeared earlier in the same actor/trajectory / all agent actions. Not semantic repetition or waste.'),
+ 'exact_dispatch_repeat_rate': ('Repeated dispatch fraction', 'Actions whose tool, arguments and text appeared earlier in the same actor, trajectory and recorded context / all agent actions. Not semantic repetition or waste.'),
  'recorded_success': ('Source-reported task success', 'Explicit boolean verified_success in the normalized outcome; unavailable otherwise. No completion-text heuristic.'),
  'recorded_reward': ('Logged reward', 'Explicit finite producer score for one rollout. Its reward function and scale belong to the source experiment; not independent correctness, task success or semantic accuracy.'),
  'annotated_actions_fraction': ('Action annotation coverage', 'Unique source agent dispatches represented in this semantic map / all source agent dispatches.'),
@@ -87,7 +87,7 @@ def source_record(run):
     feedback=links(run); linked=[e['id'] for e in actions if feedback['by_action'].get(e['id'])]
     seen=set(); repeats=[]
     for e in actions:
-        key=(e['actor'],e['trajectory_id'],digest({k:e.get(k) for k in ('tool','arguments','text')}))
+        key=(e['actor'],e['trajectory_id'],e.get('context_id'),digest({k:e.get(k) for k in ('tool','arguments','text')}))
         if key in seen: repeats.append(e['id'])
         seen.add(key)
     success=run.get('outcome',{}).get('verified_success')
@@ -286,24 +286,29 @@ def ensure_current(store):
     This consumes immutable saved inputs, never an inference provider. Older
     observations and their exact graph/annotation identities remain retained.
     """
-    compatible=tuple('rollout-behavior/'+str(v) for v in range(6,19))
+    compatible=tuple('rollout-behavior/'+str(v) for v in range(6,20))
     with store.connect() as c:
         before=c.total_changes
         # Most source values are unchanged. Recompute only traces with attached
-        # producer reward sources; reuse other frozen v13 through v17 source contents.
+        # producer reward sources or recorded sessions whose native links changed.
         current_sources={r[0] for r in c.execute("SELECT run_id FROM rollout_measurements WHERE observer='source' AND json_extract(document,'$.schema')=?",(VERSION,))}
         for row in c.execute("""SELECT m.document,m.created_at,CASE WHEN EXISTS
             (SELECT 1 FROM json_each(r.document,'$.sources') s WHERE json_extract(s.value,'$.kind') IN ('harbor_trial_result','swe_rl_grading')) OR json_extract(r.document,'$.adapter') IN ('environment-episode','generation','tau-bench')
             OR json_extract(r.document,'$.raw.reward_evaluation') IS NOT NULL OR json_extract(r.document,'$.raw.healthbench_rubric_items') IS NOT NULL
             OR EXISTS (SELECT 1 FROM json_each(r.document,'$.events') e WHERE json_type(e.value,'$.reported_tool_error') IS NOT NULL)
+            OR EXISTS (SELECT 1 FROM json_each(r.document,'$.events') e WHERE json_extract(e.value,'$.context_id') IS NOT NULL)
             THEN r.document END source_document FROM rollout_measurements m JOIN runs r ON r.id=m.run_id
-            WHERE m.observer='source' AND json_extract(m.document,'$.schema') IN ('rollout-behavior/13','rollout-behavior/14','rollout-behavior/15','rollout-behavior/16','rollout-behavior/17','rollout-behavior/18')
+            WHERE m.observer='source' AND json_extract(m.document,'$.schema') IN ('rollout-behavior/13','rollout-behavior/14','rollout-behavior/15','rollout-behavior/16','rollout-behavior/17','rollout-behavior/18','rollout-behavior/19')
             AND NOT EXISTS (SELECT 1 FROM rollout_measurements current WHERE current.run_id=m.run_id AND current.observer='source'
               AND json_extract(current.document,'$.schema')=?)
             ORDER BY json_extract(m.document,'$.schema') DESC,m.created_at DESC""",(VERSION,)).fetchall():
             record=json.loads(row['document'])
             if record['run_id'] not in current_sources:
-                if row['source_document']:record=source_record(json.loads(row['source_document']))
+                if row['source_document']:
+                    run=json.loads(row['source_document']);record=source_record(run)
+                    if any(e.get('context_id') is not None for e in run['events']):
+                        from .graph_store import build as build_graph, save as save_graph
+                        save_graph(c,build_graph(run))
                 for key,params in environment_measures({}).items():record['metrics'].setdefault(key,measurement(**params))
                 for key in REWARD_DEFINITIONS:record['metrics'].setdefault(key,measurement(reason='No recognized evaluator feedback'))
                 for key in ('agent_verify_unit_share','agent_plan_unit_share'):
@@ -331,7 +336,7 @@ def ensure_current(store):
                 record['schema']=VERSION
                 source=source_records[run['id']]
                 for name,metric in source['metrics'].items():
-                    if name in REWARD_DEFINITIONS or name in ENVIRONMENT_DEFINITIONS:record['metrics'][name]=metric
+                    if name in REWARD_DEFINITIONS or name in ENVIRONMENT_DEFINITIONS or name in {'feedback_link_rate','exact_dispatch_repeat_rate'}:record['metrics'][name]=metric
                     else:record['metrics'].setdefault(name,metric)
                 record['metrics']['recorded_reward']=source['metrics']['recorded_reward']
                 record['reward_inspection_protocol']=source['reward_inspection_protocol']

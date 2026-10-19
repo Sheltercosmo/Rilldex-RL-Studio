@@ -117,7 +117,7 @@ window.trackerComparison = (() => {
     view.addEventListener('change',render);render();section.append(matrix);
     section.append(node('p','Each cell is a share of all observed adjacent pairs, averaged within tasks. Change colors: blue for increases and purple for decreases; neither means better. Unresolved purpose stays visible.','compare-details'));
     const coverage=node('details');coverage.append(node('summary','Sequence coverage and interpretation'),node('p',data.definition,'compare-details'));
-    for(const [side,cp] of [['before',pair.reference],['after',pair.checkpoint]]){const c=data.coverage[side];coverage.append(node('p',`${cp}: ${c.observed_pairs}/${c.possible_pairs} adjacent pairs observed; ${c.excluded_batch_pairs} excluded at tool batches; ${c.unresolved_pairs} involve unresolved purpose. ${c.eligible_rollouts}/${c.total_rollouts} rollouts in these tasks have sequence opportunities.`,'compare-details'));}
+    for(const [side,cp] of [['before',pair.reference],['after',pair.checkpoint]]){const c=data.coverage[side];coverage.append(node('p',`${cp}: ${c.observed_pairs}/${c.possible_pairs} adjacent pairs observed; ${c.excluded_order_pairs??c.excluded_batch_pairs} excluded for unknown order (${c.excluded_batch_pairs} at tool batches); ${c.unresolved_pairs} involve unresolved purpose. ${c.eligible_rollouts}/${c.total_rollouts} rollouts in these tasks have sequence opportunities.`,'compare-details'));}
     if(data.excluded_task_ids.length)coverage.append(node('p','Excluded tasks: '+data.excluded_task_ids.join(', '),'source-ref'));
     section.append(coverage);panel.append(section);
   }

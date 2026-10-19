@@ -2,7 +2,7 @@
 from collections import Counter
 from copy import deepcopy
 from .schema import InputError,digest
-from .capabilities import links
+from .capabilities import links, batch_key
 from .execution_reports import bound_responses
 from .plan_stage_material import dependencies as material_dependencies, VERSION as MATERIAL_VERSION
 
@@ -76,7 +76,7 @@ def build(run,document):
             previous=None;seen_stages=set();gap=[]
             for position,action in enumerate(sorted(scope,key=lambda e:e['index'])):
                 bs=bindings.get(action['id'],[]);sids=sorted({b['stage_id'] for b in bs})
-                parallel=batch_sizes.get((action['trajectory_id'],action.get('parent_id')),0)>1 or action.get('batch_size',0)>1
+                parallel=batch_sizes.get(batch_key(action),0)>1 or action.get('batch_size',0)>1
                 row={'position':position+1,'action_event_id':action['id'],'action_unit_ids':action_units.get(action['id'],[]),
                      'stage_ids':sids,'bindings':deepcopy(bs),'order_ambiguous':parallel,
                      'status':'assigned' if len(sids)==1 else 'multiple_stages' if sids else 'unassigned'}

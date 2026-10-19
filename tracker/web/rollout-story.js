@@ -4,6 +4,12 @@
  const mapAPI=typeof module!=='undefined'?require('./map-layout.js'):root.RolloutMapLayout;
  const text=v=>typeof v==='string'?v:v?.text||'';
  const clean=v=>text(v).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').trim();
+ // Display limits never change the source used by search, relationships or evidence.
+ function excerpt(value,maxChars=420,maxLines=6){
+  const raw=clean(value),head=raw.split(/\r?\n/).slice(0,maxLines).join('\n');
+  return head.length<raw.length||head.length>maxChars?head.slice(0,maxChars-1).trimEnd()+'…':head;
+ }
+ const headingText=value=>excerpt(clean(value).replace(/\s+/g,' '),160,1);
  const names={assesses:'Assesses feedback',uses_evidence:'Uses evidence',responds_to:'Responds to',revises:'Revises',changes_attempt_procedure:'Changes procedure',changes_attempt_prerequisite:'Changes prerequisite',attempts_local_adjustment:'Attempts a local change',adjustment_before_retry:'Change before retry',revisits_after_error_report:'Returns after an error report',completed_after_failed_call:'Completed call after failed call',same_work_target:'Same question or outcome',overlapping_work_scope:'Partly shared work',different_work_same_subject:'Different work on the same subject',alternative_procedure:'Alternative procedure',reconfigured_procedure:'Reconfigured procedure',uses_correction_from:'Uses an earlier correction',attempts_plan_step:'Attempts plan step',prepares_plan_step:'Prepares plan step',checks_plan_step:'Checks plan step',recorded_recheck_of:'Rechecks a criterion'};
  const changeTypes=new Set(['revises','changes_attempt_procedure','changes_attempt_prerequisite','attempts_local_adjustment','adjustment_before_retry','revisits_after_error_report','completed_after_failed_call','alternative_procedure','reconfigured_procedure','uses_correction_from']);
  const reactionTypes=new Set(['assesses','uses_evidence','responds_to']);
@@ -22,7 +28,8 @@
   const useful=lines.filter(s=>!/^\[(?:Python Interpreter:|Jupyter |this is the (?:beginning|end) of the file)/i.test(s)&&!/^\(this is the (?:beginning|end) of the file\)/i.test(s)&&!/^\S+@\S+:.*\$/.test(s));
   return useful.slice(0,3).join('\n').slice(0,260)||'No output text beyond environment metadata.';
  }
- function preview(value){
+ function preview(value){const result=responsePreview(value);return {...result,text:excerpt(result.text)};}
+ function responsePreview(value){
   const raw=clean(value);let data;
   try{data=JSON.parse(raw);}catch{const notable=diagnosticLines(raw.split(/[\r\n]+/).map(s=>s.trim())).length>0;return {kind:'text',label:notable?'Error / warning text · inspect context':raw?'Output excerpt':'Empty response',notable,text:raw?outputExcerpt(raw):'The response record contains no text.',raw};}
   // Describe fields, not execution success. Nested error strings may be retrieved content.
@@ -78,6 +85,7 @@
   for(const [i,m]of moments.entries()){
    m.number=i+1;m.nodes=members(m).sort((a,b)=>(a.ordinal??Infinity)-(b.ordinal??Infinity));
    m.title=m.actions.length>1?m.actions.map(n=>n.target||n.summary).join(' / '):m.actions[0]?.target||m.actions[0]?.summary||m.extras[0]?.target||m.extras[0]?.summary||(m.feedback.length?'Unpaired response':'Recorded contribution');
+   m.displayTitle=headingText(m.title);
    m.responses=m.feedback.map(n=>({node:n,...preview(n.properties.source?.text||n.properties.text),reactions:relations
     .filter(e=>reactionTypes.has(e.type)&&e.target===n.id&&byId.get(e.source)?.trajectory_id===n.trajectory_id)
     .map(e=>({edge:e,node:byId.get(e.source),momentId:owner.get(e.source).id,actor:actor(byId.get(e.source))}))}));
@@ -110,10 +118,10 @@
   const needle=query.trim().toLocaleLowerCase();
   return Boolean(included)&&(!needle||[m.title,...m.nodes.map(n=>clean(n.properties.source?.text||n.properties.text)||n.summary),...m.responses.flatMap(r=>r.reactions.map(a=>clean(a.node.properties.source?.text||a.node.properties.text)||a.node.summary))].join('\n').toLocaleLowerCase().includes(needle));
  }
- const api={project,preview,names,outputExcerpt,operation,matches};
+ const api={project,preview,names,outputExcerpt,operation,matches,excerpt};
  if(typeof module!=='undefined'){module.exports=api;return;}
  const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
- function disclosure(label,body){const d=node('details');d.append(node('summary',label),body);return d;}
+ function disclosure(label,body){const d=node('details');body.classList.add('rs-disclosure-body');body.tabIndex=0;body.setAttribute('role','region');body.setAttribute('aria-label',label);d.append(node('summary',label),body);return d;}
  function render(host,data,graph,openUnit,options={}){
   host.replaceChildren();const byMoment=new Map(data.moments.map(m=>[m.id,m])),cards=new Map();
   const heading=node('div',null,'rs-heading'),copy=node('div');copy.append(node('h2',data.counts.actions?'Attempts & results':'Activities & conclusions'),node('p',data.counts.actions?'Operation · returned evidence · recorded follow-up':'Expressed work in recording order, with its source content','rs-subtitle'));heading.append(copy,node('span',(data.counts.actions?data.counts.actions+' actions':data.counts.moments+' moments')+' · '+data.counts.changes+' change / return links','rs-basis'));host.append(heading);
@@ -139,7 +147,7 @@
   filter.value=options.filter||'all';if(!filter.value)filter.value='all';let focusedMoment=options.moment||'';
   const remember=()=>options.onChange?.({query:search.value,filter:filter.value,moment:focusedMoment});
   navigator.setAttribute('aria-label','Jump to story moment');const start=node('option','Jump to a moment…');start.value='';navigator.append(start);
-  for(const m of data.moments){const o=node('option',String(m.number).padStart(2,'0')+' · '+m.title);o.value=m.id;navigator.append(o);}
+  for(const m of data.moments){const o=node('option',String(m.number).padStart(2,'0')+' · '+m.displayTitle);o.value=m.id;navigator.append(o);}
   navigator.onchange=()=>{jump(navigator.value);navigator.value='';};tools.append(search,filter,navigator);host.append(tools);
   const stats=node('p',null,'rs-filter-note');stats.setAttribute('role','status');host.append(stats);
   function applyFilter(){let count=0;for(const m of data.moments){const show=matches(m,filter.value,search.value);cards.get(m.id).hidden=!show;if(show)count++;}
@@ -169,11 +177,11 @@
    if(!row.following.length){const missing=node('section');missing.append(node('p','No subsequent dispatch is recorded in this snapshot.'));grid.append(missing);}
    dialog.append(node('p','A reference or a changed command does not establish recovery. Compare the returned evidence against the same criterion.'));document.body.append(dialog);dialog.onclose=()=>{dialog.remove();if(trigger.isConnected)trigger.focus();};dialog.showModal();
   }
-  function content(n,label){const box=node('div',null,'rs-content'),raw=clean(n.properties.source?.text||n.properties.text),copy=raw||n.summary;box.append(node('small',label,'rs-eyebrow'),node('p',copy.slice(0,600)+(copy.length>600?'…':'')));if(copy.length>600)box.append(disclosure(raw?'Full contribution':'Full annotation',node('p',copy)));const b=node('button','Unit #'+n.ordinal+' ↗','rs-text-button');b.onclick=()=>inspectUnit(n.id,data.moments.find(m=>m.nodes.some(v=>v.id===n.id))?.id||'');if(n.ordinal)box.append(b);return box;}
+  function content(n,label){const box=node('div',null,'rs-content'),raw=clean(n.properties.source?.text||n.properties.text),copy=raw||n.summary;box.append(node('small',label,'rs-eyebrow'),node('p',excerpt(copy,600)));if(excerpt(copy,600)!==copy)box.append(disclosure(raw?'Full contribution':'Full annotation',node('p',copy)));const b=node('button','Unit #'+n.ordinal+' ↗','rs-text-button');b.onclick=()=>inspectUnit(n.id,data.moments.find(m=>m.nodes.some(v=>v.id===n.id))?.id||'');if(n.ordinal)box.append(b);return box;}
   function followupPanel(responses,m){
    const panel=node('div',null,'rs-followups');panel.append(node('small','Linked follow-up','rs-eyebrow'));
    for(const r of responses)for(const reaction of r.reactions){const box=node('div',null,'rs-followup'),from=reaction.node,target=byMoment.get(reaction.momentId),quote=clean(from.properties.source?.text||from.properties.text),copy=quote||from.summary;
-    box.append(node('span',reaction.edge.label+' · #'+from.ordinal+' → response #'+r.node.ordinal,'rs-followup-label'),node('p',copy.slice(0,420)+(copy.length>420?'…':''),'rs-followup-text'));
+    box.append(node('span',reaction.edge.label+' · #'+from.ordinal+' → response #'+r.node.ordinal,'rs-followup-label'),node('p',excerpt(copy),'rs-followup-text'));
     const links=node('div',null,'rs-followup-actions'),open=node('button','Read unit #'+from.ordinal+' ↗','rs-text-button');open.onclick=()=>inspectUnit(from.id,m.id);links.append(open);
     if(target&&target!==m){const next=node('button','Go to moment '+target.number+' →','rs-text-button');next.onclick=()=>jump(target.id);links.append(next);}box.append(links);
     const trail=options.feedbackTrail?.rows.find(row=>row.reference_unit_id===from.id&&row.feedback_unit_id===r.node.id);
@@ -188,13 +196,13 @@
   }
   for(const m of data.moments){
    const card=node('article',null,'rs-moment'+(m.hasSignal?' has-signal':''));card.tabIndex=-1;card.dataset.moment=m.id;cards.set(m.id,card);
-   const top=node('header'),num=node('span',String(m.number).padStart(2,'0'),'rs-number'),title=node('div');title.append(node('small',`${m.actor||'Source'} · ${m.trajectory||'main'} · ${m.basis}`),node('h3',m.title));top.append(num,title);card.append(top);
+   const top=node('header'),num=node('span',String(m.number).padStart(2,'0'),'rs-number'),title=node('div');title.append(node('small',`${m.actor||'Source'} · ${m.trajectory||'main'} · ${m.basis}`),node('h3',m.displayTitle));top.append(num,title);card.append(top);
    if(m.actions.length>1)card.append(node('p','Grouped dispatches · execution order is not established','rs-batch-note'));
    if(m.contributions.length){const context=node('div');for(const c of m.contributions)context.append(content(c,c.activity.toUpperCase()));card.append(disclosure('Agent context · '+m.contributions.map(c=>c.activity).join(', '),context));}
    const grid=node('div',null,'rs-attempts');
    for(const a of m.attempts){
     const action=a.node,attempt=node('section',null,'rs-attempt');attempt.setAttribute('aria-label','Action '+action.ordinal+' and linked evidence');
-    const dispatch=node('div',null,'rs-dispatch');dispatch.append(node('small',a.operation.basis+' · #'+action.ordinal,'rs-eyebrow'),node('p',a.operation.text.slice(0,420)+(a.operation.text.length>420?'…':''),'rs-operation'));
+    const dispatch=node('div',null,'rs-dispatch');dispatch.append(node('small',a.operation.basis+' · #'+action.ordinal,'rs-eyebrow'),node('p',excerpt(a.operation.text),'rs-operation'));
     const inspect=node('button','Unit #'+action.ordinal+' ↗','rs-text-button');inspect.onclick=()=>inspectUnit(action.id,m.id);dispatch.append(inspect);attempt.append(dispatch);
     if(a.repetition){const repeated=node('div',null,'rs-repeat-links');repeated.append(node('small',`${a.repetition.actionIds.length} identical dispatch records · inspect each result`));for(const id of a.repetition.momentIds){const other=byMoment.get(id),b=node('button',`Moment ${other.number}${id===m.id?' · here':''}`,'rs-text-button');b.type='button';b.disabled=id===m.id;b.onclick=()=>jump(id);repeated.append(b);}dispatch.append(repeated);}
     const outcomes=node('div',null,'rs-outcomes');
@@ -211,7 +219,7 @@
    if(!m.actions.length)for(const r of m.responses){const box=node('div',null,'rs-content');box.append(node('small','UNPAIRED FEEDBACK · '+r.label,'rs-eyebrow'),node('p',r.text.slice(0,420)+(r.text.length>420?'…':'')));if(r.text!==r.raw||r.raw.length>420)box.append(disclosure('Full response',node('pre',r.raw)));box.append(followupPanel([r],m));card.append(box);}
    for(const check of m.checks)card.append(node('p',`Recorded check · ${check.properties.criterion_id} · ${check.properties.result}`,'rs-check'));
    for(const n of m.nodes){for(const plan of mapAPI.declaredPlans(graph,n.id)){const list=node('ol',null,'rs-plan');for(const item of plan.snapshot.items)list.append(node('li',`${item.text||item.title||item.content||item.id} — ${item.status||'state not recorded'}`));card.append(node('strong','Declared task list · agent-reported states'),list);}}
-   if(m.links.length){const links=node('div',null,'rs-links'),groups=new Map();for(const l of m.links){const k=JSON.stringify([l.type,l.to]);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(l);}for(const rows of groups.values()){const l=rows[0],target=byMoment.get(l.to),b=node('button',l.label+(l.within?' · this moment':' → '+String(target.number).padStart(2,'0')+' '+target.title)+(rows.length>1?' · '+rows.length+' links':''));b.title=l.properties?.explanation||l.label;b.onclick=()=>jump(l.to);links.append(b);}card.append(links);}
+   if(m.links.length){const links=node('div',null,'rs-links'),groups=new Map();for(const l of m.links){const k=JSON.stringify([l.type,l.to]);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(l);}for(const rows of groups.values()){const l=rows[0],target=byMoment.get(l.to),b=node('button',l.label+(l.within?' · this moment':' → '+String(target.number).padStart(2,'0')+' '+target.displayTitle)+(rows.length>1?' · '+rows.length+' links':''));b.title=l.properties?.explanation||l.label;b.onclick=()=>jump(l.to);links.append(b);}card.append(links);}
    const evidence=node('div',null,'rs-evidence');
    for(const n of m.nodes){const row=node('div');row.append(node('h4',`${n.kind==='event'?'Record':'Unit'} ${n.ordinal||''} · ${n.activity}`),node('pre',clean(n.properties.source?.text||n.properties.text)||n.summary));const b=node('button','Open in Unit map','rs-text-button');b.onclick=()=>inspectUnit(n.id,m.id);row.append(b);evidence.append(row);}
    for(const l of m.links){const row=node('div');row.append(node('h4',l.label),node('p',l.properties?.explanation||'Saved relationship. No additional interpretation was added.'));for(const span of l.properties?.evidence||[])row.append(node('pre',span.text));evidence.append(row);}

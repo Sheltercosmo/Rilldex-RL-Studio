@@ -179,7 +179,7 @@ def build(source,decide,progress=None,*,version=CURRENT_VERSION,allow_partial=Fa
     from .diagnostic_worker import CallBudgetReached
     protocol(version)
     base.validate_input(source,max_chars=None)
-    selected_terms=[];term_ledger=[];findings=[];ledger=[];unresolved=0;finished=True
+    selected_terms=[];term_ledger=[];findings=[];ledger=[];unresolved=0;finished=True;selection_requests=0
     try:
         for req in term_requests(source):
             answers,key=decide(req)
@@ -188,6 +188,9 @@ def build(source,decide,progress=None,*,version=CURRENT_VERSION,allow_partial=Fa
                 if choice not in TERM_TYPES:raise InputError('Unknown instruction paragraph role')
                 term_ledger.append(dict(id=term['id'],selection=choice,request_hash=key))
                 if choice in {'task_requirement','unresolved'}:selected_terms.append(term)
+            selection_requests+=1
+            if progress:progress(dict(stage='requirement_extraction',requests_completed=selection_requests,
+                scan_requests=0,requirements_reviewed=len(term_ledger),selected_requirements=len(selected_terms)))
         for req in requests(source,selected_terms,version=version):
             answers,key=decide(req)
             for field,q in req['questions'].items():
@@ -200,7 +203,8 @@ def build(source,decide,progress=None,*,version=CURRENT_VERSION,allow_partial=Fa
                 finding['id']='requirement-finding-'+digest(finding)
                 findings.append(finding)
             ledger.append(dict(page=req['state']['page'],request_hash=key,questions=len(req['questions'])))
-            if progress:progress(dict(stage='requirement_scan',requests_completed=len(ledger),candidates=len(findings)))
+            if progress:progress(dict(stage='requirement_scan',requests_completed=selection_requests+len(ledger),
+                scan_requests=len(ledger),requirements_reviewed=len(term_ledger),selected_requirements=len(selected_terms),candidates=len(findings)))
     except CallBudgetReached:
         if not allow_partial or version==VERSION:raise
         finished=False
@@ -238,7 +242,7 @@ def audit(source,result,directory):
     return dict(exact_replay=True,candidates=len(result['findings']))
 
 
-def execute(source,directory,transport,*,version=CURRENT_VERSION):
+def execute(source,directory,transport,*,version=CURRENT_VERSION,progress=None):
     from .semantic_workspace import exclusive
     protocol(version);directory=Path(directory)
     with exclusive(directory):
@@ -247,7 +251,10 @@ def execute(source,directory,transport,*,version=CURRENT_VERSION):
         if (directory/'input.json').exists() and read(directory/'input.json')!=source:raise InputError('Workspace source changed')
         write(directory/'input.json',source)
         engine=Pipeline(directory,None,transport)
-        result=build(source,engine.decide,lambda row:write(directory/'search-progress.json',row),version=version,allow_partial=True)
+        def checkpoint(row):
+            write(directory/'search-progress.json',row)
+            if progress:progress(row)
+        result=build(source,engine.decide,checkpoint,version=version,allow_partial=True)
         write(directory/'result.json',result)
         return result
 

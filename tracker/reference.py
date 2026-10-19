@@ -15,8 +15,10 @@ from .jev import packet, QUESTIONS, JEV_HARNESS, JevClient, selection_profile
 from .observe import analyze, MODES, HARNESS_VERSION
 from .schema import InputError, digest
 from .sequence import observe as sequence
+from .capabilities import recorded_scope
 
-REFERENCE_VERSION = "reference-benchmark/1"
+REFERENCE_VERSION = "reference-benchmark/2"
+LEGACY_REFERENCE_VERSION = "reference-benchmark/1"
 FIELDS = ("mode", "feedback_response")
 
 
@@ -97,11 +99,12 @@ def prepare(bundles, output, *, group_map=None, per_run=12, seed="reference-pilo
             # and separately assess the exact bounded inspector context.
             # Model labels, policy metadata, final reward and future results are
             # excluded. Raw trace text itself may still reveal model identity.
-            prefix = [{k: deepcopy(e[k]) for k in ("id", "index", "kind", "text", "source_pointer", "trajectory_id", "copied_context", "tool", "arguments", "parent_id", "call_id", "source_call_id", "related_action_ids", "media") if k in e}
-                      for e in run["events"] if e["trajectory_id"] == action["trajectory_id"] and e["index"] <= action["index"]]
+            prefix = [{k: deepcopy(e[k]) for k in ("id", "index", "kind", "text", "source_pointer", "trajectory_id", "context_id", "actor", "order_known", "source_message_index", "batch_size", "copied_context", "tool", "arguments", "parent_id", "call_id", "source_call_id", "related_action_ids", "media") if k in e}
+                      for e in sorted(run["events"],key=lambda e:e['index'])
+                      if recorded_scope(e) == recorded_scope(action) and e["index"] <= action["index"]]
             case = {"case_id": digest([REFERENCE_VERSION, rid, eid])[:24], "run_id": rid,
                     "event_id": eid, "source_hash": source_hash,
-                    "group": group, "split": split, "trajectory_id": action["trajectory_id"],
+                    "group": group, "split": split, "trajectory_id": action["trajectory_id"], "context_id":action.get('context_id'),
                     "fields": {f: deepcopy(QUESTIONS[f]) for f in FIELDS},
                     "available_prefix": prefix, "inspector_state": request["state"],
                     "request_hash": digest(request),
@@ -124,7 +127,7 @@ def prepare(bundles, output, *, group_map=None, per_run=12, seed="reference-pilo
         inventory.append({"run_id": rid, "group": group, "split": split, "exposure": exposure,
                           "task_id": task, "adapter": run["adapter"], "adapter_version": run["adapter_version"],
                           "source_uri": metadata.get("source_uri"), "reference_scope": grouping.get("reference_scope", "unspecified"),
-                          "actions": [{k: a[k] for k in ("event_id", "trajectory_id", "index", "parent_id", "feedback_opportunity")} for a in actions],
+                          "actions": [{k: deepcopy(a[k]) for k in ("event_id", "trajectory_id", "context_id", "actor", "index", "parent_id", "source_message_index", "order_known", "batch_size", "feedback_opportunity") if k in a} for a in actions],
                           "case_ids": run_cases, "source_events": len(by_id), "selected_actions": len(selected),
                           "complete_action_sample": len(selected) == len(actions),
                           "selection_probability": min(1, per_run / len(actions)) if per_run and actions else 1,
@@ -183,10 +186,13 @@ def _rates(records, choices):
 def _closure(actions):
     actors = defaultdict(list)
     for action in actions:
-        actors[action["trajectory_id"]].append(action)
+        actors[recorded_scope(action)].append(action)
     output = {}
-    for actor, rows in actors.items():
-        if any(a["mode"] == "unresolved" for a in rows) or sequence(rows)["summary"]["excluded_batch_pairs"]:
+    for (trajectory,context), rows in actors.items():
+        actor = trajectory if context is None else json.dumps([trajectory,context],ensure_ascii=False)
+        if all(type(a.get('index')) is int for a in rows):
+            rows = sorted(rows,key=lambda a:a['index'])
+        if any(a["mode"] == "unresolved" or a.get('order_known') is False or (a.get('batch_size') or 0)>1 for a in rows) or sequence(rows)["summary"]["excluded_order_pairs"]:
             output[actor] = "unresolved"
             continue
         checks = [i for i,a in enumerate(rows) if a["mode"] == "verify"]
@@ -199,7 +205,7 @@ def evaluate(directory, labels_path=None, predictions_path=None, *, split="holdo
         raise InputError("Choose development or holdout explicitly")
     directory = Path(directory)
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8-sig"))
-    if manifest.get("version") != REFERENCE_VERSION or manifest.get("contracts", {}).get("version") != CONTRACT_VERSION:
+    if manifest.get("version") not in {REFERENCE_VERSION,LEGACY_REFERENCE_VERSION} or manifest.get("contracts", {}).get("version") != CONTRACT_VERSION:
         raise InputError("Unsupported reference or measurement version")
     if digest({k:v for k,v in manifest.items() if k != "manifest_hash"}) != manifest.get("manifest_hash"):
         raise InputError("Reference manifest changed")
@@ -315,7 +321,7 @@ def evaluate(directory, labels_path=None, predictions_path=None, *, split="holdo
                       "eligible_pairs": count,
                       "closure": {"reference": _closure(reference_actions), "prediction": _closure(predicted_actions),
                                   "scope": "Recorded sequence only; trajectory completion and artifact freshness are not established."}})
-    return {"version": REFERENCE_VERSION, "manifest_hash": manifest["manifest_hash"], "split": split,
+    return {"version": REFERENCE_VERSION, "source_version":manifest['version'], "manifest_hash": manifest["manifest_hash"], "split": split,
             "status": "no_reference_labels" if not any(records.values()) else "reference_evaluated",
             "selected_cases": len(selected), "reference_groups": sorted({r["group"] for rs in records.values() for r in rs}),
             "metrics": summaries, "context_slices": context, "adapter_slices": adapter_slices,
