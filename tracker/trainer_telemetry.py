@@ -13,8 +13,9 @@ from .schema import InputError, digest, dumps
 
 VERSION = 'trainer-telemetry/1'
 LINKED_VERSION = 'trainer-telemetry/2'
-MAPPING = 'native-trainer-metrics/1'
+MAPPING = 'native-trainer-metrics/2'
 GROUPS = ('loss', 'entropy', 'kl', 'clipping', 'tokens', 'throughput')
+EXTRA_GROUPS = ('gradients', 'mismatch', 'reward', 'systems')
 
 
 def metric(label, group, unit, reduction, definition):
@@ -63,6 +64,9 @@ VERL = {
 }
 VERL['actor/entropy_loss'] = {**VERL['actor/entropy'], 'label':'Actor entropy loss component'}
 VERL['kl_loss'] = dict(VERL['actor/kl_loss'])
+TRL['grad_norm'] = metric('Gradient norm', 'gradients', 'native norm', 'trainer-reported norm', 'Gradient norm emitted by the trainer. Norm type, distributed reduction and clipping boundary follow the recorded trainer version; not a policy divergence measure.')
+VERL['actor/grad_norm'] = metric('Actor gradient norm', 'gradients', 'native norm', 'actor-reported norm', 'Actor gradient norm as emitted by the native optimizer path; norm type, distributed reduction and clipping boundary depend on the recorded trainer implementation.')
+VERL['critic/grad_norm'] = {**VERL['actor/grad_norm'], 'label':'Critic gradient norm', 'definition':'Critic gradient norm as emitted by the native optimizer path; separate from actor gradients.'}
 PROFILES = {'trl-grpo': TRL, 'trl-ppo': {**TRL, **PPO}, 'verl': VERL, 'custom': {}}
 
 
@@ -123,7 +127,7 @@ def validate(packet):
             if not isinstance(m, dict) or set(m) != {'label','group','unit','reduction','definition','value','status'}:
                 raise InputError('Metric needs its definition, value and status')
             for k in ('label','group','unit','reduction','definition'): text(m[k], k)
-            if m['group'] not in {*GROUPS,'other'}: raise InputError('Invalid metric group')
+            if m['group'] not in {*GROUPS,*EXTRA_GROUPS,'other'}: raise InputError('Invalid metric group')
             if m['status'] not in {'recorded','missing','nonfinite','invalid'}: raise InputError('Invalid metric status')
             v = m['value']
             if m['status'] == 'recorded':
@@ -252,6 +256,53 @@ class TrainerTelemetry:
         value = packet(logs,step=step,split=split,record_id=record_id,training_uses=training_uses,**self.context)
         if value is None: return {'skipped':'No scalar metrics'}
         if hasattr(self.target,'log_telemetry'): return self.target.log_telemetry(value['experiment'],value['records'],schema=value['schema'])
+        return receive(self.target,value)
+
+    def log_policy_comparison(self, behavior_logprobs, learner_logprobs, *, mask, step,
+                              basis, record_id=None, training_uses=None,
+                              probability_thresholds=(), ratio_bounds=None):
+        """Compare already aligned, detached token log-probabilities; no forward pass.
+
+        ``basis`` describes the comparison protocol, including distribution and
+        mask semantics. Record actual policy/backend versions on execution spans.
+        These sampled gaps are not reference KL or proof of quantization error.
+        """
+        from .policy_comparison import compare_probabilities
+        text(basis,'comparison basis')
+        report=compare_probabilities(behavior_logprobs,learner_logprobs,mask,
+            probability_thresholds=probability_thresholds,ratio_bounds=ratio_bounds)
+        logs={'comparison/'+k:v for k,v in report.items() if k not in ('ratio','thresholds')}
+        meanings={
+            'comparison/mean_absolute_gap':('Mean absolute log-probability gap','nats','Mean |learner log p − behavior log p| over included sampled tokens.'),
+            'comparison/mean_signed_gap':('Mean signed log-probability gap','nats','Mean learner log p − behavior log p over included sampled tokens; not a distributional KL.'),
+            'comparison/max_absolute_gap':('Maximum log-probability gap','nats','Maximum absolute gap over included sampled tokens.'),
+            'comparison/token_weight_ess_fraction':('Token importance-weight ESS fraction','fraction','(sum w)^2 / (N × sum w²), w = exp(learner log p − behavior log p). A token-weight concentration diagnostic, not the trainer objective or independent-sample ESS.'),
+            'comparison/compared_tokens':('Compared tokens','tokens','Included aligned token positions in this comparison.'),
+            'comparison/mean_probability_gap':('Mean probability gap','probability','Mean absolute learner-versus-behavior sampled-token probability difference; not full-vocabulary total variation or KL.'),
+            'comparison/p95_probability_gap':('95th percentile probability gap','probability','Nearest-rank 95th percentile absolute probability difference over included tokens.'),
+            'comparison/max_probability_gap':('Maximum probability gap','probability','Largest absolute learner-versus-behavior sampled-token probability difference.')}
+        def diagnostic(prefix,item,rule):
+            fields={'excluded_tokens':('Excluded tokens','tokens'),'excluded_fraction':('Excluded fraction','fraction'),
+                    'probability_only_tokens':('Probability rule only','tokens'),'ratio_only_tokens':('Ratio rule only','tokens'),
+                    'disagreement_fraction':('Mask disagreement','fraction')}
+            for field,(label,unit) in fields.items():
+                if field not in item:continue
+                name=prefix+'/'+field;logs[name]=item[field]
+                meanings[name]=(label+' · '+rule,unit,'Replayed mask rule: '+rule+'. '+label+' over the supplied base-mask tokens. Fractions use all compared tokens. This is not the actual trainer mask or a prediction of training outcomes.')
+        ratio=report['ratio']
+        band=''
+        if ratio:
+            low,high=ratio['bounds'];band=f'ratio outside [{low:g}, {high:g}]'
+            diagnostic('comparison/ratio/'+repr(low)+'/'+repr(high),ratio,band)
+        for item in report['thresholds']:
+            threshold=item['threshold'];rule=f'probability gap > {threshold:g}'
+            if band:rule+=' versus '+band
+            diagnostic('comparison/probability/'+repr(threshold)+(('/ratio/'+repr(ratio['bounds'][0])+'/'+repr(ratio['bounds'][1])) if ratio else ''),item,rule)
+        definitions={key:metric(label,'mismatch',unit,'declared comparison mask',definition+' Basis: '+basis)
+                     for key,(label,unit,definition) in meanings.items()}
+        context={**self.context,'definitions':{**(self.context['definitions'] or {}),**definitions}}
+        value=packet(logs,step=step,record_id=record_id,training_uses=training_uses,**context)
+        if hasattr(self.target,'log_telemetry'):return self.target.log_telemetry(value['experiment'],value['records'],schema=value['schema'])
         return receive(self.target,value)
 
     def transformers_callback(self):

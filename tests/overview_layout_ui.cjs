@@ -1,0 +1,72 @@
+// Run against the isolated execution/training-signals fixture workspace.
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict');
+const base=process.env.REVIEW_TEST_URL,output=process.env.REVIEW_OUTPUT_DIR;
+(async()=>{
+ const browser=await chromium.launch({headless:true,channel:'msedge'}),errors=[],checks=[];
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:1100}});
+  page.on('pageerror',e=>errors.push(e.message));
+  const nav=page.locator('#overview-tabs');
+  await page.goto(base+'/?experiment=synthetic-execution-signals');
+  await page.waitForFunction(()=>document.querySelector('#summary-native-count')?.textContent==='64');
+  assert.equal(await page.locator('.telemetry-preview-card').count(),3);
+  assert.equal(await page.locator('#monitor-grid .metric-card').count(),3);
+  assert.ok(await page.getByRole('heading',{name:'Rollout behavior',exact:true}).isVisible());
+  assert.ok(await page.getByRole('heading',{name:'Collection & execution',exact:true}).isVisible());
+  assert.equal(await page.locator('#measure-browser').isVisible(),false);
+  assert.equal(await page.locator('#health-view').isVisible(),false);
+  assert.equal(await page.locator('#training-execution').isVisible(),false);
+  assert.equal(await nav.locator('[aria-current=page]').count(),1);
+  if(output)await page.screenshot({path:output+'/overview-summary-desktop.png',fullPage:true});
+  checks.push('Combined summary has bounded trainer/behavior previews, visible section labels and exact entry links');
+  await page.getByRole('link',{name:'View measurement coverage →',exact:true}).click();
+  await page.locator('#monitor-availability').waitFor({state:'visible'});
+  assert.equal(await page.locator('#monitor-availability').inputValue(),'missing');
+  assert.equal(await page.locator('#experiment').inputValue(),'synthetic-execution-signals');
+  assert.equal(await page.locator('#trainer-telemetry').isVisible(),false);
+  assert.equal(await page.locator('#overview-workflow').isVisible(),false);
+  await page.locator('#monitor-availability').selectOption('all');
+  assert.equal(await page.locator('#monitor-grid .metric-card').count(),8);
+  assert.ok(await page.getByRole('combobox',{name:'Chart axis',exact:true}).isVisible());
+  await page.getByRole('link',{name:'Distributions',exact:true}).click();
+  await page.locator('#strategies-view').waitFor({state:'visible'});
+  assert.equal(await page.locator('#overview-context').isVisible(),false);
+  assert.equal(await nav.locator('[aria-current=page]').innerText(),'Behavior');
+  checks.push('Behavior retains all eight measures, coverage filtering, local chart axis and separate distribution view');
+  await nav.getByRole('link',{name:'Training',exact:true}).click();
+  await page.locator('.telemetry-aligned').waitFor();
+  assert.equal(await page.locator('#health-view').isVisible(),false);
+  await page.getByRole('link',{name:'Sample diagnostics',exact:true}).click();
+  await page.locator('#health-view.training-health').waitFor();
+  assert.equal(await page.locator('#trainer-telemetry').isVisible(),false);
+  assert.ok(new URL(page.url()).searchParams.get('health_panel')==='diagnostics');
+  await nav.getByRole('link',{name:'Execution',exact:true}).click();
+  await page.locator('.ex-block').first().waitFor();
+  assert.equal(await page.locator('#trainer-telemetry').isVisible(),false);
+  assert.equal(await page.locator('#experiment').inputValue(),'synthetic-execution-signals');
+  await nav.getByRole('link',{name:'Training data',exact:true}).click();
+  await page.locator('#training-view').waitFor({state:'visible'});
+  assert.equal(await nav.locator('[aria-current=page]').innerText(),'Training data');
+  checks.push('Training signals, sample diagnostics, execution and training data render independently with run scope preserved');
+  await nav.getByRole('link',{name:'Summary',exact:true}).click();
+  await page.locator('.telemetry-preview-card').first().waitFor();
+  for(const width of [1024,390]){
+   await page.setViewportSize({width,height:1000});
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No horizontal page overflow at '+width);
+   const cells=await page.locator('.dashboard-scope>label').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,right:r.right,y:r.y};}));
+   assert.equal(cells.length,2);assert.equal(cells[0].y,cells[1].y);
+   assert.ok(cells[0].right<=cells[1].x);
+   if(output&&width===390)await page.screenshot({path:output+'/overview-summary-mobile.png',fullPage:true});
+  }
+  await page.goto(base+'/?experiment=not-yet-recorded-demo');
+  await page.getByRole('link',{name:'Connect or import logs →',exact:true}).waitFor();
+  assert.ok(await page.getByRole('link',{name:'Connect rollout data →',exact:true}).isVisible());
+  assert.equal(await page.locator('#summary-native-count').innerText(),'0');
+  await page.goto(base+'/monitors?experiment=synthetic-execution-signals');
+  await page.getByRole('heading',{name:'Monitor registry',exact:true}).waitFor();
+  assert.equal(await nav.isVisible(),false);assert.equal(await page.locator('#overview-workflow').isVisible(),false);
+  checks.push('Desktop/tablet/mobile layouts fit; empty runs retain capture routes; Monitor management is unchanged');
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({checks,errors},null,2));
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

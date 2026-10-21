@@ -7,6 +7,8 @@ import math
 from .schema import InputError, digest, dumps
 
 VERSION = 'execution-records/1'
+TIMELINE_VERSION = 'execution-records/2'
+KINDS = ('rollout','inference','environment','verification','learner_update','weight_sync','configuration')
 STATES = ('queued','running','suspended','completed','failed','cancelled')
 TERMINAL = {'completed','failed','cancelled'}
 CONTEXT = ('split','framework','framework_version','environment','environment_version','harness','harness_version',
@@ -17,7 +19,7 @@ COLUMNS = ('producer','experiment','record_id','revision','kind','rollout_produc
            *CONTEXT,*METRICS,'source_revision','parent_producer','parent_id','retry_producer','retry_id',
            'observed_at','received_at','document_json','is_latest')
 EMPTY_SQL = 'SELECT '+','.join('NULL AS '+k for k in COLUMNS)+' WHERE 0'
-VIEW_SQL = '''SELECT e.producer,e.experiment,e.record_id,e.revision,e.kind,e.rollout_producer,e.rollout_id,e.state,
+VIEW_SQL = '''SELECT e.producer,e.experiment,e.record_id,e.revision,e.kind,NULLIF(e.rollout_producer,'') rollout_producer,NULLIF(e.rollout_id,'') rollout_id,e.state,
   '''+','.join("json_extract(e.document,'$.context."+k+"') "+k for k in CONTEXT)+','+','.join(
     "json_extract(e.document,'$.metrics."+k+"') "+k for k in METRICS)+''',
   json_extract(e.document,'$.source_revision') source_revision,
@@ -34,6 +36,7 @@ def initialize(connection):
       kind TEXT NOT NULL,rollout_producer TEXT NOT NULL,rollout_id TEXT NOT NULL,state TEXT NOT NULL,
       document TEXT NOT NULL,received_at TEXT NOT NULL,PRIMARY KEY(producer,experiment,record_id,revision));
       CREATE INDEX IF NOT EXISTS execution_rollout ON execution_records(experiment,rollout_producer,rollout_id);
+      CREATE TABLE IF NOT EXISTS execution_views (id TEXT PRIMARY KEY,created_at TEXT NOT NULL,document TEXT NOT NULL);
     ''')
 
 
@@ -49,24 +52,27 @@ def _reference(value, name):
 
 
 def validate(packet):
-    if not isinstance(packet,dict) or set(packet)!={'schema','producer','experiment','records'} or packet['schema']!=VERSION:
-        raise InputError('Use execution-records/1 with producer, experiment and records')
+    if not isinstance(packet,dict) or set(packet)!={'schema','producer','experiment','records'} or packet['schema'] not in (VERSION,TIMELINE_VERSION):
+        raise InputError('Use execution-records/1 or /2 with producer, experiment and records')
+    timeline = packet['schema'] == TIMELINE_VERSION
     _text(packet['producer'],'producer');_text(packet['experiment'],'experiment')
     if not isinstance(packet['records'],list) or not 1<=len(packet['records'])<=1000:
         raise InputError('Supply 1–1,000 execution records')
     seen=set()
     for r in packet['records']:
         required={'id','revision','kind','rollout','state','context','evidence'}
-        if not isinstance(r,dict) or not required<=set(r) or set(r)-required-{'parent','retry_of','source_revision','metrics','observed_at','reason'}:
+        optional = {'timing','configuration','policy','telemetry'} if timeline else set()
+        if not isinstance(r,dict) or not required<=set(r) or set(r)-required-{'parent','retry_of','source_revision','metrics','observed_at','reason'}-optional:
             raise InputError('Invalid execution record fields')
         _text(r['id'],'execution id');_text(r['evidence'],'capture evidence')
         if type(r['revision']) is not int or r['revision']<0:raise InputError('Execution revision must be a nonnegative integer')
         identity=(r['id'],r['revision'])
         if identity in seen:raise InputError('Duplicate execution identity in packet')
         seen.add(identity)
-        if r['kind'] not in ('rollout','inference','environment','verification'):raise InputError('Invalid execution kind')
+        if r['kind'] not in (KINDS if timeline else KINDS[:4]):raise InputError('Invalid execution kind')
         if r['state'] not in STATES:raise InputError('Invalid execution state')
-        _reference(r['rollout'],'rollout')
+        if r['rollout'] is not None or r['kind'] in KINDS[:4]:_reference(r['rollout'],'rollout')
+        if r['rollout'] is None and 'source_revision' in r:raise InputError('source_revision requires a rollout')
         for k in ('parent','retry_of'):
             if k in r:
                 _reference(r[k],k)
@@ -87,6 +93,31 @@ def validate(packet):
             if type(v) not in (int,float) or not math.isfinite(v) or v<0:raise InputError('Execution metrics must be finite and nonnegative')
             if k.endswith('_tokens') and type(v) is not int:raise InputError('Token counts must be integers')
         if 'duration_ms' in metrics and r['state'] not in TERMINAL:raise InputError('duration_ms is a terminal duration; use elapsed_ms for unfinished work')
+        if 'timing' in r:
+            timing = r['timing']
+            if not isinstance(timing,dict) or set(timing)!={'clock','start','end'}:raise InputError('timing needs clock, start and end (seconds; null end while unfinished)')
+            _text(timing['clock'],'timing clock')
+            for key in ('start','end'):
+                if key=='end' and timing[key] is None:continue
+                if type(timing[key]) not in (int,float) or not math.isfinite(timing[key]):raise InputError('Timing coordinates must be finite seconds')
+            if timing['end'] is not None and timing['end']<timing['start']:raise InputError('Timing end precedes start')
+            if r['state'] in TERMINAL and timing['end'] is None:raise InputError('A timed terminal execution needs an end')
+        if 'configuration' in r:
+            configuration=r['configuration']
+            try:valid=isinstance(configuration,dict) and len(dumps(configuration).encode())<=32768
+            except (TypeError,ValueError):valid=False
+            if not valid:raise InputError('configuration must be a finite JSON object of at most 32 KiB')
+        if 'policy' in r:
+            from .policy_age import validate_clock
+            validate_clock(r['policy'])
+        if 'telemetry' in r:
+            if not isinstance(r['telemetry'],list) or len(r['telemetry'])>1000:raise InputError('Supply at most 1,000 exact telemetry references')
+            refs=set()
+            for ref in r['telemetry']:
+                _reference(ref,'telemetry')
+                key=(ref['producer'],ref['id'])
+                if key in refs:raise InputError('Duplicate telemetry reference')
+                refs.add(key)
     return packet
 
 
@@ -99,6 +130,14 @@ def _compatible(old, new):
     if any(v!=high['context'].get(k) for k,v in low['context'].items()):return False
     if low['state'] in TERMINAL and high['state']!=low['state']:return False
     if low['state']!='queued' and high['state']=='queued':return False
+    for key in ('configuration','policy'):
+        if key in low and low[key]!=high.get(key):return False
+    if 'timing' in low:
+        a,b=low['timing'],high.get('timing',{})
+        if any(a[k]!=b.get(k) for k in ('clock','start')):return False
+        if a['end'] is not None and (b.get('end') is None or b['end']<a['end']):return False
+        if low['state'] in TERMINAL and a['end']!=b.get('end'):return False
+    if any(ref not in high.get('telemetry',[]) for ref in low.get('telemetry',[])):return False
     return True
 
 
@@ -114,8 +153,9 @@ def receive(store, packet):
             following=c.execute('SELECT document FROM execution_records WHERE producer=? AND experiment=? AND record_id=? AND revision>? ORDER BY revision LIMIT 1',(*key,r['revision'])).fetchone()
             if any(p and not _compatible(json.loads(p[0]),r) for p in (previous,following)):
                 raise ReviewConflict('Execution identity, context or lifecycle conflicts with retained evidence; use a new attempt/segment ID')
+            rollout=r['rollout'] or {'producer':'','id':''}
             inserted+=c.execute('INSERT OR IGNORE INTO execution_records VALUES (?,?,?,?,?,?,?,?,?,?)',
-                (*key,r['revision'],r['kind'],r['rollout']['producer'],r['rollout']['id'],r['state'],dumps(r),datetime.now(timezone.utc).isoformat())).rowcount
+                (*key,r['revision'],r['kind'],rollout['producer'],rollout['id'],r['state'],dumps(r),datetime.now(timezone.utc).isoformat())).rowcount
     return dict(id='execution-packet-'+digest(packet),revision=0,inserted=inserted,records=len(packet['records']))
 
 
@@ -126,7 +166,7 @@ Latency quantiles use nearest rank, with explicit measured/eligible counts.
 No cross-host timestamp subtraction, no training-clock inference.
 """
     _text(experiment,'experiment')
-    if kind not in ('rollout','inference','environment','verification'):raise InputError('Choose one execution kind')
+    if kind not in KINDS:raise InputError('Choose one execution kind')
     if not isinstance(group_by,(list,tuple)) or not group_by or len(group_by)>8 or len(set(group_by))!=len(group_by) or any(k not in CONTEXT for k in group_by):
         raise InputError('Choose 1–8 distinct execution context fields')
     with data.snapshot() as snapshot:

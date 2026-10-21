@@ -17,6 +17,8 @@ test('unsafe, external and non-page returns use a safe fallback',()=>{
 });
 test('section deep links resolve their containing panel, not the Setup fallback',()=>{
  assert.equal(N.captureView('#directory-section'), 'watch');
+ assert.equal(N.captureView('#telemetry-section'), 'code');
+ assert.equal(N.captureView('#execution-section'), 'code');
  assert.equal(N.captureView('#capture-bundle-receive'), 'import');
  assert.equal(N.captureView('#analysis-table-tools',['outputs']), 'outputs');
  assert.equal(N.captureView('#native-analysis-result',['outputs'],true), 'outputs');

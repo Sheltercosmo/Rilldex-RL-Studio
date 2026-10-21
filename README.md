@@ -9,7 +9,8 @@
 ## Highlights
 
 - **See what an agent did.** Connected maps of units, actions, feedback, expressed plans, branches and repeated attempts.
-- **Put behavior beside training signals.** Recovery, verification and unresolved work alongside loss, entropy, KL, clipping, tokens and throughput.
+- **Compare training runs.** Align reward, policy mismatch, loss, entropy, KL, clipping, tokens and throughput; select one interval across the charts.
+- **Connect training to behavior.** Follow worker activity, learner updates and their linked rollouts; inspect recovery, verification and unresolved work.
 - **Keep evidence within reach.** Chart values and saved investigations link to source records, relationships, coverage and definitions.
 - **Keep your own workflow.** Files, Python and HTTP input; a live SQLite workspace; code-defined monitors with optional UI.
 
@@ -23,7 +24,7 @@
 
 ![A report-production branch with Markdown drafting, PDF conversion and repeated attempts](docs/assets/demo/plans-and-attempts.svg)
 
-**Training overview:** compare reward, task outcomes and recheck success for the same cohort.
+**Rollout measures:** compare reward, task outcomes and recheck success for the same cohort.
 
 ![Reward, task success and recheck success across a clearly labeled 64-step training simulation](docs/assets/demo/training-signals.svg)
 
@@ -34,8 +35,11 @@ Figures use saved app content with navigation removed. Maps use a [public OpenHa
 | Capability | What you can do |
 | --- | --- |
 | Behavior maps | Move between activity units and higher-level work, plans and attempts; inspect the source behind each saved interpretation. |
-| Training overview | Follow rollout measures and native trainer curves with explicit populations, clocks, units and missing data. |
+| Training overview | Start with a combined summary, then open focused Training, Behavior, Execution or Training data views. |
+| Run comparisons | Compare up to three runs with aligned charts, raw values, step-based EMA, log scales and a shared interval. Inspect updates or export the displayed data. |
 | Trainer telemetry | Connect TRL GRPO/PPO callbacks, verl logger dictionaries or custom definitions. Preserve objective, version, writer and restart boundaries. |
+| Execution timeline | Inspect worker spans, failures, configuration and weight-sync events alongside linked signals and samples. Save a captured view or export it. |
+| Policy mismatch | Measure aligned token probability gaps and compare probability-based and ratio-based exclusion rules using existing log probabilities. No additional inference required. |
 | Monitor management | Use built-in measures, relationship queries and Python-defined monitors; inspect coverage and contributing cases. |
 | Reward hacking detection | Select common behavior checks or define reward-specific detectors; follow flagged rollouts and inspect their supporting evidence. |
 | Investigations | Compare intervals and populations, retain hypotheses, annotate run history and reopen saved evidence. |
@@ -93,6 +97,14 @@ trainer.add_callback(metrics.transformers_callback())
 
 For verl, choose `framework="verl"` and call `metrics.log(native_metrics, step=global_steps)` beside the existing reduced logger call. Other trainers and inference servers use `framework="custom"` with explicit metric definitions. Existing logs use `rilldex telemetry import`. [Live, batch and custom examples →](docs/TRAINER_TELEMETRY.md)
 
+### Inspect a run
+
+Select the experiment in **Overview**. **Summary** previews training signals and rollout measures; **Training → Training signals** opens the full comparison board. Add runs with **Compare run**, select an interval, then **Inspect updates** to open logs and linked rollout evidence. Ordinary trainer logs are enough to start.
+
+**Behavior** contains measures, distributions and strategy profiles. **Execution** shows timing recorded with `ExecutionRecorder`; **Training data** follows generation, scoring, selection and learner use. Each view keeps the selected experiment and environment. [Execution capture and probability comparisons →](docs/TRAINER_TELEMETRY.md#execution-and-training-signals)
+
+Comparisons retain recorded clocks, populations and metric definitions. Training steps do not imply equal compute; sampled probability gaps are not full-distribution KL. Replayed exclusion rules describe supplied tokens, not predicted training outcomes.
+
 ## Model setup
 
 Collection, conventional telemetry, source maps and analysis need **no LLM**. Semantic observation separates candidate generation from finite-choice decisions:
@@ -147,6 +159,7 @@ ws = Workspace("study.sqlite", experiment="run-a")
 units = ws.units().rows
 relations = ws.relations(target_activity="revise").rows
 trainer_logs = ws.telemetry().rows
+execution = ws.execution_view()  # recorded spans and linked logs/samples
 loss = ws.sql("""
     SELECT step, session,
            json_extract(record_json, '$.metrics.loss.value') AS loss

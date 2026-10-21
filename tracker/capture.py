@@ -101,10 +101,10 @@ class Outbox:
         packet=validate({'schema':schema or VERSION,'producer':self.producer,'experiment':experiment,'records':records})
         return self._enqueue([{'rollout_id':'@training/'+digest(packet),'training_records':packet}])[0]
 
-    def log_execution(self, experiment, records):
+    def log_execution(self, experiment, records, *, schema=None):
         """Durably queue lifecycle facts without waiting for traces or other workers."""
         from .execution_records import VERSION, validate
-        packet=validate(dict(schema=VERSION,producer=self.producer,experiment=experiment,records=records))
+        packet=validate(dict(schema=schema or VERSION,producer=self.producer,experiment=experiment,records=records))
         return self._enqueue([{'rollout_id':'@execution/'+digest(packet),'execution_records':packet}])[0]
 
     def log_telemetry(self, experiment, records, *, schema=None):

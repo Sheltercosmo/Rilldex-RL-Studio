@@ -13,7 +13,7 @@
  }
  function title(path){return names[new URL(path,'http://workspace.local').pathname]||'workspace';}
  function captureView(hash,views=[],recipe=false){
-  const id=hash.replace(/^#/,''),routes={'setup-section':'setup','snapshot-section':'import','capture-bundle-receive':'import','directory-section':'watch','worker-section':'workers','code-section':'code','telemetry-section':'code','training-setup':'config','question-section':'readiness','data-access-section':'outputs','analysis-code':'outputs','workspace-transfer':'outputs'};
+  const id=hash.replace(/^#/,''),routes={'setup-section':'setup','snapshot-section':'import','capture-bundle-receive':'import','directory-section':'watch','worker-section':'workers','code-section':'code','telemetry-section':'code','execution-section':'code','training-setup':'config','question-section':'readiness','data-access-section':'outputs','analysis-code':'outputs','workspace-transfer':'outputs'};
   return routes[id]||views[0]||(recipe?'readiness':'setup');
  }
  function install(){

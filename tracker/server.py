@@ -191,10 +191,17 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if path == '/api/trainer-telemetry/evidence':
                     from .telemetry_evidence import evidence
                     return self.response(200,evidence(store,**{k:params.get(k,[''])[0] for k in ('producer','experiment','record_id')}))
+                if path == '/api/training-execution':
+                    from . import execution_timeline
+                    if 'saved' in params:return self.response(200,execution_timeline.load(store,params['saved'][0]))
+                    options={'experiment':params.get('experiment',[''])[0],**{k:params[k][0] for k in ('environment','clock') if k in params}}
+                    options.update({k:float(params[k][0]) for k in ('start','end') if k in params})
+                    options['limit']=int(params.get('limit',['1000'])[0])
+                    return self.response(200,execution_timeline.snapshot(store,**options))
                 if path == '/api/trainer-telemetry':
                     from .trainer_telemetry import snapshot
                     return self.response(200,snapshot(store,experiment=params.get('experiment',[None])[0],environment=params.get('environment',[None])[0],limit=int(params.get('limit',['1000'])[0])))
-                if path in {'/trainer-telemetry.js','/trainer-telemetry.css'}:
+                if path in {'/trainer-telemetry.js','/trainer-telemetry.css','/training-execution.js','/training-execution.css'}:
                     return self.response(200,(WEB/path.lstrip('/')).read_bytes(),'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
                 if path == '/api/training-health':
                     from .training_health import snapshot
@@ -767,6 +774,11 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if self.path == '/api/execution-records':
                     from .execution_records import receive
                     return self.response(200,receive(store,body))
+                if self.path == '/api/training-execution/save':
+                    from .execution_timeline import save
+                    if not isinstance(body,dict) or 'experiment' not in body or set(body)-{'experiment','environment','clock','start','end','limit'}:
+                        raise InputError('Supply an experiment and execution interval')
+                    return self.response(200,save(store,**body))
                 if self.path == '/api/generation-cohorts':
                     from .generation_cohorts import receive
                     return self.response(200,receive(store,body))

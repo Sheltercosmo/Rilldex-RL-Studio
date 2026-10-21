@@ -202,6 +202,17 @@ Each call sees fresh committed data; joins within one call share a read snapshot
 
     def telemetry(self,**filters): return self.table('trainer_telemetry',**filters)
 
+    def execution_view(self, *, saved=None, **selection):
+        """Read synchronized execution evidence without running a UI or model."""
+        from .store import ReadSnapshot
+        from . import execution_timeline
+        if not saved and not self.scope['experiment']:raise InputError('Select one experiment')
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Execution views require the live workspace or a full restore')
+            store=ReadSnapshot(self.data.path,source.c)
+            if saved:return execution_timeline.load(store,saved)
+            return execution_timeline.snapshot(store,experiment=self.scope['experiment'],environment=self.scope.get('environment'),**selection)
+
     def telemetry_evidence(self,*,producer,record_id):
         """Resolve a native log's explicit use references in one read snapshot."""
         from .store import ReadSnapshot

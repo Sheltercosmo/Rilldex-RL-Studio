@@ -25,6 +25,7 @@ test('source-only map explains missing semantic layers and retains experiment in
  assert.equal(all(host).filter(n=>n.tag==='button').length,0);
  const link=all(host).find(n=>n.textContent==='Behavior measures →');
  assert.equal(new URL(link.href,'http://localhost').searchParams.get('experiment'),'test / alpha');
+ assert.equal(new URL(link.href,'http://localhost').searchParams.get('view'),'measures');
 });
 test('source map offers an explicit saved-observer switch without invoking any new inference',()=>{
  const source={observer:'source',coverage:{semantic_relations:'unavailable'}};

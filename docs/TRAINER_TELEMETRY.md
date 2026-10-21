@@ -1,6 +1,10 @@
 # Trainer metrics
 
-Loss, entropy, KL, clipping, tokens and throughput appear in **Training overview → Trainer metrics**, next to rollout behavior. Pick a series to choose its trainer, objective, split, writer and session. Open **Definition & source** for the native key, unit and reduction. Click a point for its exact saved log identity. **Export values** downloads the current bounded view.
+Open **Overview → Training → Training signals**. Summary shows a compact preview; the Training view contains the full comparison controls. Select a run, then **Compare run** to overlay up to three runs on the same recorded-step axis. Matching recorded definitions and population labels share a chart; this does not establish matched task composition. Use **Add metric** for additional signals.
+
+Drag an interval or enter step bounds to align every chart and hold the displayed data. **Inspect updates** opens the recorded logs and linked rollouts. **Resume updates** returns to live refresh; **Export comparison** preserves the displayed data and settings. Links open the execution timeline, behavior measures and capture setup with the run selected.
+
+Raw points remain visible beneath optional EMA trends. Smoothing uses a half-life in recorded steps, resets at missing observations, and is computed before interval selection. It starts at the earliest loaded record. Choose **Log** per chart for signals spanning orders of magnitude. Recorded-step comparisons do not imply equal wall time or compute.
 
 ## Connect a running trainer
 
@@ -57,7 +61,72 @@ metrics = TrainerTelemetry(
 metrics.log({"server/output_tokens_per_s": 1250.0}, step=42)
 ```
 
-Groups: `loss`, `entropy`, `kl`, `clipping`, `tokens`, `throughput`, `other`. Unknown numeric keys are retained as unmapped native scalars and available in Python/exports. No guessed aliases or derived throughput are applied. Pass `environment=` only when the entire logged population belongs to that environment; mixed-environment batches should retain `unspecified` or an explicit mixture name.
+Groups: `loss`, `entropy`, `kl`, `clipping`, `tokens`, `throughput`, `gradients`, `mismatch`, `reward`, `systems`, `other`. Unmapped numeric keys are also selectable in the dashboard. No guessed aliases or derived throughput are applied. Pass `environment=` only when the entire logged population belongs to that environment.
+
+## Execution and training signals
+
+In **Overview → Execution**, use **Curves → Raw + EMA** to show trends alongside
+every raw point. This timeline's EMA uses logged points, starts at the selected
+interval and resets at gaps. Each chart
+offers **Y scale → Log**; nonpositive points are counted, not clamped. Point
+inspection and numeric readouts always use raw measurements.
+
+`log_policy_comparison(..., probability_thresholds=[0.2, 0.3], ratio_bounds=[0.2, 5])`
+adds probability-gap tails and exclusion/disagreement counts to **Policy mismatch**.
+Supply aligned, detached natural-log probabilities with the same normalization,
+and a base mask **before** optimizer exclusion. These replayed rules do not change
+training or predict rewards. `rilldex.compare_probabilities(a, b, mask, ...)`
+returns the same diagnostic directly in Python, without storage or a server.
+Probability and ratio rules follow the comparison described in
+[Prime RL's IPO study](https://github.com/PrimeIntellect-ai/prime-rl/blob/v0.10.0/docs/ipo.md).
+
+Open **Overview → Execution**. Choose a clock and drag a time interval;
+click a span or curve point for its configuration, sample selection, policy age
+and behavior-map links. **Save view** keeps the captured data unchanged as late
+results arrive. **Export view** and `Workspace.execution_view()` return the same data.
+
+Use **Zoom in / Undo interval**, search operations, or click **Failed** to narrow
+the timeline. Curves retain the full selected interval. **Pause updates** holds
+the display; selected values and map-return links retain the operation context.
+While paused, **Export view** keeps displayed data; **Save latest data** captures
+the server's latest records for that interval.
+
+```python
+from rilldex import ExecutionRecorder
+
+execution = ExecutionRecorder(outbox, experiment="run-a", clock="run-a/utc")
+with execution.span("update-42", kind="learner_update",
+                    context={"worker": "learner"},
+                    configuration={"precision": "nvfp4", "backward": "dequantized"}) as span:
+    # Run the actual update, then capture its existing logger output.
+    metrics.log(native_metrics, step=42, record_id="log-42", training_uses=use_refs)
+    span["telemetry"] = [{"producer": outbox.producer, "id": "log-42"}]
+```
+
+Use `inference`, `rollout`, `environment` or `verification` with
+`rollout={"producer": producer, "id": rollout_id}`. Set `span["source_revision"]`
+to the captured revision for a direct map link. `weight_sync` and `configuration`
+record actual synchronization and setting changes. IDs identify attempts; retries
+need new IDs. For staged capture, send equivalent `execution-records/2` packets
+through the existing outbox, HTTP or offline bundle.
+
+The default clock function returns Unix seconds. Use a shared clock ID only when
+producers establish a common time basis; unsynchronized clocks remain separate.
+An unfinished span has no invented end. Environment filters narrow rollout lanes;
+shared learner context and whole-batch metrics remain intact.
+
+To compare already aligned token probabilities without another model call:
+
+```python
+metrics.log_policy_comparison(behavior_logprobs, learner_logprobs,
+    mask=response_mask, step=42, record_id="comparison-42", training_uses=use_refs,
+    basis="Same target tokens; raw natural-log probabilities; response-only mask")
+```
+
+Attach that log ID to the update span too. This records signed/absolute gaps,
+compared tokens and token importance-weight ESS fraction. These are sampled
+diagnostics, not reference KL or proof of a quantization defect. Native gradients
+and custom mismatch definitions retain their own units and reductions.
 
 ## Link a trainer log to rollout evidence
 

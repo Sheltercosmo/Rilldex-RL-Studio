@@ -484,3 +484,13 @@ passages, and separate evaluator access from explicit instruction conflicts.
 Historical workspaces keep their protocol, definitions and cached decisions.
 Known bypass and numerical-reasoning errors remain; public-trace checks do not
 establish deployment accuracy. [Validation summary](DETECTOR_VALIDATION.md).
+
+## Execution and probability comparisons
+
+The [humans& simulator](https://humansand.ai/blog/nvfp4-rl?v=3) motivates aligning
+execution, mismatch, gradients and outcomes; its critical thresholds are simulated.
+[Prime RL v0.10.0](https://github.com/PrimeIntellect-ai/prime-rl/blob/v0.10.0/docs/ipo.md)
+motivates probability-gap tails and replayed probability/ratio exclusion rules.
+Rilldex now records these diagnostics from supplied token probabilities, with counts
+and rule disagreement. Controlled, randomized and storage tests validate the
+calculation, not optimizer superiority or real-training failure prediction.

@@ -116,7 +116,7 @@ function renderMapAvailability(){
  const links=el('div',undefined,'map-availability-actions');
  if(source&&alternatives.length===1){const other=alternatives[0],b=el('button',other.observer_label||'Open semantic observations');b.onclick=()=>{clearReceipt(true);load(payload.run.id,other.observer);};links.append(b);}else if(source&&alternatives.length>1){const b=el('button',`Choose semantic observations · ${alternatives.length}`);b.onclick=()=>{$('.map-settings').open=true;$('#map-observer').focus();};links.append(b);}
  if(source&&pinned&&!alternatives.length){const browse=el('button','Browse saved observations');browse.onclick=()=>{clearReceipt(true);load(payload.run.id,'source');};links.append(browse);}
- const overview=el('a','Behavior measures →'),q=new URLSearchParams();if(payload.run.metadata?.experiment)q.set('experiment',payload.run.metadata.experiment);overview.href='/'+(q.size?'?'+q:'');links.append(overview);
+ const overview=el('a','Behavior measures →'),q=new URLSearchParams({view:'measures'});if(payload.run.metadata?.experiment)q.set('experiment',payload.run.metadata.experiment);overview.href='/?'+q;links.append(overview);
  const all=el('a','Browse rollouts →');all.href='/runs'+(q.size?'?'+q:'');links.append(all);host.append(text,links);
 }
 function render(){
