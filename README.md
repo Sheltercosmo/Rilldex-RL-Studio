@@ -28,7 +28,15 @@
 
 ![Reward, task success and recheck success across a clearly labeled 64-step training simulation](docs/assets/demo/training-signals.svg)
 
-Figures use saved app content with navigation removed. Maps use a [public OpenHands trace](https://github.com/metauto-ai/agent-as-a-judge/blob/43c2fa7b84ef0c1522e8250576e6798bace29dd0/benchmark/trajectories/OpenHands/39_Drug_Response_Prediction_SVM_GDSC_ML.json); curves use simulated training.
+**Run comparison:** align outcomes and policy mismatch, select an interval, and inspect the recorded updates.
+
+![Three simulated runs with noisy task-success curves, aligned probability-gap trends, and selected-step values](docs/assets/demo/run-comparison.svg)
+
+**Execution timeline:** follow parallel workers, a timed-out request and its retry alongside learner updates.
+
+![An asynchronous execution timeline with worker lanes, learner updates, weight synchronization, and linked retry details](docs/assets/demo/execution-timeline.svg)
+
+Maps use a [public OpenHands trace](https://github.com/metauto-ai/agent-as-a-judge/blob/43c2fa7b84ef0c1522e8250576e6798bace29dd0/benchmark/trajectories/OpenHands/39_Drug_Response_Prediction_SVM_GDSC_ML.json). Training and execution figures use labeled simulations, rendered as focused product views.
 
 ## Core features
 
