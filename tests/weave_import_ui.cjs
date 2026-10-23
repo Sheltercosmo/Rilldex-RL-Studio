@@ -1,0 +1,41 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const base=process.env.REVIEW_TEST_URL,output=process.env.REVIEW_OUTPUT_DIR;
+(async()=>{
+ const browser=await chromium.launch({headless:true,channel:'msedge'}),errors=[];
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+  page.on('pageerror',e=>errors.push(e.message));
+  const model=JSON.parse(fs.readFileSync('tests/fixtures/weave/public_openai_tool_call.json','utf8'));
+  const root={...model,id:'root',op_name:'weave:///fixture/weave/op/inspect_record:v1',started_at:'2026-10-20T23:59:59Z',attributes:{},output:{score:1},inputs:{task:'Inspect a cricket record'}};
+  model.parent_id='root';
+  await page.goto(base+'/connections#snapshot-section');
+  await page.waitForFunction(()=>[...document.querySelector('#upload-format').options].some(o=>o.value==='weave'));
+  await page.locator('#upload-format').selectOption('weave');
+  await page.locator('#upload-files').setInputFiles({name:'weave.jsonl',mimeType:'application/json',buffer:Buffer.from([root,model].map(x=>JSON.stringify(x)).join('\n'))});
+  await page.locator('#check-snapshot').click();
+  await page.locator('#preflight').getByText('Available analyses and required inputs',{exact:true}).click();
+  await page.locator('#preflight').getByText('Weave call export',{exact:true}).waitFor();
+  assert.match(await page.locator('#preflight').innerText(),/2 calls · 1 decoded model outputs/);
+  await page.locator('#import-snapshot').click();
+  await page.locator('#import-links .feature-readiness').waitFor();
+  await page.locator('#import-links').getByRole('link',{name:'Source inspection →',exact:true}).click();
+  await page.locator('.unit-card').first().waitFor();
+  const url=page.url(),cards=await page.locator('.unit-card').count();assert.ok(cards>=5);
+  const rootCard=page.locator('.unit-card').filter({hasText:'inspect_record'}).first();
+  await rootCard.click();
+  await page.getByRole('link',{name:'Open call in Weave ↗'}).waitFor();
+  assert.equal(await page.getByRole('link',{name:'Open call in Weave ↗'}).getAttribute('href'),'https://wandb.ai/fixture/weave/weave/calls/root');
+  assert.match(await page.locator('#detail-body').innerText(),/Contains call|contains call/);
+  const title=await rootCard.getAttribute('aria-label');assert.ok(!title.includes(':v1'));
+  if(output)await page.screenshot({path:output+'/weave-map-desktop.png'});
+  await page.setViewportSize({width:390,height:900});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  if(output)await page.screenshot({path:output+'/weave-map-mobile.png'});
+  await page.goto(url);await page.locator('.unit-card').first().waitFor();
+  assert.equal(await page.locator('.unit-card').count(),cards);
+  assert.deepEqual(errors,[]);
+  console.log('Passed: Weave import UI, native grouping, preflight, source map, call link, nesting labels, reload and mobile layout.');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});

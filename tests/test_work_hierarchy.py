@@ -38,7 +38,56 @@ def finish(g):
     return {'id':'graph-'+digest(g),**g}
 
 
+def split_action(g):
+    """Two nonoverlapping annotations of the same captured dispatch."""
+    g = deepcopy(g)
+    original = next(n for n in g['nodes'] if n['id'] == 'action')
+    second = deepcopy(original)
+    original['properties']['source'].update(end=6, text='source')
+    second['id'] = 'action-fragment'
+    second['properties']['source'].update(start=7, text='1')
+    g['nodes'].append(second)
+    g['edges'].extend([
+        dict(id='ground-fragment', source='action-fragment', target='event:e1', type='grounded_in', properties={}),
+        dict(id='attempt-fragment', source='action-fragment', target='plan', type='attempts_plan_step', properties={'plan_step_id': 'a'}),
+    ])
+    return finish(g)
+
+
 class WorkHierarchyTests(unittest.TestCase):
+    def test_split_annotations_preserve_cards_but_count_one_dispatch(self):
+        out = build(split_action(graph()))
+        self.assertEqual(out['counts']['linked_actions'], 1)
+        self.assertEqual(out['counts']['visible_actions'], 1)
+        step = next(n for n in out['nodes'] if n['id'] == 'plan:a')
+        self.assertEqual(step['state'], '1 attempt')
+        path = next(p for p in out['stage_paths'] if p['stage_id'] == 'plan:a')
+        self.assertEqual(path['counts']['actions'], 1)
+        self.assertEqual(path['counts']['attempts'], 1)
+        self.assertEqual(path['retry_summary']['attempts'], 1)
+        self.assertEqual({r['action_id'] for r in path['rows']}, {'action', 'action-fragment'})
+
+    def test_duplicate_role_witnesses_do_not_inflate_stage_state(self):
+        g = graph()
+        g['edges'].append({**deepcopy(next(e for e in g['edges'] if e['id'] == 'attempt')), 'id': 'attempt-copy'})
+        out = build(finish(g))
+        self.assertEqual(next(n for n in out['nodes'] if n['id'] == 'plan:a')['state'], '1 attempt')
+        self.assertEqual(len(out['stage_paths'][0]['rows'][0]['role_link_ids']), 2)
+
+    def test_same_text_in_distinct_source_calls_remains_two_dispatches(self):
+        g = split_action(graph())
+        original = deepcopy(next(n for n in g['nodes'] if n['id'] == 'event:e1'))
+        original.update(id='event:e4', event_index=4)
+        original['properties']['id'] = 'e4'
+        g['nodes'].append(original)
+        fragment = next(n for n in g['nodes'] if n['id'] == 'action-fragment')
+        fragment['event_index'] = 4
+        fragment['properties']['source']['event_id'] = 'e4'
+        next(e for e in g['edges'] if e['id'] == 'ground-fragment')['target'] = 'event:e4'
+        out = build(finish(g))
+        self.assertEqual(out['counts']['linked_actions'], 2)
+        self.assertEqual(out['stage_paths'][0]['counts']['attempts'], 2)
+
     def test_structure_preserves_plan_stage_action_feedback_and_assessment(self):
         out=build(graph());nodes={n['id']:n for n in out['nodes']}
         self.assertEqual(out['counts'],dict(plans=1,roots=1,plan_steps=2,linked_actions=1,visible_actions=1,unassigned_actions=0))

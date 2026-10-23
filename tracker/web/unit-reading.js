@@ -31,7 +31,8 @@
   };
   for(const e of direct){
    const other=layout.byId.get(e.source===id?target(e):e.source);if(!other)continue;
-   if(feedback.has(e.type))add('result',selected.lane===2?'Source action':'Returned feedback',e,other);
+   if(['contains_call','call_input','call_output','call_exception'].includes(e.type))add('trace','Call structure',e,other);
+   else if(feedback.has(e.type))add('result',selected.lane===2?'Source action':'Returned feedback',e,other);
    else if(use.has(e.type))add('use',selected.lane===2?'Agent response to this evidence':'Feedback & evidence links',e,other);
    else if(['return','verification'].includes(e.family)||['revises','changes_attempt_procedure','changes_attempt_prerequisite','uses_correction_from'].includes(e.type))add('changes','Repeated work & changes',e,other);
    else if(e.family==='plan')add('plan','Plan correspondence',e,other);
@@ -41,7 +42,7 @@
   // A two-edge path is displayed as two claims, never collapsed to "caused" or "fixed".
   if(selected.lane===1){
    const returns=direct.filter(e=>feedback.has(e.type)&&target(e)===id);
-   if(!returns.length)groups.set('result',{key:'result',title:'Returned feedback',rows:[],empty:'No response is bound to this action in the saved graph.'});
+   if(!returns.length)groups.set('result',{key:'result',title:'Returned feedback',rows:[],empty:L.capturedResponses(layout,id).length?'Full call feedback is available below; unit pairing is unresolved.':'No response is bound to this action in the saved graph.'});
    for(const response of returns){
     const r=layout.byId.get(response.source);if(!r||r.trajectory_id!==selected.trajectory_id)continue;
     for(const e of layout.edges){
@@ -53,14 +54,14 @@
    if(returns.length&&!groups.has('use'))groups.set('use',{key:'use',title:'Agent response to the feedback',rows:[],empty:'No saved assessment or evidence-use link for these responses. This does not establish that feedback was ignored.'});
   }
   if(selected.lane===2&&!groups.has('use'))groups.set('use',{key:'use',title:'Agent response to this evidence',rows:[],empty:'No saved assessment or evidence-use link. This does not establish that feedback was ignored.'});
-  const order=['result','use','changes','plan','dispatch','other'];
+  const order=['trace','result','use','changes','plan','dispatch','other'];
   return order.filter(k=>groups.has(k)).map(k=>groups.get(k));
  }
  function foot(layout,n){
   const edges=layout.edges.filter(e=>e.family!=='sequence'&&(e.source===n.id||target(e)===n.id));
   if(n.lane===2){
    const usages=edges.filter(e=>use.has(e.type)&&target(e)===n.id);
-   if(!usages.length)return 'Output excerpt · no saved use link';
+   if(!usages.length)return (L.capturedResponses(layout,n.id).length?'Call linked':'Output excerpt')+' · no saved use link';
    const refs=[...new Set(usages.map(e=>ref(layout.byId.get(e.source))))];
    const prefix=usages.every(e=>['assesses','assesses_response_group'].includes(e.type))?'Assessed by ':usages.every(e=>e.type==='uses_evidence')?'Used as evidence by ':'Referenced by ';
    return prefix+refs.slice(0,2).join(', ')+(refs.length>2?' +'+(refs.length-2):'');
@@ -68,6 +69,7 @@
   const result=edges.find(e=>feedback.has(e.type)&&target(e)===n.id),assessment=edges.find(e=>use.has(e.type)&&e.source===n.id),repeat=edges.find(e=>e.type==='revisits_after_error_report'&&e.source===n.id),plan=edges.find(e=>e.family==='plan');
   const parts=[];
   if(result)parts.push('Response '+ref(layout.byId.get(result.source)));
+  else if(n.lane===1&&L.capturedResponses(layout,n.id).length)parts.push('Call feedback available');
   if(assessment)parts.push(L.relationMeaning(assessment).label+' '+ref(layout.byId.get(target(assessment))));
   if(repeat)parts.push('Returns to '+ref(layout.byId.get(target(repeat))));
   if(!parts.length&&plan){

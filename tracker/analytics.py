@@ -17,9 +17,11 @@ import time
 import zipfile
 
 from .schema import InputError
+from .run_records import VIEW_SQL as RUN_CAPTURE_SQL, EMPTY_SQL as EMPTY_RUN_CAPTURE
 from .execution_records import VIEW_SQL as EXECUTION_SQL, EMPTY_SQL as EMPTY_EXECUTIONS
 from .generation_cohorts import VIEW_SQL as COHORT_SQL, EMPTY_SQL as EMPTY_COHORTS
 from .evaluation_receipts import VIEW_SQL as EVALUATION_SQL, EMPTY_SQL as EMPTY_EVALUATIONS
+from .work_content_results import VIEW_SQL as CONTENT_SQL, EMPTY_SQL as EMPTY_CONTENTS
 
 VERSION = 'research-data/1'
 FEED_MAX_BYTES = 32*1024*1024
@@ -36,6 +38,7 @@ TRAINING_SQL = {
       AND u.experiment=t.experiment AND u.record_id=t.record_id) is_latest FROM training_sample_records t""",
 }
 VIEWS = {
+    'run_capture': RUN_CAPTURE_SQL,
     'trainer_telemetry': '''SELECT producer,experiment,record_id,session,step,
       json_extract(document,'$.clock') clock,json_extract(document,'$.framework') framework,
       json_extract(document,'$.objective') objective,json_extract(document,'$.split') split,
@@ -103,7 +106,9 @@ VIEWS = {
     'monitor_definitions': "SELECT id monitor_id,enabled,created_at,json_extract(document,'$.observer') observer,json_extract(document,'$.name') monitor_name,document definition_json FROM monitors",
     'training_records': ' UNION ALL '.join(TRAINING_SQL.values()),
 }
+VIEWS.update(CONTENT_SQL)
 GRAINS = {
+    'run_capture': 'One immutable console chunk, hardware sample, file version, manifest or session event per producer. File bytes are available through the file API; wall clocks across hosts may differ.',
     'trainer_telemetry': 'One immutable native trainer log. Metrics retain units and reductions; no inferred rollout or sample joins.',
     'evaluations': 'One immutable producer-reported evaluation. Repeated checks are not distinct rollouts or verified independent outcomes; select explicit receipt IDs.',
     'generation_cohorts': 'One scheduler-declared membership revision. Sealing fixes membership, not scoring or training-use completeness.',
@@ -118,9 +123,13 @@ GRAINS = {
     'monitor_values': 'One saved monitor result per input identity. is_latest marks the published index; is_current also verifies current source, population and monitor inputs. Neither implies an available or correct measurement.',
     'monitor_definitions': 'Monitor definitions, including disabled monitors. An experiment scope retains definitions referenced by its saved results.',
     'training_records': 'One explicit trainer fact revision; no guessed joins to source snapshots.',
+    'content_extractions':'Current saved progress per exact graph, unit and extraction workspace; revision changes on progress. Generated content is not a verified behavior or execution.',
+    'work_contents':'One generated operation/state per extraction. Join by extraction_id AND content_id; modes are candidate interpretations, not verified outcomes.',
+    'work_attachments':'One feature/content pair per extraction, including pending and unresolved decisions. Applies is model-selected attachment, not an execution or correctness claim.',
+    'work_content_relations':'One directed content pair and relationship type per enabled extraction, including pending/unsupported/unresolved decisions. Join endpoints with extraction_id AND content_id. Source interpretation, not observed execution.',
 }
 DEFAULT_TABLES = tuple(n for n in VIEWS if n != 'sources')
-OBSERVER_TABLES = ('graphs', 'nodes', 'edges', 'measurements', 'monitor_values', 'monitor_definitions')
+OBSERVER_TABLES = ('graphs', 'nodes', 'edges', 'measurements', 'monitor_values', 'monitor_definitions', *CONTENT_SQL)
 EXPORT_PROFILES = {
     'research': DEFAULT_TABLES,
     'measurements': ('rollouts', 'revisions', 'measurements', 'monitor_values', 'monitor_definitions'),
@@ -163,6 +172,10 @@ class Analysis:
             cohort_available = ('rl_generation_cohorts' if frozen else 'generation_cohorts') in tables
             evaluation_available = ('rl_evaluations' if frozen else 'evaluation_receipts') in tables
             telemetry_available = ('rl_trainer_telemetry' if frozen else 'trainer_telemetry') in tables
+            capture_available = ('rl_run_capture' if frozen else 'run_records') in tables
+            if not capture_available: unavailable.add('run_capture')
+            content_available = {name:('rl_'+name if frozen else 'work_content_extractions') in tables for name in CONTENT_SQL}
+            unavailable.update(name for name,present in content_available.items() if not present)
             empty_telemetry = 'SELECT '+','.join('NULL '+k for k in ('producer','experiment','record_id','session','step','clock','framework','objective','split','record_json','received_at'))+' WHERE 0'
             if not telemetry_available: unavailable.add('trainer_telemetry')
             if not frozen:
@@ -177,6 +190,8 @@ class Analysis:
                     basis='Physical schema support, not evidence of captured or absent trainer facts')
                 unavailable_feeds = {n for n, spec in FEEDS.items() if spec[0] not in tables}
                 for name, sql in VIEWS.items():
+                    if name == 'run_capture' and not capture_available: sql = EMPTY_RUN_CAPTURE
+                    if name in CONTENT_SQL and not content_available[name]:sql=EMPTY_CONTENTS[name]
                     if name == 'trainer_telemetry' and not telemetry_available: sql = empty_telemetry
                     if name == 'training_records': sql = training_sql
                     if name == 'executions' and not execution_available: sql = EMPTY_EXECUTIONS
@@ -184,6 +199,9 @@ class Analysis:
                     if name == 'evaluations' and not evaluation_available: sql = EMPTY_EVALUATIONS
                     c.execute(f'CREATE TEMP VIEW rl_{name} AS '+sql)
             else:
+                if not capture_available:c.execute('CREATE TEMP VIEW rl_run_capture AS '+EMPTY_RUN_CAPTURE)
+                for name,present in content_available.items():
+                    if not present:c.execute('CREATE TEMP VIEW rl_'+name+' AS '+EMPTY_CONTENTS[name])
                 if not telemetry_available:c.execute('CREATE TEMP VIEW rl_trainer_telemetry AS '+empty_telemetry)
                 rows = c.execute('SELECT schema,document_json FROM research_snapshot').fetchall()
                 if len(rows)!=1 or rows[0][0]!='research-snapshot/1': raise InputError('Unsupported research snapshot schema')
@@ -422,7 +440,7 @@ class Snapshot:
             if not history: parts.append('r.is_latest=1')
             if experiment is not None: parts.append('r.experiment=?'); parameters.append(experiment)
             conditions.append('EXISTS(SELECT 1 FROM rl_rollouts r WHERE '+' AND '.join(parts)+')')
-        elif name in {'training_records','executions','generation_cohorts','trainer_telemetry'} and experiment is not None:
+        elif name in {'training_records','executions','generation_cohorts','trainer_telemetry','run_capture'} and experiment is not None:
             conditions.append('t.experiment=?'); parameters.append(experiment)
         elif name == 'monitor_definitions' and experiment is not None:
             conditions.append('''EXISTS(SELECT 1 FROM rl_monitor_values v JOIN rl_rollouts r ON r.run_id=v.run_id

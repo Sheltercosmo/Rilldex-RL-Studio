@@ -1,0 +1,91 @@
+{
+  "id": "public-tool-call",
+  "project_id": "fixture/weave",
+  "trace_id": "public-tool-trace",
+  "parent_id": null,
+  "op_name": "weave:///fixture/weave/op/openai.chat.completions.create:recorded",
+  "started_at": "2026-10-21T00:00:00Z",
+  "ended_at": "2026-10-21T00:00:01Z",
+  "attributes": {
+    "weave": {
+      "kind": "llm"
+    }
+  },
+  "inputs": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Can you name a cricket player along with team name and highest score?"
+      }
+    ],
+    "model": "gpt-4o",
+    "max_tokens": 64,
+    "temperature": 0.0,
+    "tool_choice": "required",
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "cricket_player_names",
+          "description": "store the name of players",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The name of the player"
+              },
+              "team:": {
+                "type": "string",
+                "description": "The team of the player"
+              },
+              "highest_score": {
+                "type": "number",
+                "description": "The highest score of the player"
+              }
+            },
+            "required": [
+              "name",
+              "team",
+              "highest_score"
+            ]
+          }
+        }
+      }
+    ],
+    "top_p": 1
+  },
+  "output": {
+    "id": "chatcmpl-9eLE2jX4BPZeJjBok2gCEnFKmE7De",
+    "object": "chat.completion",
+    "created": 1719401738,
+    "model": "gpt-4o-2024-05-13",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "call_SWMuKPyiatqi82zAF37iPLhO",
+              "type": "function",
+              "function": {
+                "name": "cricket_player_names",
+                "arguments": "{\"name\":\"Sachin Tendulkar\",\"team\":\"India\",\"highest_score\":248}"
+              }
+            }
+          ]
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 90,
+      "completion_tokens": 27,
+      "total_tokens": 117
+    },
+    "system_fingerprint": "fp_d576307f90"
+  }
+}

@@ -1,0 +1,41 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const base=process.env.REVIEW_TEST_URL,out=process.env.REVIEW_OUTPUT_DIR;
+const fixtures=JSON.parse(fs.readFileSync(out+'/fixture.json','utf8'));
+(async()=>{const browser=await chromium.launch({headless:true,channel:'msedge'}),errors=[];try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(base);const links=page.locator('.overview-rollout-link');await links.first().waitFor();
+ const advertised=new URL(await links.first().getAttribute('href'),base);assert.ok(advertised.searchParams.get('graph'));assert.ok(advertised.searchParams.get('observer'));
+ await links.first().click();await page.locator('.unit-card').first().waitFor();
+ assert.equal(new URL(page.url()).searchParams.get('graph'),advertised.searchParams.get('graph'));
+ await page.locator('#workspace-back').click();await page.locator('.overview-rollout-link').first().waitFor();
+ const snapshot=await page.request.get(base+'/api/monitoring').then(r=>r.json());
+ for(const f of fixtures){
+  const entry=snapshot.runs.find(r=>r.id===f.run_id);assert.equal(entry.default_map.id,f.graph_id);
+  await page.goto(base+'/semantic-map?'+new URLSearchParams({run:f.run_id,observer:'missing-requested-pass',return_to:'/?view=measures'}));
+  await page.getByText('Selected observation unavailable',{exact:true}).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('observer'),'missing-requested-pass');
+  assert.equal(await page.locator('#map-workbench').isVisible(),false);
+  await page.getByRole('link',{name:'Recorded source',exact:true}).click();await page.locator('.unit-card').first().waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('observer'),'source');
+  assert.equal(await page.locator('.unit-card[data-card-kind=contribution]').count(),0);
+  await page.getByRole('button',{name:'Browse saved observations',exact:true}).click();
+  await page.getByRole('button',{name:'Public approach evidence',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Public approach evidence',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.unit-card[data-card-kind=contribution]').length>0);
+  assert.equal(new URL(page.url()).searchParams.get('observer'),f.observer);
+  assert.equal(new URL(page.url()).searchParams.get('return_to'),'/?view=measures');
+  assert.equal(new URL(await page.locator('#workspace-back').getAttribute('href'),base).search,'?view=measures');
+  await page.getByRole('button',{name:'Work path',exact:true}).click();await page.locator('.wr-target').first().waitFor();
+  await page.locator('#workspace-back').click();assert.equal(new URL(page.url()).searchParams.get('view'),'measures');
+ }
+ await page.setViewportSize({width:390,height:900});const f=fixtures[0];
+ await page.goto(base+'/semantic-map?'+new URLSearchParams({run:f.run_id,observer:'missing'}));
+ await page.getByText('Selected observation unavailable',{exact:true}).waitFor();
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ await page.locator('#map-availability').screenshot({path:out+'/missing-observer-mobile.png'});
+ await page.getByRole('link',{name:'Public approach evidence',exact:true}).click();await page.locator('.unit-card').first().waitFor();
+ assert.equal(new URL(page.url()).searchParams.get('graph'),f.graph_id);
+ assert.deepEqual(errors,[]);
+ const report={passed:true,checks:['overview pins advertised semantic graph','explicit missing observer is not substituted','explicit source remains source','semantic selection preserves origin','work path and back on public software/airline','mobile missing-observer recovery'],provider_calls:0};
+ fs.writeFileSync(out+'/map-entry-report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1);});

@@ -30,6 +30,28 @@ def bound_responses(run):
     return result
 
 
+def validate(run,result):
+    """Validate retained selections without rerunning the observer."""
+    if result.get('schema')!=VERSION or result.get('source_hash')!=digest(run) or result.get('run_id')!=run['id']:
+        raise InputError('Execution report source or version differs')
+    pairs={(a['id'],r['id']) for a,r in bound_responses(run)};seen=set()
+    events={e['id']:e for e in run['events']}
+    for row in result.get('observations',[]):
+        pair=(row.get('action_event_id'),row.get('response_event_id'))
+        if pair not in pairs or pair in seen:raise InputError('Duplicate or unbound execution observation')
+        seen.add(pair)
+        if any(row.get(k) not in {'reported','not_reported','unresolved'} for k in ('error','warning')):
+            raise InputError('Invalid execution report selection')
+        if type(row.get('complete_readable_response')) is not bool:raise InputError('Execution report coverage is missing')
+        response=events[pair[1]]
+        for ref in row.get('evidence',[]):
+            a,b=ref.get('start'),ref.get('end')
+            if (ref.get('event_id')!=response['id'] or type(a) is not int or type(b) is not int
+                or not 0<=a<b<=len(response['text']) or ref.get('text')!=response['text'][a:b]):
+                raise InputError('Execution report evidence differs from its bound response')
+    return result
+
+
 def request(run,action,response):
     if not any(a==action and r==response for a,r in bound_responses(run)):
         raise InputError('Execution report requires an exact visible source call binding')
@@ -68,9 +90,33 @@ def request(run,action,response):
         'missingness':{'truncated_event_ids':[]},'limits':LIMITS},'questions':questions}
 
 
-def build(run,decide):
+def progress_record(run,observations,total,*,complete=False):
+    return {'schema':'execution-report-progress/1','report_version':VERSION,'source_hash':digest(run),
+        'status':'complete' if complete else 'running',
+        'coverage':{'response_pairs':total,'inspected_pairs':len(observations),'pending_pairs':total-len(observations),
+            'error_reports':sum(r['error']=='reported' for r in observations),
+            'warning_reports':sum(r['warning']=='reported' for r in observations),
+            'unresolved_pairs':sum('unresolved' in (r['error'],r['warning']) for r in observations),
+            'incomplete_responses':sum(not r['complete_readable_response'] for r in observations)}}
+
+
+def status(directory,run,version):
+    if version is None:return {'status':'not_requested'}
+    if version!=VERSION:raise InputError('Unsupported execution report version')
+    path=Path(directory)/'execution-report-progress.json'
+    if path.exists():
+        saved=read(path)
+        if saved.get('source_hash')!=digest(run) or saved.get('report_version')!=version:
+            raise InputError('Execution report progress belongs to another source or protocol')
+        return saved
+    return {'status':'pending','report_version':version}
+
+
+def build(run,decide,*,progress=None):
     observations=[]
-    for action,response in bound_responses(run):
+    pairs=bound_responses(run)
+    if progress:progress(progress_record(run,observations,len(pairs)))
+    for action,response in pairs:
         req=request(run,action,response); answers,key=decide(req)
         view=req['state']['response']
         omitted=view.get('omitted_text_ranges',[])
@@ -84,6 +130,8 @@ def build(run,decide):
             'evidence':[evidence(run,response['id'],start=start,end=start+len(text))
                         for start,text in source_fragments(view) if text.strip()],
             'cutoff':{'event_id':response['id'],'end':len(response['text'])}})
+        if progress:progress(progress_record(run,observations,len(pairs)))
+    if progress:progress(progress_record(run,observations,len(pairs),complete=True))
     return {'schema':VERSION,'run_id':run['id'],'source_hash':digest(run),'observations':observations,
             'counts':{'responses':len(observations),'errors':dict(Counter(o['error'] for o in observations)),
                       'warnings':dict(Counter(o['warning'] for o in observations))},'limits':LIMITS}
@@ -105,8 +153,8 @@ def path_for(directory,run):
     return Path(directory)/'results'/f'{digest({"version":VERSION,"source":digest(run)})}.json'
 
 
-def execute(run,engine):
-    result=build(run,engine.decide); validation=audit(run,result,engine.directory)
+def execute(run,engine,*,progress=None):
+    result=build(run,engine.decide,progress=progress); validation=audit(run,result,engine.directory)
     write(path_for(engine.directory,run),result)
     return result,validation
 

@@ -1,0 +1,52 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const {spawn}=require('child_process'),fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
+const root=process.env.RILLDEX_UI_OUTPUT,py=process.env.RILLDEX_TEST_PYTHON;
+const ids=JSON.parse(fs.readFileSync(path.join(root,'captures.json'),'utf8'));
+const server=spawn(py,['-I','-u',path.join(__dirname,'../scripts/validate_sb3_capture.py'),'--serve',path.join(root,'workspace.sqlite')],{cwd:require('os').tmpdir(),windowsHide:true,stdio:['pipe','pipe','pipe']});
+let output='';server.stdout.on('data',d=>output+=d);server.stderr.on('data',d=>output+=d);
+(async()=>{let browser,page;const errors=[];try{
+ const deadline=Date.now()+30000;while(!/Rilldex: (http:\/\/127\.0\.0\.1:\d+)/.test(output)){if(server.exitCode!==null||Date.now()>deadline)throw Error(output);await new Promise(r=>setTimeout(r,100));}
+ const base=output.match(/Rilldex: (http:\/\/127\.0\.0\.1:\d+)/)[1];browser=await chromium.launch({headless:true,channel:'msedge'});
+ page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));
+ const selected=JSON.stringify(['learner-a','native/1']);
+ await page.goto(base+'/?'+new URLSearchParams({view:'health',experiment:'capture/restart-study',signals_session:selected}));
+ const board=page.locator('#trainer-telemetry');await board.locator('svg').first().waitFor();
+ await board.getByRole('button',{name:'Session details',exact:true}).click();
+ const d=page.getByRole('dialog',{name:'Run details',exact:true}),filter=d.getByRole('combobox',{name:'Worker and session',exact:true});
+ await d.getByText('0.0005',{exact:true}).waitFor();assert.equal(await filter.inputValue(),JSON.stringify(['learner-a',ids.before]));
+ assert.equal(await d.locator('.run-detail-record').count(),3);
+ const current=d.locator('.run-detail-record').filter({has:page.getByText('0.0005',{exact:true})});
+ await current.getByText('Compare configuration',{exact:true}).click();
+ const select=current.getByRole('combobox',{name:'Compare configuration snapshot',exact:true});
+ const choices=await select.locator('option').evaluateAll(opts=>opts.map(o=>o.value).filter(Boolean));
+ await select.selectOption(choices.at(-1));
+ await current.getByText('2 differing fields',{exact:true}).waitFor();
+ assert.match(await current.locator('table').innerText(),/unknown[\s\S]*null[\s\S]*Not recorded/);
+ await current.locator('table').scrollIntoViewIfNeeded();await d.screenshot({path:path.join(root,'config-diff-desktop.png')});
+ await d.getByRole('button',{name:'Logs',exact:true}).click();await d.getByText('before process console only',{exact:true}).waitFor();
+ assert.equal(await filter.inputValue(),JSON.stringify(['learner-a',ids.before]));assert.doesNotMatch(await d.innerText(),/after process console|other process console/);
+ await d.getByRole('button',{name:'Hardware',exact:true}).click();await d.getByRole('heading',{name:/before-host/}).waitFor();
+ await d.getByRole('button',{name:'Files',exact:true}).click();await d.getByRole('heading',{name:'before.txt',exact:true}).waitFor();
+ assert.equal(await d.getByRole('heading',{name:'after.txt',exact:true}).count(),0);
+ // Choosing another capture becomes shared tab state, not a transient local dropdown.
+ await filter.selectOption(JSON.stringify(['learner-a',ids.after]));await d.getByRole('heading',{name:'after.txt',exact:true}).waitFor();
+ await d.getByRole('button',{name:'Logs',exact:true}).click();await d.getByText('after process console only',{exact:true}).waitFor();
+ await d.getByRole('button',{name:'Trainer streams',exact:true}).click();
+ const old=d.locator('.run-detail-record').filter({hasText:'learner-a'}).filter({has:page.getByText('native/1',{exact:true})});
+ await old.getByRole('link',{name:'Open training curves',exact:true}).click();
+ await board.locator('svg').first().waitFor();assert.equal(new URL(page.url()).searchParams.get('signals_session'),selected);
+ await board.locator('circle[role=button]').first().click();
+ const point=page.locator('dialog.telemetry-dialog');await point.getByRole('button',{name:'Captured logs & settings',exact:true}).click();
+ await filter.waitFor();assert.equal(await filter.inputValue(),JSON.stringify(['learner-a',ids.before]));
+ await page.setViewportSize({width:390,height:844});await d.getByRole('button',{name:'Config & runtime',exact:true}).click();
+ await d.getByText('0.0005',{exact:true}).waitFor();await current.getByText('Compare configuration',{exact:true}).click();await select.selectOption(choices.at(-1));
+ await current.getByText('2 differing fields',{exact:true}).waitFor();
+ await current.locator('table').scrollIntoViewIfNeeded();assert.equal(await d.evaluate(n=>n.scrollWidth>n.clientWidth+2),false);assert.ok(await d.evaluate(n=>{const box=n.getBoundingClientRect(),head=n.querySelector('header').getBoundingClientRect();return head.top>=box.top&&head.bottom<=box.bottom&&getComputedStyle(n).paddingTop==='0px';}));await d.screenshot({path:path.join(root,'config-diff-mobile.png')});
+ await d.getByRole('button',{name:'Close',exact:true}).click();await point.getByRole('button',{name:'Close',exact:true}).click();
+ // No matching capture must never fall back to another process in the same run.
+ await page.evaluate(()=>ExperimentDetails.openTrainer('capture/restart-study','learner-a','missing'));
+ await page.getByRole('dialog',{name:'Trainer session context'}).getByText('No process capture is linked to this trainer session.',{exact:true}).waitFor();
+ assert.deepEqual(errors,[]);
+ fs.writeFileSync(path.join(root,'browser-report.json'),JSON.stringify({passed:true,checks:['exact trainer-to-process mapping','configuration diff','shared logs hardware files selection','manual selection carries across tabs','old trainer link stays old','point-to-capture navigation','mobile diff layout','missing capture remains empty'],errors,fixture:'authored control; not model accuracy evidence'},null,2));
+ console.log('Trainer context browser checks passed');
+}catch(error){if(page){await page.screenshot({path:path.join(root,'failure.png')});fs.writeFileSync(path.join(root,'failure.html'),await page.content());}throw error;}finally{if(browser)await browser.close();server.stdin.end();}})().catch(e=>{console.error(e);process.exitCode=1;});

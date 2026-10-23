@@ -7,8 +7,9 @@ from collections import defaultdict
 from copy import deepcopy
 
 from .schema import digest
+from . import work_dispatches
 
-VERSION = 'decision-followthrough/1'
+VERSION = 'decision-followthrough/2'
 LIMIT = ('Counts saved action links within a source-record window, not causal effects of a decision. '
          'Unlinked execution remains unobserved. Parent scope can include descendants. '
          'Checks, returned feedback and completion statements do not establish success.')
@@ -90,12 +91,7 @@ def attach(graph, outline):
                             else: unresolved['assessments'].append(assessment['node_id'])
                         copy['responses'].append(r)
                     rows.append(copy)
-            counts = None if status != 'mapped' else dict(actions=len(rows),
-                attempts=sum('attempts_plan_step' in r['roles'] for r in rows),
-                preparations=sum('prepares_plan_step' in r['roles'] for r in rows),
-                checks=sum('checks_plan_step' in r['roles'] for r in rows),
-                with_feedback=sum(bool(r['responses']) for r in rows),
-                with_assessment=sum(any(v['assessments'] for v in r['responses']) for r in rows))
+            counts = None if status != 'mapped' else work_dispatches.counts(rows)
             value = dict(schema=VERSION, status=status, item_id=item['id'],
                 decision_ids=[d['id'] for d in group['decisions']],
                 window=dict(start_event_id=group['event_id'], start_event_index=group['index'],

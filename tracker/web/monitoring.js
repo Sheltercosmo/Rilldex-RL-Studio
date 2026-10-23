@@ -3,6 +3,7 @@ const OverviewLayout=(()=>{
  'use strict';
  function mode(search){
   const q=new URLSearchParams(search),view=q.get('view');
+  if(view==='experiments')return {section:'library',panel:'runs'};
   if(view==='health')return {section:'training',panel:q.get('health_panel')==='diagnostics'||q.has('health_mode')?'diagnostics':'signals'};
   if(view==='execution')return {section:'execution',panel:'timeline'};
   if(view==='training')return {section:'samples',panel:'samples'};
@@ -10,12 +11,21 @@ const OverviewLayout=(()=>{
   if(view==='measures'||q.has('monitor')||q.has('comparison'))return {section:'behavior',panel:'measures'};
   return {section:'summary',panel:'summary'};
  }
- function href(view,scope={},extra={}){const q=new URLSearchParams();for(const [k,v]of Object.entries({...scope,...extra,view}))if(v!==undefined&&v!==null&&v!=='')q.set(k,v);return '/'+(q.size?'?'+q:'');}
+ function href(view,scope={},extra={}){const q=new URLSearchParams();for(const [k,v]of Object.entries({...scope,...extra,view}))if(v!==undefined&&v!==null&&v!=='')q.set(k,v);if(Object.hasOwn(scope,'experiment')&&!scope.experiment)q.set('scope','all');return '/'+(q.size?'?'+q:'');}
+ function scopeQuery(search,scope={}){const q=new URLSearchParams(search);for(const key of ['experiment','environment'])if(scope[key])q.set(key,scope[key]);else q.delete(key);if(scope.experiment)q.delete('scope');return q.size?'?'+q:'';}
+ function mapHref(run,{observer,valueId,returnTo}={}){
+  const id=typeof run==='string'?run:run.id,selected=observer==null&&typeof run==='object'?run.default_map:null;
+  if(observer?.startsWith('tool-contracts-'))return '/source#run='+encodeURIComponent(id);
+  const q=new URLSearchParams({run:id,level:'units'});
+  if(observer!=null)q.set('observer',observer);else if(selected){q.set('observer',selected.observer);q.set('graph',selected.id);}
+  if(valueId)q.set('value',valueId);if(returnTo)q.set('return_to',returnTo);
+  return '/semantic-map?'+q;
+ }
  function previews(monitors,limit=3){
   const priority=m=>m.group==='Behavior'?0:m.group==='Reward integrity'?1:m.metric==='recorded_success'?2:m.metric==='recorded_reward'?3:4;
   return monitors.filter(m=>m.enabled).sort((a,b)=>Number((b.coverage?.available||0)>0)-Number((a.coverage?.available||0)>0)||priority(a)-priority(b)).slice(0,limit);
  }
- if(typeof module!=='undefined'&&module.exports)return module.exports={mode,href,previews};
+ if(typeof module!=='undefined'&&module.exports)return module.exports={mode,href,previews,mapHref,scopeQuery};
  const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
  const a=(text,url)=>{const n=el('a',text);n.href=url;return n;};
  function navigation(scope,current){
@@ -23,7 +33,7 @@ const OverviewLayout=(()=>{
   for(const [id,view,section]of [['summary-tab','','summary'],['health-tab','health','training'],['measures-tab','measures','behavior'],['execution-tab','execution','execution'],['training-tab','training','samples']]){
    const link=document.getElementById(id);link.hidden=false;link.href=href(view,scope);link.setAttribute('aria-current',current.section===section?'page':'false');
   }
-  primary.hidden=false;secondary.replaceChildren();
+  primary.hidden=current.section==='library';secondary.replaceChildren();
   const items=current.section==='training'?[
    ['Training signals',href('health',scope),'signals'],['Sample diagnostics',href('health',scope,{health_panel:'diagnostics'}),'diagnostics']
   ]:current.section==='behavior'?[
@@ -34,27 +44,27 @@ const OverviewLayout=(()=>{
  function summary(host,workflow,state,scope){
   host.hidden=false;workflow.hidden=false;host.replaceChildren();workflow.replaceChildren();
   const maps=state.runs.filter(r=>r.semantic_graphs),active=state.monitors.filter(m=>m.enabled),loaded=state.runs.length;
+  const latest=[...state.runs].filter(r=>Number.isFinite(Date.parse(r.imported_at))).sort((a,b)=>String(b.imported_at).localeCompare(String(a.imported_at)));
   const stats=el('div',undefined,'overview-stat-grid');
   for(const [value,label,note,url,id]of [
    [state.population.toLocaleString(),'Rollouts','Received in this selection','/runs'+href('',scope).slice(1)],
-   ['—','Trainer logs','Native updates',href('health',scope),'summary-native-count'],
-   [maps.length.toLocaleString(),'Behavior maps',loaded<state.population?'Within '+loaded+' loaded rollouts':'Saved semantic observations',maps.length?'/semantic-map?'+new URLSearchParams({run:maps[0].id}):'/runs'+href('',scope).slice(1)],
-   [active.length.toLocaleString(),'Active monitors','Definitions in this selection','/monitors'+href('',scope).slice(1)]
+   [state.active_captures?.total?.toLocaleString()??'—','Unfinished rollouts','Reported in-progress · not worker status',href('execution',scope)],
+   [active.filter(m=>m.coverage?.available>0).length.toLocaleString(),'Rollout measures',active.length+' enabled · open coverage','/monitors'+href('',scope).slice(1)],
+   [latest.length?new Date(latest[0].imported_at).toLocaleString('en-GB', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—','Latest rollout received',loaded<state.population?'Within '+loaded+' loaded rollouts':'Receipt time · not training progress','/runs'+href('',scope).slice(1)]
   ]){const card=a('',url);card.className='overview-stat';const strong=el('strong',value);if(id)strong.id=id;card.append(el('span',label),strong,el('small',note));stats.append(card);}host.append(stats);
   const mapPanel=el('section',undefined,'overview-workflow-card'),mapHead=el('div',undefined,'overview-section-heading');mapHead.append(el('h2','Inspect a rollout'),a('All rollouts →','/runs'+href('',scope).slice(1)));mapPanel.append(mapHead,el('p','Open activities, plans and the feedback connecting them.'));
-  const latest=[...state.runs].sort((a,b)=>String(b.imported_at||'').localeCompare(String(a.imported_at||'')));
   const selected=maps.length?[...maps.slice(0,2),...latest.filter(r=>!r.semantic_graphs).slice(0,1)]:latest.slice(0,3);
-  for(const [i,r]of selected.entries()){const row=a('', '/semantic-map?'+new URLSearchParams({run:r.id,...(!r.semantic_graphs?{observer:'source'}:{}),return_to:href('',scope)}));row.className='overview-rollout-link';row.append(el('strong',r.metadata.task_id||'Rollout '+(i+1)),el('span',r.semantic_graphs?'Behavior map →':'Source trace →'));mapPanel.append(row);}
+  for(const [i,r]of selected.entries()){const row=a('',mapHref(r,{...(!r.semantic_graphs?{observer:'source'}:{}),returnTo:href('',scope)}));row.className='overview-rollout-link';row.append(el('strong',r.metadata.task_id||(r.metadata.training_step!=null?'Step '+r.metadata.training_step+' · rollout':'Rollout '+(i+1))),el('span',r.semantic_graphs?'Behavior map →':'Source trace →'));mapPanel.append(row);}
   if(!selected.length)mapPanel.append(a('Connect rollout data →','/connections#directory-section'));
   const activity=el('section',undefined,'overview-workflow-card'),activityHead=el('div',undefined,'overview-section-heading');activityHead.append(el('h2','Collection & execution'),a('Open timeline →',href('execution',scope)));activity.append(activityHead);
   const counts=el('dl',undefined,'overview-collection');
   const declared=state.declared_populations,streaming=state.active_captures?.total;
-  counts.append(el('dt','Streaming rollouts'),el('dd',streaming==null?'Not reported':streaming.toLocaleString()));
+  counts.append(el('dt','Reported unfinished'),el('dd',streaming==null?'Not reported':streaming.toLocaleString()));
   counts.append(el('dt','Declared workload'),el('dd',declared?.available?`${declared.distinct_delivered_rollouts} / ${declared.distinct_declared_rollouts} sources received`:'Not declared'));
   activity.append(counts,el('p','Open the timeline for worker activity and linked learner updates.','overview-secondary-copy'));
   const links=el('div',undefined,'overview-inline-links');links.append(a('Training data →',href('training',scope)),a('Capture settings →','/connections'));activity.append(links);workflow.append(mapPanel,activity);
  }
- return {mode,href,previews,navigation,summary};
+ return {mode,href,previews,mapHref,scopeQuery,navigation,summary};
 })();
 
 'use strict';
@@ -162,7 +172,7 @@ async function api(path,body){const r=await fetch(path,body===undefined?{}:{meth
 function opt(value,label){const o=make('option',label);o.value=value;return o;}
 function failed(e){$('#error').hidden=false;$('#error').textContent=e.message;}
 function query(){const p=new URLSearchParams();if($('#experiment').value)p.set('experiment',$('#experiment').value);if($('#environment').value)p.set('environment',$('#environment').value);return p.toString()?'?'+p:'';}
-function mapLink(id,observer,valueId){if(observer?.startsWith('tool-contracts-'))return '/source#run='+encodeURIComponent(id);return '/semantic-map?run='+encodeURIComponent(id)+(observer&&observer!=='source'?'&observer='+encodeURIComponent(observer):'')+(valueId?'&value='+encodeURIComponent(valueId):'');}
+function mapLink(id,observer,valueId){return OverviewLayout.mapHref(state?.runs?.find(r=>r.id===id)||id,{observer,valueId,returnTo:location.pathname+location.search+location.hash});}
 function metricValue(v,m){if(v===null||v===undefined)return '—';if(m.unit==='fraction')return (v*100).toFixed(1)+'%';return Math.abs(v)>=1000?number(Math.round(v)):Number(v.toFixed(3)).toLocaleString();}
 function headlineDetails(point,byStep){
  const position=byStep?'Step '+point.step:'Rollout '+point.order;
@@ -182,12 +192,12 @@ function coverageView(m){const c=m.coverage;if(!c)return{denominator:null,label:
 function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=make('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function status(s){const disconnected=window.trackerStreamConnected===false,collecting=window.trackerLive?.connections?.some(c=>c.running);$('#service-status').textContent=disconnected?'Disconnected · reconnecting':s.error?'Monitor error':s.updating||s.snapshot_stale?'Source received · updating monitors':s.running?(collecting?'Connected · watching sources':'Connected · saved data'):'Offline';$('#service-status').classList.toggle('offline',disconnected||!!s.error||!s.running);$('#service-status').title=s.error||s.inference||'';if(s.checked_at)$('#updated').textContent='Monitors checked '+new Date(s.checked_at).toLocaleTimeString();}
 async function load(initial=false){const sequence=++requestSequence;try{const data=await api('/api/monitoring'+query());if(sequence!==requestSequence)return;state=data;status(data.service);$('#error').hidden=true;
- if(initial){$('#experiment').replaceChildren(opt('','All experiments'),...data.experiments.map(e=>opt(e.id,e.id==='__unassigned__'?'Unassigned / evaluation rollouts':e.id)));$('#environment').replaceChildren(opt('','All environments'),...data.environments.map(e=>opt(e,e)));
-  const requested=new URLSearchParams(location.search),old=requested.get('experiment')??sessionStorage.getItem('monitor-experiment');
-  for(const key of ['experiment','environment'])if(requested.has(key)&&![...$('#'+key).options].some(o=>o.value===requested.get(key)))$('#'+key).append(opt(requested.get(key),requested.get(key)+' (no source rollouts)'));
-  if(requested.has('environment'))$('#environment').value=requested.get('environment');
-  $('#experiment').value=old!==null&&[...$('#experiment').options].some(o=>o.value===old)?old:'';if($('#experiment').value||$('#environment').value)return load();}
- if(!initial){for(const [id,values,placeholder]of [['#experiment',data.experiments.map(e=>[e.id,e.id==='__unassigned__'?'Unassigned / evaluation rollouts':e.id]),'All experiments'],['#environment',data.environments.map(e=>[e,e]),'All environments']]){const select=$(id),old=select.value;if(old&&!values.some(v=>v[0]===old))values.push([old,old+' (no source rollouts)']);if(JSON.stringify([...select.options].map(o=>o.value))!==JSON.stringify(['',...values.map(v=>v[0])])){select.replaceChildren(opt('',placeholder),...values.map(v=>opt(...v)));select.value=old;}}}
+ if(initial){$('#experiment').replaceChildren(opt('','All training runs'),...data.experiments.map(e=>opt(e.id,e.id==='__unassigned__'?'Unassigned / evaluation rollouts':(e.label||e.id))));$('#environment').replaceChildren(opt('','All environments'),...data.environments.map(e=>opt(e,e)));
+  let requested=window.TrainingContext?await TrainingContext.initial(data.experiments,location.search):Object.fromEntries(new URLSearchParams(location.search));if(sequence!==requestSequence)return;
+  if(strategyView&&window.BehaviorDistributions){const fixed=await BehaviorDistributions.savedSelection();if(sequence!==requestSequence)return;if(fixed){requested=fixed;window.TrainingContext?.viewEvidence(fixed);}}
+  for(const key of ['experiment','environment']){const value=requested[key]||'';if(value&&![...$('#'+key).options].some(o=>o.value===value))$('#'+key).append(opt(value,value));$('#'+key).value=value;}
+  if($('#experiment').value||$('#environment').value)return load();}
+ if(!initial){for(const [id,values,placeholder]of [['#experiment',data.experiments.map(e=>[e.id,e.id==='__unassigned__'?'Unassigned / evaluation rollouts':(e.label||e.id)]),'All training runs'],['#environment',data.environments.map(e=>[e,e]),'All environments']]){const select=$(id),old=select.value;if(old&&!values.some(v=>v[0]===old))values.push([old,old+' (no source rollouts)']);if(JSON.stringify([...select.options].map(o=>[o.value,o.textContent]))!==JSON.stringify([['',placeholder],...values])){select.replaceChildren(opt('',placeholder),...values.map(v=>opt(...v)));select.value=old;}}}
  render();
  }catch(e){failed(e);}}
 function render(){
@@ -200,20 +210,23 @@ function render(){
  $('#page-name').textContent={overview:'Overview',monitors:'Monitors',runs:'Rollouts'}[view];
  $('#page-title').textContent={overview:'Training overview',monitors:'Monitor management',runs:'Rollout explorer'}[view];
  $('#page-description').textContent={overview:'Training signals, rollout behavior and execution in one place.',monitors:'Add, edit or pause monitors. Open a monitor to view its values and linked evidence.',runs:'Filter by task, training step or result. Open a rollout to trace actions, feedback and revisions.'}[view];
- $('#add-monitor').hidden=view==='runs';$('#reward-hub').hidden=!rewardView;$('#reward-hub-shortcut').hidden=rewardView;
+ $('#add-monitor').hidden=view!=='monitors';$('#reward-hub').hidden=!rewardView;$('#reward-hub-shortcut').hidden=rewardView;
  const rewardScope=new URLSearchParams(query().slice(1));rewardScope.set('view','reward');$('#reward-hub-shortcut').href='/monitors?'+rewardScope;$('#all-monitor-link').href='/monitors'+query();
  if(rewardView){document.title='Rilldex · Reward hacking';$('#page-title').textContent=$('#page-name').textContent='Reward hacking';$('#add-monitor').textContent='+ Add reward checks';$('#page-description').textContent='Inspect flagged rollouts, choose common checks, and configure budgeted scans or custom detectors.';$('#monitor-presets').hidden=true;$('#add-core-monitors').hidden=true;$('#registry-code-help').hidden=true;$('#reward-checks').open=true;}
  const filters={experiment:$('#experiment').value,environment:$('#environment').value};
+ const scopeSearch=OverviewLayout.scopeQuery(location.search,filters);if(scopeSearch!==location.search)history.replaceState(history.state,'',location.pathname+scopeSearch+location.hash);
  $('#overview-tabs').hidden=view!=='overview';$('#overview-subnav').hidden=true;
  if(view==='overview')OverviewLayout.navigation(filters,overviewMode);
  $('#monitors-view').hidden=view!=='monitors';$('#runs-view').hidden=view!=='runs';
  $('#overview-view').hidden=!(summaryView||measuresView);$('#measure-browser').hidden=!measuresView;$('#axis-label').hidden=!measuresView;
  $('#strategies-view').hidden=!strategyView;$('#training-view').hidden=!trainingView;$('#training-execution').hidden=!executionView;
  $('#health-view').hidden=!healthView||overviewMode.panel!=='diagnostics';$('#overview-workflow').hidden=!summaryView;
+ document.body.classList.remove('workspace-empty');FirstSession.render($('#first-session'),summaryView?state.first_session:null);
  renderOverviewContext();renderActiveCaptures(state.active_captures);
  const executionHost=$('#execution-context');executionHost.hidden=!measuresView;
  if(measuresView){const panels=[...executionHost.children].map(e=>e.open),declared=PopulationEvidence.declaredCohorts(state.declared_populations),execution=PopulationEvidence.executionContext(state.execution_context);if(panels.length&&executionHost.firstChild.dataset.scope===declared.dataset.scope){declared.open=panels[0];execution.open=panels[1];}executionHost.replaceChildren(declared,execution);}
- if(summaryView){OverviewLayout.summary($('#overview-context'),$('#overview-workflow'),{...state,monitors:active},filters);renderCards(OverviewLayout.previews(active));const head=$('#overview-view .section-heading');head.replaceChildren(make('h2','Rollout behavior'));const all=make('a','All behavior measures →');all.href=OverviewLayout.href('measures',filters);head.append(all);$('#research-rail').hidden=true;let note=$('#overview-preview-note');if(!note){note=make('p',undefined,'overview-preview-note');note.id='overview-preview-note';$('#overview-view .research-main').append(note);}const missing=active.filter(m=>!m.coverage?.available).length;note.replaceChildren(document.createTextNode(`Showing ${Math.min(3,active.length)} of ${active.length} active measures${missing?' · '+missing+' awaiting measurements':''}. `));if(missing){const gaps=make('a','View measurement coverage →');gaps.href=OverviewLayout.href('measures',filters,{availability:'missing'});note.append(gaps);}}
+ if(summaryView){OverviewLayout.summary($('#overview-context'),$('#overview-workflow'),{...state,monitors:active},filters);const preview=OverviewLayout.previews(active.filter(m=>m.coverage?.available>0));if(preview.length)renderCards(preview);else{$('#monitor-grid').replaceChildren(make('p','No behavior measurements for this run yet. Open measurement coverage to see which inputs are missing.','overview-behavior-empty'));}const head=$('#overview-view .section-heading');head.replaceChildren(make('h2','Rollout behavior'));const all=make('a','All behavior measures →');all.href=OverviewLayout.href('measures',filters);head.append(all);$('#research-rail').hidden=true;let note=$('#overview-preview-note');if(!note){note=make('p',undefined,'overview-preview-note');note.id='overview-preview-note';$('#overview-view .research-main').append(note);}const missing=active.filter(m=>!m.coverage?.available).length;note.replaceChildren(document.createTextNode(`Showing ${preview.length} of ${active.length} active measures${missing?' · '+missing+' awaiting measurements':''}. `));if(missing){const gaps=make('a','View measurement coverage →');gaps.href=OverviewLayout.href('measures',filters,{availability:'missing'});note.append(gaps);}}
+ if(overviewMode.section==='library'){$('#page-title').textContent=$('#page-name').textContent='Runs & projects';$('#page-description').textContent='Organize runs, compare settings and reopen saved comparisons.';}
  if(measuresView){$('#page-title').textContent='Behavior';$('#page-description').textContent='Measure activities, recovery and outcomes. Open a value to inspect its rollout evidence.';$('#research-rail').hidden=false;renderCards(active);renderResearchRail(active);}
  if(executionView){$('#page-title').textContent='Execution';$('#page-description').textContent='Worker timelines, linked training signals and the rollouts behind each update.';}
  if(healthView){$('#page-title').textContent='Training';$('#page-description').textContent=overviewMode.panel==='diagnostics'?'Inspect scoring, selection and learner use for the selected training population.':'Compare recorded trainer signals, then inspect an update or interval.';if(overviewMode.panel==='diagnostics'){if(state.capabilities?.training_health)loadHealthView();else $('#health-view').replaceChildren(make('p','Update the collector to enable sample diagnostics. Existing training signals remain available.'));}}
@@ -479,9 +492,9 @@ async function openCases(m,step=null,exactValue=null,initialFilter=null,series=n
   const ids=series?new Set(series.points.map(p=>p.run_id)):null;
   caseRows=ids?rows.filter(r=>ids.has(r.run.id)):rows;
   $('#cases-filter').value=initialFilter||((m.coverage?.available||0)>0?'available':'all');renderCases();$('#cases-export').disabled=false;
-  if(m.kind==='analysis'&&m.analysis_definition?.aggregation==='opportunity_ratio'||m.kind==='custom'&&m.custom?.aggregation==='incidence'){
+  if(m.kind==='analysis'&&m.analysis_definition?.aggregation==='opportunity_ratio'||m.kind==='custom'&&m.custom?.aggregation==='incidence'||m.kind==='metric'&&m.metric?.startsWith('diagnostic_')){
    if(!options)options=await api('/api/monitoring/options');
-   if(request===caseRequestSequence){const button=$('#cases-review');button.hidden=!(m.kind==='custom'?options.measurement_review?.custom_aggregation==='incidence':['measurement-review-sample/1','measurement-review-sample/2','measurement-review-sample/3'].includes(options.measurement_review?.version));button.textContent='Review all outcomes';button.title='Sample this cohort and training step, including clear and unresolved results. Value filters do not restrict the review sample.';}
+   if(request===caseRequestSequence){const button=$('#cases-review');button.hidden=!(m.kind==='custom'?options.measurement_review?.custom_aggregation==='incidence':m.kind==='metric'?options.measurement_review?.diagnostic_indicators:['measurement-review-sample/1','measurement-review-sample/2','measurement-review-sample/3'].includes(options.measurement_review?.version));button.textContent='Review all outcomes';button.title='Sample this cohort and training step, including clear and unresolved results. Value filters do not restrict the review sample.';}
   }
  }catch(e){if(request===caseRequestSequence)$('#case-table').textContent=e.message;}
 }
@@ -605,9 +618,9 @@ $('#clear-case-value').onclick=()=>{caseExactValue=null;casePage=0;$('#clear-cas
 function openWindowComparison(monitor){MonitorComparisons.open({monitors:state.monitors,experiments:state.experiments,experiment:$('#experiment').value,environment:$('#environment').value,monitor});}
 $('#compare-windows').onclick=()=>openWindowComparison();
 $('#add-monitor').onclick=()=>{if(rewardView){$('#reward-checks').open=true;$('#reward-checks').scrollIntoView({block:'start'});}else openEditor();};$('#close-editor').onclick=()=>$('#monitor-dialog').close();$('#monitor-dialog').addEventListener('close',()=>pulse());$('#close-cases').onclick=()=>$('#cases-dialog').close();$('#cases-filter').onchange=()=>{casePage=0;renderCases();};$('#prev-cases').onclick=()=>{casePage--;renderCases();};$('#next-cases').onclick=()=>{casePage++;renderCases();};$('#cases-export').onclick=()=>download({monitor:caseMonitor,scope:{experiment:$('#experiment').value,environment:$('#environment').value,step:caseStep,cohort:caseCohort,exact_value:caseExactValue,filter:$('#cases-filter').value},rows:filteredCases()},'monitor-values.json');
-$('#experiment').onchange=()=>{sessionStorage.setItem('monitor-experiment',$('#experiment').value);page=0;load();};$('#environment').onchange=()=>{page=0;load();};$('#axis').onchange=()=>{if(state)renderCards(state.monitors.filter(m=>m.enabled));};$('#refresh').onclick=()=>load();$('#run-search').oninput=()=>{page=0;renderRuns();};$('#prev-runs').onclick=()=>{page--;renderRuns();};$('#next-runs').onclick=()=>{page++;renderRuns();};
+$('#experiment').onchange=()=>{page=0;load();};$('#environment').onchange=()=>{page=0;load();};$('#axis').onchange=()=>{if(state)renderCards(state.monitors.filter(m=>m.enabled));};$('#refresh').onclick=()=>load();$('#run-search').oninput=()=>{page=0;renderRuns();};$('#prev-runs').onclick=()=>{page--;renderRuns();};$('#next-runs').onclick=()=>{page++;renderRuns();};
 async function pulse(){if(busy||document.hidden)return;busy=true;try{const s=await api('/api/monitoring/status');status(s);if((s.revision!==revision||state?.service?.snapshot_stale)&&!$('#monitor-dialog').open){await load();revision=state?.service?.revision;}}catch(e){status({running:false});}finally{busy=false;}}
-(async()=>{const availability=new URLSearchParams(location.search).get('availability');if(['all','measured','missing'].includes(availability))$('#monitor-availability').value=availability;await load(true);const savedComparison=new URLSearchParams(location.search).get('comparison');if(savedComparison)MonitorComparisons.openSaved(savedComparison,{monitors:state.monitors,experiments:state.experiments,experiment:$('#experiment').value,environment:$('#environment').value});const draft=new URLSearchParams(location.search);if(view==='monitors'&&draft.has('create_measure')){const key=draft.get('create_measure');if(!options)options=await api('/api/monitoring/options');if(options.analysis_measures?.[key]){await openEditor();$('#monitor-kind').value='analysis';$('#monitor-group').value='Behavior';$('#monitor-analysis').value=key;configureKind(draft.get('observer')||undefined);$('#monitor-name').value=options.analysis_measures[key].label;}}revision=state?.service?.revision;let trainingRevision=window.trackerLive?.training_revision,source=window.trackerLive?.source_revision,execution=window.trackerLive?.execution_revision,cohort=window.trackerLive?.cohort_revision,semantic=window.trackerLive?.semantic_revision,observedRevision=revision,wasUpdating=false;window.addEventListener('tracker-live',async e=>{const s=e.detail,a=s.analysis;if(!a)return;status(a);const changed=s.training_revision!==trainingRevision||s.source_revision!==source||s.execution_revision!==execution||s.cohort_revision!==cohort||s.semantic_revision!==semantic||a.revision!==observedRevision||wasUpdating&&!a.updating;wasUpdating=a.updating;if(!changed||busy||document.hidden||$('#monitor-dialog').open)return;trainingRevision=s.training_revision;source=s.source_revision;execution=s.execution_revision;cohort=s.cohort_revision;semantic=s.semantic_revision;observedRevision=a.revision;busy=true;try{await load();revision=state?.service?.revision;}finally{busy=false;}});window.addEventListener('tracker-disconnected',()=>status(state?.service||{}));setInterval(pulse,30000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)pulse();});})();
+(async()=>{const availability=new URLSearchParams(location.search).get('availability');if(['all','measured','missing'].includes(availability))$('#monitor-availability').value=availability;await load(true);const savedComparison=new URLSearchParams(location.search).get('comparison');if(savedComparison)MonitorComparisons.openSaved(savedComparison,{monitors:state.monitors,experiments:state.experiments,experiment:$('#experiment').value,environment:$('#environment').value});const draft=new URLSearchParams(location.search);if(view==='monitors'&&draft.has('create_measure')){const key=draft.get('create_measure');if(!options)options=await api('/api/monitoring/options');if(options.analysis_measures?.[key]){await openEditor();$('#monitor-kind').value='analysis';$('#monitor-group').value='Behavior';$('#monitor-analysis').value=key;configureKind(draft.get('observer')||undefined);$('#monitor-name').value=options.analysis_measures[key].label;}}revision=state?.service?.revision;let trainingRevision=window.trackerLive?.training_revision,source=window.trackerLive?.source_revision,execution=window.trackerLive?.execution_revision,cohort=window.trackerLive?.cohort_revision,semantic=window.trackerLive?.semantic_revision,capture=window.trackerLive?.capture_revision,observedRevision=revision,wasUpdating=false;window.addEventListener('tracker-live',async e=>{const s=e.detail,a=s.analysis;if(!a)return;status(a);const changed=s.training_revision!==trainingRevision||s.source_revision!==source||s.execution_revision!==execution||s.cohort_revision!==cohort||s.semantic_revision!==semantic||s.capture_revision!==capture||a.revision!==observedRevision||wasUpdating&&!a.updating;wasUpdating=a.updating;if(!changed||busy||document.hidden||$('#monitor-dialog').open)return;trainingRevision=s.training_revision;source=s.source_revision;execution=s.execution_revision;cohort=s.cohort_revision;semantic=s.semantic_revision;capture=s.capture_revision;observedRevision=a.revision;busy=true;try{await load();revision=state?.service?.revision;}finally{busy=false;}});window.addEventListener('tracker-disconnected',()=>status(state?.service||{}));setInterval(pulse,30000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)pulse();});})();
 
 // Setup reuses the ordinary monitor definition and frozen observer selection.
 $('#check-question').onclick=()=>checkQuestion();

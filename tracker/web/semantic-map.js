@@ -927,12 +927,15 @@ function inspectStageEvidence(plan,stage){
  for(const ref of stage.evidence)host.append(cite(ref));
  for(const result of stage.work_result_history||[])host.append(button(result.response_event_id+' · '+workResultLabel[result.result],()=>inspectWorkResult(result),'work-result-badge '+result.result));
  for(const r of stage.response_evidence){
-  const box=el('section',undefined,'inspector-connection'),m=r.material_index===null?null:state.doc.plan_stage_material?.observations[r.material_index],er=r.executor_report_index===null?null:state.doc.execution_reports?.observations[r.executor_report_index];
-  box.append(el('p',`${r.response_event_id} · ${r.roles.map(label).join(' / ')}`,'eyebrow'),button('Open action: '+unit(r.action_unit_id).content.summary.text,()=>inspect(r.action_unit_id),'connection-jump'));
-  if(m){box.append(el('p','Material: '+(BehaviorBlueprint.materialLabels[m.form]||label(m.form))),el('p',`Decision ${m.request_hash}`,'muted'));for(const ref of m.evidence)box.append(cite(ref));}
-  else box.append(el('p',r.roles.includes('prepares')?'Preparation response; downstream product not assessed.':'Stage material has not been inspected.','muted'));
+  const box=el('section',undefined,'inspector-connection'),er=r.executor_report_index===null?null:state.doc.execution_reports?.observations[r.executor_report_index];
+  const indices=r.material_indices??(r.material_index==null?[]:[r.material_index]);
+  box.append(el('p',`${r.response_event_id} · ${r.roles.map(label).join(' / ')}`,'eyebrow'));
+  for(const id of r.action_unit_ids??[r.action_unit_id])box.append(button('Open action: '+unit(id).content.summary.text,()=>inspect(id),'connection-jump'));
+  if(r.material_form==='conflicting_observations')box.append(el('p','Conflicting readings of this stage response. Open the saved evidence below.','missing'));
+  for(const index of indices){const m=state.doc.plan_stage_material?.observations[index];if(m){box.append(el('p','Material: '+(BehaviorBlueprint.materialLabels[m.form]||label(m.form))),el('p',`Decision ${m.request_hash}`,'muted'));for(const ref of m.evidence)box.append(cite(ref));}}
+  if(!indices.length)box.append(el('p',r.roles.every(role=>role==='prepares')?'Preparation response; downstream product not assessed.':'Stage material has not been inspected.','muted'));
   if(er)box.append(el('p',`Executor error: ${label(er.error)} · warning: ${label(er.warning)}`,'muted'));
-  if(r.response_unit_id)box.append(button('Open recorded response',()=>inspect(r.response_unit_id),'connection-jump'));host.append(box);
+  for(const id of r.response_unit_ids??(r.response_unit_id?[r.response_unit_id]:[]))box.append(button('Open recorded response: '+unit(id).content.summary.text,()=>inspect(id),'connection-jump'));host.append(box);
  }
  if(!stage.response_evidence.length)host.append(el('p','No source-bound response is available for this stage.','muted'));
  host.append(el('p','Stage completion: not established.','muted'));presentInspector(host);

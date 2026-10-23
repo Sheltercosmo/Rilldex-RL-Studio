@@ -16,6 +16,7 @@ def configure(commands):
     watch.add_argument('directory');watch.add_argument('--experiment',required=True);watch.add_argument('--label',required=True)
     watch.add_argument('--workspace-options',help='JSON workspace options: activity routing, context, reading protocol, include_user, feedback_profile, requested_profile')
     watch.add_argument('--feedback-references',action='store_true',help='After base extraction, select explicit references to earlier tool feedback across primary activities')
+    watch.add_argument('--behavior-links',action='store_true',help='Inspect plan steps, work-target relationships, executor feedback and approach comparisons under the same lifetime budget')
     watch.add_argument('--requested-conditions',action='store_true',help='Retain distinct user requirements, requested checks and their revisions after base extraction')
     watch.add_argument('--live-prefixes',action='store_true',help='Observe growing rollouts; reuse exact requests from earlier revisions without adding unfinished captures to completed-rollout rates')
     watch.add_argument('--max-new-calls',type=int,default=0);watch.add_argument('--max-candidate-calls',type=int,default=0);watch.add_argument('--max-input-bytes',type=int,default=0)
@@ -28,6 +29,8 @@ def configure(commands):
     watcher.add_argument('--candidate-command',nargs='...')
     watch_status=sub.add_parser('watch-status',help='Read observation coverage, blocked jobs and persistent provider usage')
     watch_status.add_argument('directory')
+    watch_refresh=sub.add_parser('watch-refresh',help='Replay saved evidence offline after a package update; preserve the observer, protocol and lifetime usage')
+    watch_refresh.add_argument('directory')
     watch_budget=sub.add_parser('watch-budget',help='Raise absolute lifetime limits without resetting consumed reservations')
     watch_budget.add_argument('directory');watch_budget.add_argument('--max-new-calls',type=int,required=True)
     watch_budget.add_argument('--max-candidate-calls',type=int,required=True);watch_budget.add_argument('--max-input-bytes',type=int,required=True)
@@ -108,6 +111,11 @@ def execute(args,store):
             allowance={'jev_requests':args.max_new_calls,'candidate_requests':args.max_candidate_calls,'input_bytes':args.max_input_bytes}
             if args.semantic_command=='watch-init':
                 options=workspace.read(args.workspace_options) if args.workspace_options else {}
+                if args.behavior_links:
+                    if not isinstance(options,dict):raise InputError('Workspace options must be a JSON object')
+                    for key,value in semantic_watch.behavior_options().items():
+                        if key in options and options[key]!=value:raise InputError('Behavior links conflict with '+key)
+                        options[key]=value
                 if args.feedback_references:
                     from .semantic_layers import FEEDBACK_PROFILE,profile
                     if not isinstance(options,dict):raise InputError('Workspace options must be a JSON object')
@@ -123,6 +131,9 @@ def execute(args,store):
                     command=args.candidate_command,producer=args.candidate_producer,citation_format=args.candidate_citation_format)
             else:result=semantic_watch.set_allowance(store,root,allowance)
         elif args.semantic_command=='watch-status':result=semantic_watch.status(store,root)
+        elif args.semantic_command=='watch-refresh':
+            from .semantic_refresh import refresh
+            result=refresh(store,root)
         else:
             import math,time
             from .jev import JevClient

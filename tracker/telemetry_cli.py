@@ -3,18 +3,29 @@ import json
 from pathlib import Path
 from .schema import InputError
 from .store import Store
-from .trainer_telemetry import TrainerTelemetry, snapshot
+from .trainer_telemetry import TrainerTelemetry, snapshot, PROFILES, TRANSFORMERS_PROFILES
 
 
 def configure(commands):
     p=commands.add_parser('telemetry',help='Import native trainer logs or read their measured series')
     s=p.add_subparsers(dest='telemetry_command',required=True)
     show=s.add_parser('show');show.add_argument('--experiment');show.add_argument('--limit',type=int,default=1000)
+    query=s.add_parser('query',help='Full-run summaries and spike-preserving chart points')
+    export=s.add_parser('export',help='Stream original telemetry packets for an exact step interval')
+    for parser in (query,export):
+        for name in ('experiment','environment','clock','producer','session'):parser.add_argument('--'+name)
+        parser.add_argument('--session-mode',choices=('all','latest'),default='all')
+        parser.add_argument('--from-step',type=json.loads,dest='start');parser.add_argument('--to-step',type=json.loads,dest='end')
+        parser.add_argument('--as-of',type=int,help='Freeze at the source cutoff returned by query')
+    query.add_argument('--max-points',type=int,default=240)
+    query.add_argument('--half-life',type=int,choices=(0,10,50,100),default=0)
+    query.add_argument('--series',action='append',default=[],dest='series_ids')
+    export.add_argument('destination',help='New JSONL file; native records can be replayed through the telemetry API')
     load=s.add_parser('import',help='Read JSONL logs or a trainer_state.json log_history; replay is idempotent')
     load.add_argument('path')
     for name in ('experiment','producer','framework-version','objective','session'):
         load.add_argument('--'+name,required=True)
-    load.add_argument('--framework',choices=('trl-grpo','trl-ppo','verl','custom'),required=True)
+    load.add_argument('--framework',choices=tuple(PROFILES),required=True)
     load.add_argument('--clock',default='learner_update')
     load.add_argument('--split',choices=('train','evaluation'),default='train')
     load.add_argument('--population',default='trainer logged batch')
@@ -25,6 +36,17 @@ def configure(commands):
 def run(args):
     store=Store(args.db)
     if args.telemetry_command=='show':return snapshot(store,experiment=args.experiment,limit=args.limit)
+    if args.telemetry_command in {'query','export'}:
+        from . import telemetry_queries as tq
+        options={k:getattr(args,k) for k in ('experiment','environment','clock','start','end','as_of')}
+        options.update({k:getattr(args,k) for k in ('producer','session','session_mode') if getattr(args,k,None) is not None})
+        if args.telemetry_command=='query':
+            return tq.query(store,**options,max_points=args.max_points,half_life=args.half_life,series_ids=args.series_ids)
+        cutoff,records=tq.export_records(store,**options);count=0
+        with Path(args.destination).open('x',encoding='utf-8',newline='\n') as stream:
+            for packet in records:
+                stream.write(json.dumps(packet,ensure_ascii=False,allow_nan=False,separators=(',',':'))+'\n');count+=len(packet['records'])
+        return dict(path=str(Path(args.destination).resolve()),records=count,as_of=cutoff,range=[args.start,args.end])
     path=Path(args.path)
     if path.stat().st_size>64*1024*1024:raise InputError('Split log imports into files of at most 64 MiB')
     raw=path.read_text(encoding='utf-8-sig')
@@ -52,7 +74,7 @@ def run(args):
             if 'metrics' not in row or row.get('split') not in ('train','evaluation'):
                 raise InputError('Linked logs require metrics and an explicit train/evaluation split')
             partitions=[(row['split'],logs)]
-        elif args.framework.startswith('trl-') and args.split=='train':
+        elif args.framework in TRANSFORMERS_PROFILES and args.split=='train':
             partitions=[('train',{k:v for k,v in logs.items() if not k.startswith('eval_')}),
                         ('evaluation',{k:v for k,v in logs.items() if k.startswith('eval_')})]
         else:partitions=[(args.split,logs)]

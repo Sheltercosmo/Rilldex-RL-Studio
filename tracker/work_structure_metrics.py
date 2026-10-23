@@ -7,8 +7,9 @@ witnesses, never inferred exploration quality or abandoned work.
 from collections import defaultdict, deque
 
 from .schema import digest, InputError
+from . import work_dispatches
 
-VERSION = 'work-structure-measures/1'
+VERSION = 'work-structure-measures/2'
 LIMIT = ('Recorded structure only. Unlinked or unvisited work remains unobserved, not ignored or abandoned. '
          'Native operation requests do not prove execution; linked Plan attempts do not prove completion. '
          'Stop, defer and resume are attributed decisions. Depth and effort depend on the captured hierarchy; '
@@ -60,6 +61,7 @@ def summarize(graph, hierarchy):
     source = {n['id']: n for n in graph['nodes']}
     items = {n['id']: n for n in hierarchy['nodes']}
     edge_by_id = {e['id']: e for e in graph['edges']}
+    hierarchy_links = {e['id']: e for e in hierarchy['links']}
     edges_from, edges_to = defaultdict(list), defaultdict(list)
     for e in graph['edges']:
         edges_from[e['source']].append(e)
@@ -68,31 +70,39 @@ def summarize(graph, hierarchy):
     profiles = {}
 
     def witness(identifier, label, nodes, edges=(), **extra):
-        return dict(id=identifier, label=label, taken=True, status='recorded', node_ids=sorted(set(nodes) & source.keys()),
-                    edge_ids=sorted(set(edges)), **extra)
+        edge_ids = sorted(set(edges))
+        endpoints = {nid for eid in edge_ids for nid in (edge_by_id[eid]['source'], edge_by_id[eid]['target'])}
+        return dict(id=identifier, label=label, taken=True, status='recorded', node_ids=sorted((set(nodes) | endpoints) & source.keys()),
+                    edge_ids=edge_ids, **extra)
 
     # One row per semantic Plan step, with exact action membership retained.
     paths = {p['stage_id']: p for p in hierarchy['stage_paths']}
     steps = [n for n in items.values() if n['kind'] == 'plan_step']
-    dispatches = defaultdict(list)
+    dispatches = defaultdict(lambda: dict(actions=set(), owners=[]))
     for step in steps:
         path = paths.get(step['id'], {})
         attempts = [r for r in path.get('rows', []) if 'attempts_plan_step' in r['roles']]
         ids = sorted({r['action_id'] for r in attempts})
-        links = sorted({eid for r in attempts for eid in r['role_link_ids']
+        links = sorted({eid for r in attempts for lid in r['role_link_ids']
+                        for eid in hierarchy_links.get(lid, {}).get('edge_ids', [])
                         if edge_by_id.get(eid, {}).get('type') == 'attempts_plan_step'})
+        effort = len(work_dispatches.identities(attempts))
         row = dict(id=step['id'], profile='plan_steps', label=step['label'], state=step['state'],
-                   effort=len(ids), effort_unit='linked attempt dispatches', direct_effort=len(ids),
+                   effort=effort, effort_unit='linked attempt dispatches', direct_effort=effort,
                    depth_min=1, depth_max=1, observed=bool(ids), node_ids=[step['id'], *ids], edge_ids=links)
         rows.append(row)
         if ids:
             cases['plan_steps_attempted'].append(witness(step['id'], step['label'], row['node_ids'], links,
-                work_structure=dict(profile='plan_steps', focus=step['id'], effort=len(ids))))
-        for aid in ids:
-            dispatches[aid].append(row)
-    for aid, owners in sorted(dispatches.items()):
-        cases['plan_attempt_dispatches'].append(witness(aid, 'Plan attempt · ' + aid,
-            [aid, *(r['id'] for r in owners)], {eid for r in owners for eid in r['edge_ids'] if edge_by_id[eid]['source'] == aid},
+                work_structure=dict(profile='plan_steps', focus=step['id'], effort=effort)))
+        for attempt in attempts:
+            dispatch = dispatches[work_dispatches.identity(attempt)]
+            dispatch['actions'].add(attempt['action_id'])
+            if row not in dispatch['owners']: dispatch['owners'].append(row)
+    for did, dispatch in sorted(dispatches.items()):
+        owners, actions = dispatch['owners'], dispatch['actions']
+        label = items[min(actions)]['label']
+        cases['plan_attempt_dispatches'].append(witness(did, 'Plan attempt · ' + label,
+            [did, *actions, *(r['id'] for r in owners)], {eid for r in owners for eid in r['edge_ids'] if edge_by_id[eid]['source'] in actions},
             work_structure=dict(profile='plan_steps', focus=owners[0]['id'], shared_scopes=[r['id'] for r in owners])))
     profiles['plan_steps'] = dict(available=bool(hierarchy['counts']['plans']), declared=len(steps), observed=sum(r['observed'] for r in rows),
                                  distinct_effort=len(dispatches), effort_unit='linked attempt dispatches')
@@ -164,10 +174,12 @@ def summarize(graph, hierarchy):
     for item in work_items:
         k = item['id']
         execution = item.get('execution_summary', {})
-        ids = {r['action_id'] for r in execution.get('rows', [])}
-        all_actions.update(ids)
+        action_rows = execution.get('rows', [])
+        ids = {r['action_id'] for r in action_rows}
+        dispatch_ids = work_dispatches.identities(action_rows)
+        all_actions.update(dispatch_ids)
         rows.append(dict(id=k, profile='work_outline', label=item['label'], state=item['state'],
-                         depth_min=level[k][0], depth_max=level[k][1], observed=bool(ids), effort=len(ids),
+                         depth_min=level[k][0], depth_max=level[k][1], observed=bool(ids), effort=len(dispatch_ids),
                          direct_effort=None, effort_unit='linked dispatches (including descendants)',
                          node_ids=[k, *sorted(ids)], edge_ids=[]))
         for decision in item['decisions']:

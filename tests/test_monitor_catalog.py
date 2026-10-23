@@ -11,7 +11,7 @@ class MonitorCatalogTests(unittest.TestCase):
         self.assertEqual(monitor_catalog.validate_catalog(), [])
         rows = monitor_catalog.catalog()
         self.assertGreaterEqual(len(rows), 10)
-        self.assertLessEqual(len(rows), 16)
+        self.assertLessEqual(len(rows), 19)
         for row in rows:
             with self.subTest(recipe=row['id']):
                 if row['kind'] == 'metric':
@@ -39,7 +39,7 @@ class MonitorCatalogTests(unittest.TestCase):
     def test_semantic_recipes_need_explicit_observer_and_validate(self):
         definitions = monitor_catalog.default_definitions('reviewed-observer-v1')
         semantic = [d for d in definitions if d['observer'] != 'source']
-        self.assertEqual(len(semantic), 6)
+        self.assertEqual(len(semantic), 9)
         for definition in semantic:
             with self.subTest(name=definition['name']):
                 validated = monitoring.validate(definition)
@@ -56,6 +56,8 @@ class MonitorCatalogTests(unittest.TestCase):
     def test_catalog_searches_question_and_measure_ids(self):
         self.assertEqual([r['id'] for r in monitor_catalog.catalog('explicit feedback')], ['feedback-reference'])
         self.assertEqual([r['id'] for r in monitor_catalog.catalog('procedure_change_fraction')], ['procedure-change'])
+        self.assertEqual(monitor_catalog.catalog('explicit_observer'), [])
+        self.assertEqual([r['id'] for r in monitor_catalog.catalog('revisit_exact_repeat_fraction')], ['revisit-matching-feedback'])
 
     def test_add_defaults_preserves_equivalent_renamed_paused_measure(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -67,7 +69,7 @@ class MonitorCatalogTests(unittest.TestCase):
             self.assertIn(old['id'],result['existing'])
             self.assertEqual(monitoring.add_starters(store,{})['added'],[])
             self.assertFalse(next(d for d in monitoring.definitions(store) if d['id']==old['id'])['enabled'])
-            self.assertEqual(len(monitoring.options(store)['starters']),16)
+            self.assertEqual(len(monitoring.options(store)['starters']),19)
 
 
 if __name__ == '__main__':

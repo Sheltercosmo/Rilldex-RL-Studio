@@ -49,6 +49,69 @@ def selected_case(choices=None):
 
 
 class BindingTests(unittest.TestCase):
+    def test_membership_can_represent_shared_scope_without_supplied_bundle(self):
+        p,q,body,b=case();body['features'][2]['scopes']=[['absence']]
+        b=scoped.bind(p,q,body,'authored structural control')
+        req=scoped.membership_scope_request(p,b,'intention')
+        choices={key:('does_not_apply' if cid=='absence' else 'applies') for key,cid in req['state']['question_contents'].items()}
+        raw=response(req,choices);result=scoped.membership_scope_result(p,b,'intention',raw)
+        self.assertEqual(result['content_ids'],['available','convert','install'])
+        self.assertEqual(result['response'],raw)
+        self.assertEqual(result['selection_policy'],'argmax/1')
+        self.assertNotIn('scopes',req['state']['feature'])
+        self.assertEqual(req['state']['unit'],q['unit'])
+
+    def test_membership_request_is_independent_of_scope_options_and_content_order(self):
+        p,q,body,b=case();req=scoped.membership_scope_request(p,b,'intention')
+        body['features'][2]['scopes']=[['absence']];body['contents'].reverse()
+        other=scoped.bind(p,q,body,'authored structural control')
+        self.assertEqual(req,scoped.membership_scope_request(p,other,'intention'))
+
+    def test_membership_keeps_unknown_and_outside_inventory_distinct(self):
+        p,_,_,b=case();req=scoped.membership_scope_request(p,b,'hedge')
+        raw=response(req,{k:'does_not_apply' for k in req['questions']})
+        result=scoped.membership_scope_result(p,b,'hedge',raw)
+        self.assertEqual(result['status'],'outside_inventory');self.assertIsNone(result['content_ids'])
+        raw=response(req,{k:'unresolved' if i==0 else 'applies' for i,k in enumerate(req['questions'])})
+        result=scoped.membership_scope_result(p,b,'hedge',raw)
+        self.assertEqual(result['status'],'unresolved');self.assertIsNone(result['content_ids'])
+        self.assertEqual(len(result['supported_content_ids']),3)
+        with self.assertRaises(InputError):scoped.membership_scope_request(p,b,'missing')
+
+    def test_proposed_work_scope_is_explicit_and_projection_retains_source_modes(self):
+        p,_,_,b=case()
+        direct=scoped.membership_scope_request(p,b,'intention')
+        req=scoped.membership_scope_request(p,b,'intention',intent_rule='expressed_work')
+        self.assertNotEqual(req,direct)
+        self.assertEqual(req['state']['unit'],direct['state']['unit'])
+        self.assertEqual(req['state']['scope_semantics'],'expressed_proposed_work')
+        raw=response(req,{k:'does_not_apply' if cid=='absence' else 'applies' for k,cid in req['state']['question_contents'].items()})
+        result=scoped.membership_scope_result(p,b,'intention',raw,intent_rule='expressed_work')
+        projected=scoped.project_membership_scope(p,b,result)
+        self.assertEqual(projected['scope_semantics'],'expressed_proposed_work')
+        self.assertEqual(projected['unit']['source'],req['state']['unit']['source'])
+        self.assertEqual(projected['inventory_status'],'not_evaluated')
+        for c in projected['contents']:
+            self.assertEqual(c['mode'],next(x['mode'] for x in b['contents'] if x['id']==c['id']))
+        bad=deepcopy(result);bad['content_ids']=['absence']
+        with self.assertRaises(InputError): scoped.project_membership_scope(p,b,bad)
+        with self.assertRaises(InputError): scoped.membership_scope_request(p,b,'hedge',intent_rule='expressed_work')
+        with self.assertRaises(InputError): scoped.membership_scope_request(p,b,'intention',intent_rule='invented')
+
+    def test_incremental_feature_review_automatically_uses_work_status_for_intent(self):
+        p,_,_,b=case();requests=scoped.scope_membership_requests(p,b)
+        self.assertEqual(requests['intention']['state']['scope_semantics'],'expressed_proposed_work')
+        self.assertNotIn('scope_semantics',requests['hedge']['state'])
+        raw=response(requests['intention'])
+        partial=scoped.scope_membership_review(p,b,{'intention':raw})
+        self.assertEqual(partial['pending_feature_ids'],['hedge','negative'])
+        self.assertEqual(partial['features'][0]['scope_semantics'],'expressed_proposed_work')
+        complete=scoped.scope_membership_review(p,b,{k:response(r) for k,r in requests.items()})
+        self.assertEqual(complete['pending_feature_ids'],[])
+        self.assertEqual(complete['inventory_status'],'not_evaluated')
+        self.assertEqual(complete['receipts'][2],partial['receipts'][0])
+        with self.assertRaises(InputError):scoped.scope_membership_review(p,b,{'missing':raw})
+
     def test_scopes_use_raw_argmax_without_confidence_and_keep_raw_response(self):
         p,_,_,b,raw,s=selected_case()
         self.assertTrue(s['ready_for_relationships'])

@@ -110,7 +110,7 @@ def export(store, destination):
             'database':{'name':'workspace.sqlite','bytes':database.stat().st_size,'sha256':file_hash(database)},
             'tables':counts,'observers':observers,'paused':{'connections':connections,'inference_jobs':jobs},
             'preserved':['sources','revision receipts','graphs','review notes','measurements','investigations','training facts'],
-            'excluded':['external worker outboxes','training output directories','candidate-generation and audit workspace files'],
+            'excluded':['external worker outboxes','training output directories','externally referenced artifact bytes (their metadata is preserved)','candidate-generation and audit workspace files'],
             'restore':'Restore to a new database path. Connections and pending inference are paused; resume only the intended producers.'}
         archive = Path(tmp)/'snapshot.rilldex.zip'
         with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=3) as z:

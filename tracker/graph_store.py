@@ -64,6 +64,14 @@ def build(run, bundle=None, *, include_requested=True):
                 edge('event:'+parent['id'], 'event:'+e['id'], 'parent_message',
                      {'basis':e['parent_link_basis'], 'semantic_causality':False})
     # Source-native action/result identity remains useful without semantic tags.
+    if run.get('adapter') == 'weave':
+        for e in run['events']:
+            if e.get('native_parent_event_id') in events:
+                edge('event:'+e['native_parent_event_id'], 'event:'+e['id'], 'contains_call',
+                     {'basis':'weave_parent_id', 'semantic_causality':False})
+            if e.get('call_event_id') in events:
+                edge('event:'+e['call_event_id'], 'event:'+e['id'], 'call_'+e['weave_record_role'],
+                     {'basis':'weave_record_field', 'source_pointer':e['source_pointer'], 'semantic_causality':False})
     from .capabilities import links
     for action, responses in links(run)['by_action'].items():
         for response in responses:
@@ -84,6 +92,10 @@ def build(run, bundle=None, *, include_requested=True):
             'identity_reviews':d.get('action_target_review',[]),
             'method_schema':d.get('method_comparison',{}).get('schema'),
             'method_observations':d.get('method_comparison',{}).get('observations',[])}
+        if d.get('execution_reports'):
+            from .execution_reports import validate, VERSION as REPORT_VERSION
+            if d['execution_reports'].get('schema')==REPORT_VERSION:validate(run,d['execution_reports'])
+            semantic_context['execution_reports']=deepcopy(d['execution_reports'])
         if d.get('check_correspondence'):
             checks=d['check_correspondence']
             if checks.get('source_hash')!=digest(run) or checks.get('requested_work_hash')!=digest(d.get('requested_work')):
@@ -168,22 +180,28 @@ def read(store, identifier):
     return value
 
 
-def catalog(store, *, run_id=None):
+def catalog(store, *, run_id=None, run_ids=None):
     # Query latest producer snapshots without loading every trace or rebuilding maps.
     # Database insertion order breaks wall-clock ties between annotation versions.
     # This is review history, never a rollout/training clock.
     if run_id is not None and (not isinstance(run_id,str) or not run_id):
         raise InputError('Choose a nonempty rollout snapshot ID')
+    if run_ids is not None and (run_id is not None or not isinstance(run_ids,(list,tuple)) or len(run_ids)>20000
+            or any(not isinstance(i,str) or not i for i in run_ids)):
+        raise InputError('Choose at most 20,000 exact rollout snapshot IDs')
     # An exact detail view must still open an older immutable source snapshot.
     # Keep the ordinary catalog restricted to current producer revisions.
     where='g.run_id=?' if run_id is not None else '''(NOT EXISTS (SELECT 1 FROM rollout_revisions r WHERE r.run_id=g.run_id)
             OR EXISTS (SELECT 1 FROM rollout_revisions r WHERE r.run_id=g.run_id AND r.revision=(
               SELECT max(r2.revision) FROM rollout_revisions r2 WHERE r2.producer=r.producer AND r2.rollout_id=r.rollout_id)))'''
+    args=(run_id,) if run_id is not None else ()
+    if run_ids is not None:
+        where='g.run_id IN (SELECT value FROM json_each(?))'; args=(json.dumps(run_ids),)
     with store.connect() as c:
         rows = c.execute('SELECT g.document,g.created_at FROM rollout_graphs g WHERE '+where+'''
             AND g.rowid=(SELECT max(h.rowid) FROM rollout_graphs h WHERE h.run_id=g.run_id AND h.observer=g.observer)
             ORDER BY g.rowid''',
-                         (run_id,) if run_id is not None else ()).fetchall()
+                         args).fetchall()
         count = c.execute('SELECT count(*) FROM rollout_graphs').fetchone()[0]
     latest = {}
     for row in rows:

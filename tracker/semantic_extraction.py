@@ -112,7 +112,16 @@ def partition_request(run,w,opts,context_policy=None,standard=PARTITION_STANDARD
 def write(path,value):
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     temporary=path.with_suffix(path.suffix+'.tmp')
-    temporary.write_text(dumps(value),encoding='utf-8');temporary.replace(path)
+    temporary.write_text(dumps(value),encoding='utf-8')
+    # Windows readers can briefly deny replacement of a progress receipt.
+    # Retry only that atomic filesystem operation, never provider execution.
+    for delay in (.005,.01,.02,.04,.08,.16,.32,None):
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError as exc:
+            if getattr(exc,'winerror',None) not in (5,32,33) or delay is None:raise
+            time.sleep(delay)
 
 
 def read(path):
@@ -440,6 +449,7 @@ class Pipeline:
         self.directory=Path(directory);self.provider=provider;self.transport=transport or JevClient().transport
         self.context_policy=getattr(provider,'context_policy',None)
         self.calls=0;self.cache_directories=tuple(Path(p) for p in cache_directories);self.reused_decisions=set()
+        self.cached_decisions=set()
     def decide(self,req):
         key=digest(req);path=self.directory/'decisions'/f'{key}.json'
         if not path.exists() and self.cache_directories:
@@ -451,6 +461,7 @@ class Pipeline:
             if saved.get('response',{}).get('model')!=req['model']:raise InputError('Cached response model differs')
             answers=replay_decision(saved)
             if saved.get('answers')!=answers:raise InputError('Cached raw argmax differs')
+            self.cached_decisions.add(key)
             return answers,key
         start=time.monotonic();response=self.transport(req)
         if response.get('model')!=req['model']:raise InputError('Jev model mismatch')
@@ -839,7 +850,7 @@ def source_expression_links(run,units):
     return links
 
 
-def load_extraction(run,directory=None,*,action_target_version=None):
+def load_extraction(run,directory=None,*,action_target_version=None,plan_relation_version=None):
     directory=Path(directory) if directory else Path(__file__).resolve().parent.parent/'research/semantic-extraction-2026-10-07'
     rid=run['id']
     if not rid.isalnum():raise InputError('Invalid run ID')
@@ -932,8 +943,8 @@ def load_extraction(run,directory=None,*,action_target_version=None):
     doc['relations'].extend(expression_links)
     validation['source_expression_links']=len(expression_links)
     doc['provenance']['source_expression_harness']=SOURCE_ASSOCIATION
-    from .plan_relations import path_for, audit as audit_plan_relations
-    relation_path=path_for(directory,result)
+    from .plan_relations import path_for, audit as audit_plan_relations, VERSION as PLAN_VERSION
+    relation_path=path_for(directory,result,plan_relation_version or PLAN_VERSION)
     if relation_path.exists():
         links=read(relation_path)
         validation['plan_relations']=audit_plan_relations(run,result,links,directory)

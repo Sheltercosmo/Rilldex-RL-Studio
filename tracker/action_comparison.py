@@ -16,14 +16,24 @@ LIMIT = ('Compares captured dispatch fields only. Unchanged calls can operate on
     'Intervening work is context, not evidence of a causal repair or a new strategy.')
 
 
-def source(graph, node_id):
+def source_resolver(graph):
+    """Index bindings once when resolving several nodes in the same graph."""
     nodes = {n['id']:n for n in graph['nodes']}
+    grounded = {(e['source'], e['target']) for e in graph['edges'] if e['type'] == 'grounded_in'}
+    return lambda node_id: _source(nodes, grounded, node_id)
+
+
+def source(graph, node_id):
+    return source_resolver(graph)(node_id)
+
+
+def _source(nodes, grounded, node_id):
     node = nodes.get(node_id)
     if not node: return None
     if node['kind'] == 'unit':
         ref = node['properties'].get('source', {})
         eid = 'event:'+str(ref.get('event_id'))
-        if not any(e['type']=='grounded_in' and e['source']==node_id and e['target']==eid for e in graph['edges']):
+        if (node_id, eid) not in grounded:
             return None
         parent = nodes.get(eid)
         if not parent: return None
@@ -89,8 +99,20 @@ def recorded_fields(event):
     return dict(tool=event['tool'],arguments=captured)
 
 
-def compare(graph, previous_id, current_id):
-    previous,current=source(graph,previous_id),source(graph,current_id)
+def comparator(graph):
+    """Reuse source and ordering indexes when comparing a rollout's pairs."""
+    resolve = source_resolver(graph)
+    events = {n['properties']['id']:{**n['properties'],'index':n['event_index'],'trajectory_id':n['trajectory_id']}
+              for n in graph['nodes'] if n['kind']=='event'}
+    groups = Evidence(events).groups
+    return lambda previous, current: compare(graph, previous, current, _context=(resolve, groups))
+
+
+def compare(graph, previous_id, current_id, *, _context=None):
+    if _context is None:
+        return comparator(graph)(previous_id, current_id)
+    resolve, groups = _context
+    previous,current=resolve(previous_id),resolve(current_id)
     value=dict(schema=VERSION,graph_id=graph['id'],previous_node_id=previous_id,current_node_id=current_id,
         status='unavailable',basis=None,ordering='unestablished',changes=[],changes_truncated=False,reason=None,limits=LIMIT)
     def finish():return dict(id='action-comparison-'+digest(value),**value)
@@ -102,9 +124,6 @@ def compare(graph, previous_id, current_id):
         value['reason']='Actions have different actors or source contexts.';return finish()
     if previous['index']>=current['index']:
         value['reason']='An earlier source position is not established.';return finish()
-    events={n['properties']['id']:{**n['properties'],'index':n['event_index'],'trajectory_id':n['trajectory_id']}
-        for n in graph['nodes'] if n['kind']=='event'}
-    groups=Evidence(events).groups
     if current['id'] in groups.get(previous['id'],[]):
         value['reason']='Sibling dispatches have no recorded mutual order.';return finish()
     value['ordering']='source_order'

@@ -283,7 +283,7 @@ class GenerationCohortInvestigationTests(unittest.TestCase):
         self.assertNotEqual(before['cohort_revision'],after['cohort_revision'])
         self.assertEqual(before['source_revision'],after['source_revision'])
         state=monitoring.snapshot(self.store,experiment=EXPERIMENT)
-        self.assertIn({'id':EXPERIMENT,'count':0},state['experiments'])
+        self.assertIn({'id':EXPERIMENT,'label':EXPERIMENT,'count':0},state['experiments'])
         self.assertTrue(state['declared_populations']['available'])
 
 

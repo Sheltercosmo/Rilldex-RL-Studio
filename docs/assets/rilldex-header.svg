@@ -1,41 +1,42 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480" fill="none" role="img" aria-labelledby="title desc">
-  <title id="title">Rilldex — RL Studio</title>
-  <desc id="desc">Understand how your RL agents learn. Behavior maps, training signals, and evidence you can query.</desc>
-  <rect width="1280" height="480" rx="24" fill="#F7F9FC"/>
-  <rect x="1" y="1" width="1278" height="478" rx="23" stroke="#E3E8F1"/>
-  <path d="M944 0V480M1104 0V480M1280 160H896M1280 320H896" stroke="#E9EEF7"/>
-  <g transform="translate(64 65)">
-    <rect width="80" height="80" rx="23" fill="#19212F"/>
-    <path d="M25 58V23H40C50 23 55 28 55 35S50 48 40 48H25" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M40 48L55 58" stroke="#75E2CA" stroke-width="6" stroke-linecap="round"/>
-  </g>
-  <g font-family="Segoe UI, Inter, Arial, sans-serif">
-    <text x="168" y="124" fill="#19212F" font-size="64" font-weight="700" letter-spacing="-2.5">Rilldex</text>
-    <rect x="396" y="91" width="118" height="34" rx="17" fill="#E8EDFF"/>
-    <text x="455" y="113" text-anchor="middle" fill="#3659E3" font-size="15" font-weight="600" letter-spacing="1">RL STUDIO</text>
-    <text x="64" y="205" fill="#19212F" font-size="35" font-weight="600" letter-spacing="-.8">Understand how your RL agents learn.</text>
-    <text x="64" y="247" fill="#5E697B" font-size="20">From training curves to actions, plans, and the evidence behind them.</text>
-    <g transform="translate(64 313)">
-      <rect width="352" height="105" rx="16" fill="white" stroke="#DCE3EF"/>
-      <path d="M27 34H45V55H65M45 34V75H65" stroke="#3659E3" stroke-width="2" stroke-linejoin="round"/>
-      <rect x="21" y="27" width="12" height="12" rx="3" fill="#3659E3"/>
-      <rect x="62" y="48" width="12" height="12" rx="3" fill="#7C89CD"/>
-      <rect x="62" y="68" width="12" height="12" rx="3" fill="#159981"/>
-      <text x="94" y="46" fill="#19212F" font-size="20" font-weight="600">Behavior maps</text>
-      <text x="94" y="74" fill="#5E697B" font-size="15">Units, relationships, plans &amp; retries</text>
-    </g>
-    <g transform="translate(440 313)">
-      <rect width="352" height="105" rx="16" fill="white" stroke="#DCE3EF"/>
-      <path d="M25 28V77H77" stroke="#CFD7E6" stroke-width="2"/>
-      <path d="M26 65L37 55L46 61L57 39L66 45L77 28" stroke="#3659E3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="94" y="46" fill="#19212F" font-size="20" font-weight="600">Training signals</text>
-      <text x="94" y="74" fill="#5E697B" font-size="15">Native metrics beside behavior</text>
-    </g>
-    <g transform="translate(816 313)">
-      <rect width="400" height="105" rx="16" fill="white" stroke="#DCE3EF"/>
-      <path d="M39 36L25 53L39 70M62 36L76 53L62 70M55 32L47 74" stroke="#3659E3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="96" y="46" fill="#19212F" font-size="20" font-weight="600">Evidence you can query</text>
-      <text x="96" y="74" fill="#5E697B" font-size="15">Python, SQL &amp; custom monitors</text>
-    </g>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="430" viewBox="0 0 1280 430" role="img" aria-label="Rilldex RL Studio — behavior maps, training and evidence">
+<title>Rilldex RL Studio — behavior maps, training and evidence</title>
+<rect width="1280" height="430" rx="24" fill="#f8faff"/>
+<rect x="1" y="1" width="1278" height="428" rx="23" fill="none" stroke="#e3e9f3"/>
+<g transform="translate(58 45) scale(.15)"><defs>
+ <linearGradient id="rd-base" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#d2d9ff"/><stop offset=".43" stop-color="#147bff"/><stop offset="1" stop-color="#8ed9fc"/></linearGradient>
+ <linearGradient id="rd-fold" x1=".2" y1="0" x2=".65" y2="1"><stop stop-color="#003fe9"/><stop offset=".4" stop-color="#0667ff"/><stop offset="1" stop-color="#d6d9ff"/></linearGradient>
+ <linearGradient id="rd-core" x1=".1" y1=".5" x2="1" y2=".35"><stop stop-color="#1428c9"/><stop offset=".65" stop-color="#0759f5"/><stop offset="1" stop-color="#439fff"/></linearGradient>
+ <linearGradient id="rd-stem" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#92b9ff"/><stop offset="1" stop-color="#c9effc"/></linearGradient>
+ <linearGradient id="rd-dot" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0055ff"/><stop offset="1" stop-color="#48a6ff"/></linearGradient>
+ <clipPath id="rd-clip"><path d="M22 562Q0 562 0 540V254Q0 212 30 181L184 27Q211 0 256 0H472Q493 0 493 23V181Q493 204 472 204H332C269 204 219 255 219 319V540Q219 562 197 562Z"/></clipPath>
+</defs>
+<g transform="translate(19 19)">
+ <g clip-path="url(#rd-clip)">
+  <path d="M0 0H493V562H0Z" fill="url(#rd-base)"/>
+  <path d="M219 257V562H0L0 540Z" fill="url(#rd-stem)"/>
+  <path d="M0 194C93 130 150 98 229 98C316 98 369 136 418 204H332C293 204 260 224 235 251L0 532Z" fill="url(#rd-fold)"/>
+  <path d="M214 98H247C327 98 381 146 418 204H332C290 204 262 220 233 254L148 355V238C148 178 171 129 214 98Z" fill="url(#rd-core)"/>
+ </g>
+ <rect x="417" y="287" width="144" height="141" rx="19" fill="url(#rd-dot)"/>
+</g></g>
+<g transform="translate(166 67) scale(.34)"><g fill="#05081d">
+ <path d="M0 174V101C0 65 18 50 54 50H104V74H53Q30 74 30 101V174Z"/>
+ <rect x="130" y="50" width="30" height="124" rx="2"/><rect x="130" width="30" height="30" rx="15"/>
+ <rect x="194" width="30" height="174" rx="2"/><rect x="259" width="30" height="174" rx="2"/>
+ <path fill-rule="evenodd" d="M469 0V174H400C351 174 321 167 321 123V100C321 64 343 50 385 50H440V0ZM440 75H391Q351 75 351 102V123Q351 148 390 148H440Z"/>
+ <path fill-rule="evenodd" d="M530 121Q530 149 572 149H620V172Q599 176 570 176Q500 176 500 128V99Q500 50 567 50Q640 50 640 96V119H530ZM530 98H610V94Q610 72 569 72Q533 72 530 98Z"/>
+ <path d="M657 50H691L728 96L765 50H800L746 110L800 174H765L728 128L691 174H657L710 110Z"/>
+</g></g>
+<g font-family="Segoe UI,Arial,sans-serif">
+ <text x="471" y="115" font-size="17" fill="#536580" letter-spacing="2">RL STUDIO</text>
+ <text x="64" y="211" font-size="42" font-weight="650" letter-spacing="-1.3" fill="#15243b">From training signals to agent behavior.</text>
+ <text x="66" y="253" font-size="21" fill="#617089">Follow a run. Inspect a change. Return to the evidence.</text>
+ <path d="M64 296H1216" stroke="#dce5f2"/>
+ <text x="66" y="342" font-size="22" font-weight="600" fill="#15243b">Behavior maps</text>
+ <text x="66" y="373" font-size="17" fill="#617089">Activities, plans &amp; repeated attempts</text>
+ <text x="468" y="342" font-size="22" font-weight="600" fill="#15243b">Training &amp; execution</text>
+ <text x="468" y="373" font-size="17" fill="#617089">Native signals, parallel workers &amp; logs</text>
+ <text x="888" y="342" font-size="22" font-weight="600" fill="#15243b">Evidence &amp; diagnosis</text>
+ <text x="888" y="373" font-size="17" fill="#617089">Saved comparisons, Python &amp; SQL</text>
+</g>
 </svg>

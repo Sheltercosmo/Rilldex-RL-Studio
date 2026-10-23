@@ -4,9 +4,10 @@ from copy import deepcopy
 from .schema import InputError,digest
 from .capabilities import links, batch_key
 from .execution_reports import bound_responses
-from .plan_stage_material import dependencies as material_dependencies, VERSION as MATERIAL_VERSION
+from .plan_stage_material import dependencies as material_dependencies, correspondence_events, VERSION as MATERIAL_VERSION
+from .work_order import Evidence as OrderEvidence
 
-VERSION='plan-execution-projection/1'
+VERSION='plan-execution-projection/2'
 ROLES={'prepares_plan_step':'prepares','attempts_plan_step':'attempts','checks_plan_step':'checks'}
 LIMITS=('Declared stage order and observed dispatch order are distinct. Stage membership comes from saved '
         'correspondence selections. Unassigned actions are not deviations. Output material is not verified '
@@ -24,13 +25,16 @@ def build(run,document):
     materials=(material or {}).get('observations',[])
     responses={}
     for action,response in bound_responses(run):responses.setdefault(action['id'],[]).append(response)
-    response_units={u['source']['event_id']:u['id'] for u in units.values() if u['kind']=='feedback'}
+    response_units={}
+    for u in units.values():
+        if u['kind']=='feedback':response_units.setdefault(u['source']['event_id'],[]).append(u['id'])
     action_units={}
     for u in units.values():
         if u['kind']=='action':action_units.setdefault(u['source']['event_id'],[]).append(u['id'])
-    batch_sizes=links(run)['batch_sizes']
+    batch_sizes=links(run)['batch_sizes'];order=OrderEvidence(events)
     def ordered(ids):return sorted(set(ids),key=lambda uid:(events[units[uid]['source']['event_id']]['index'],units[uid]['source']['start']))
-    result={'schema':VERSION,'source_hash':digest(run),'plans':[],'limits':LIMITS}
+    result={'schema':VERSION,'source_hash':digest(run),'plans':[],'limits':LIMITS,
+            'counting':'Roles count distinct source dispatches per stage; responses count once per stage. A dispatch may serve multiple roles or stages, so these counts are not additive.'}
     for plan in (u for u in units.values() if u.get('plan_structure')):
         structure=plan['plan_structure'];pe=events[plan['source']['event_id']]
         steps={s['id']:s for s in structure['steps']};bindings={};stage_rows=[]
@@ -38,25 +42,30 @@ def build(run,document):
             if relation['type'] not in ROLES or relation['to']!=plan['id']:continue
             action=units.get(relation['from']);sid=relation.get('plan_step_id')
             if not action or action['kind']!='action' or sid not in steps:raise InputError('Invalid Plan stage binding')
-            ae=events[action['source']['event_id']]
-            if (action['actor'],action['trajectory_id'])!=(plan['actor'],plan['trajectory_id']) or (pe['index'],plan['source']['end'])>(ae['index'],action['source']['start']):
-                raise InputError('Plan correspondence crosses participant or source cutoff')
+            ae,_=correspondence_events(run,action,plan)
             binding={'unit_id':action['id'],'stage_id':sid,'role':ROLES[relation['type']],'relation_index':index}
             bindings.setdefault(ae['id'],[]).append(binding)
         for stage in structure['steps']:
             selected=[b for bs in bindings.values() for b in bs if b['stage_id']==stage['id']]
             action_ids=ordered(b['unit_id'] for b in selected)
+            dispatch_ids=sorted({units[aid]['source']['event_id'] for aid in action_ids},key=lambda eid:events[eid]['index'])
             feedback_ids=[];evidence_events=[]
-            for aid in action_ids:
-                event_id=units[aid]['source']['event_id']
-                roles=sorted({b['role'] for b in selected if b['unit_id']==aid})
+            for event_id in dispatch_ids:
+                aids=[aid for aid in action_ids if units[aid]['source']['event_id']==event_id]
+                roles=sorted({b['role'] for b in selected if b['unit_id'] in aids})
                 for feedback in responses.get(event_id,[]):
-                    fid=response_units.get(feedback['id'])
-                    if fid:feedback_ids.append(fid)
-                    entries=[i for i,r in enumerate(materials) if (r['plan_unit_id'],r['stage_id'],r['action_unit_id'],r['response_event_id'])==(plan['id'],stage['id'],aid,feedback['id'])]
-                    if len(entries)>1:raise InputError('Duplicate stage material observation')
-                    evidence_events.append({'action_unit_id':aid,'response_unit_id':fid,'response_event_id':feedback['id'],
-                        'roles':roles,'material_index':entries[0] if entries else None,
+                    fids=ordered(response_units.get(feedback['id'],[]));feedback_ids.extend(fids)
+                    entries=[]
+                    for aid in aids:
+                        found=[i for i,r in enumerate(materials) if (r['plan_unit_id'],r['stage_id'],r['action_unit_id'],r['response_event_id'])==(plan['id'],stage['id'],aid,feedback['id'])]
+                        if len(found)>1:raise InputError('Duplicate stage material observation')
+                        entries.extend(found)
+                    forms={materials[i]['form'] for i in entries}
+                    form=next(iter(forms)) if len(forms)==1 else 'conflicting_observations' if forms else 'uninspected'
+                    evidence_events.append({'action_event_id':event_id,'action_unit_ids':aids,'response_unit_ids':fids,
+                        'action_unit_id':aids[0],'response_unit_id':fids[0] if fids else None,'response_event_id':feedback['id'],
+                        'roles':roles,'material_indices':entries,'material_form':form,
+                        'material_index':entries[0] if len(entries)==1 else None,
                         'executor_report_index':reports.get(feedback['id'])})
             related=set([plan['id'],*action_ids,*feedback_ids])
             for r in document['relations']:
@@ -65,26 +74,27 @@ def build(run,document):
             stage_rows.append({'id':'plan-stage-'+digest([plan['id'],stage['id']])[:20],
                 'stage_id':stage['id'],'text':stage['text'],'target':stage['target'],'evidence':deepcopy(stage['evidence']),
                 'action_unit_ids':action_ids,'focus_unit_ids':ordered(related),'bindings':selected,'response_evidence':evidence_events,
-                'role_counts':{role:len({b['unit_id'] for b in selected if b['role']==role}) for role in ROLES.values()},
-                'material_counts':dict(Counter(materials[e['material_index']]['form'] if e['material_index'] is not None else 'uninspected' for e in evidence_events if set(e['roles'])&{'attempts','checks'})),
+                'dispatch_event_ids':dispatch_ids,'dispatch_count':len(dispatch_ids),'action_annotation_count':len(action_ids),
+                'role_counts':{role:len({units[b['unit_id']]['source']['event_id'] for b in selected if b['role']==role}) for role in ROLES.values()},
+                'material_counts':dict(Counter(e['material_form'] for e in evidence_events if set(e['roles'])&{'attempts','checks'})),
                 'completion':'not_established'})
         timeline=[];transitions=[];phase_runs=[]
         if bindings:
             first=min(events[eid]['index'] for eid in bindings);last=max(events[eid]['index'] for eid in bindings)
             scope=[e for e in run['events'] if e['kind']=='action' and not e.get('copied_context') and
-                   (e['actor'],e['trajectory_id'])==(plan['actor'],plan['trajectory_id']) and first<=e['index']<=last]
+                   (e['actor'],e['trajectory_id'],e.get('context_id'))==(plan['actor'],plan['trajectory_id'],pe.get('context_id')) and first<=e['index']<=last]
             previous=None;seen_stages=set();gap=[]
             for position,action in enumerate(sorted(scope,key=lambda e:e['index'])):
                 bs=bindings.get(action['id'],[]);sids=sorted({b['stage_id'] for b in bs})
-                parallel=batch_sizes.get(batch_key(action),0)>1 or action.get('batch_size',0)>1
+                parallel=batch_sizes.get(batch_key(action),0)>1 or not order.is_ordered(action['id'])
                 row={'position':position+1,'action_event_id':action['id'],'action_unit_ids':action_units.get(action['id'],[]),
                      'stage_ids':sids,'bindings':deepcopy(bs),'order_ambiguous':parallel,
                      'status':'assigned' if len(sids)==1 else 'multiple_stages' if sids else 'unassigned'}
                 timeline.append(row)
-                signature=(tuple(sids),tuple(sorted({b['role'] for b in bs})),row['status'])
+                signature=(tuple(sids),tuple(sorted({b['role'] for b in bs})),row['status'],parallel)
                 if not phase_runs or signature!=phase_runs[-1]['_signature']:
                     phase_runs.append({'_signature':signature,'stage_ids':sids,'roles':list(signature[1]),'status':row['status'],
-                        'positions':[],'action_unit_ids':[],'action_event_ids':[]})
+                        'order_ambiguous':parallel,'positions':[],'action_unit_ids':[],'action_event_ids':[]})
                 phase_runs[-1]['positions'].append(position+1);phase_runs[-1]['action_unit_ids'].extend(row['action_unit_ids']);phase_runs[-1]['action_event_ids'].append(action['id'])
                 if len(sids)!=1:
                     gap.append(row)
@@ -102,7 +112,8 @@ def build(run,document):
                         'order_status':'not_established' if parallel or previous['order_ambiguous'] or any(g['order_ambiguous'] for g in gap) else 'source_order',
                         'reentry':current in seen_stages,'prior_stage_material_before_entry':before,
                         'cutoff':{'event_id':action['id'],'end':len(action['text'])}})
-                previous=row;seen_stages.add(current);gap=[]
+                previous=row;gap=[]
+                if not parallel:seen_stages.add(current)
         for phase in phase_runs:phase.pop('_signature')
         if document.get('work_results'):
             # Scope judgments are response-time evidence. Never fill an earlier

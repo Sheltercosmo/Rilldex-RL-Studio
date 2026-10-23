@@ -179,6 +179,8 @@ class Store:
             initialize_training(c)
             from .trainer_telemetry import initialize as initialize_telemetry
             initialize_telemetry(c)
+            from .run_records import initialize as initialize_run_records
+            initialize_run_records(c)
             from .execution_records import initialize as initialize_executions
             initialize_executions(c)
             from .generation_cohorts import initialize as initialize_cohorts
@@ -221,13 +223,25 @@ class Store:
             analysis["review_queue"] = review_logic.queue(run, analysis)
         result = []
         with self.connect() as c:
+            if any(run['adapter']=='weave' for run, _ in prepared):
+                c.execute('BEGIN IMMEDIATE')
             for run, analysis in prepared:
+                revision = None
+                if run['adapter']=='weave':
+                    from .weave_import import import_revision
+                    revision = import_revision(c,run)
+                    if revision.get('reuse'):
+                        result.append({'id':revision['reuse'], 'imported':False, 'actions':analysis['metrics']['actions']})
+                        continue
                 cursor = c.execute("INSERT OR IGNORE INTO runs VALUES (?,?,?,?)",
                                    (run["id"], datetime.now(timezone.utc).isoformat(), dumps(run), dumps(analysis)))
                 from .rollout_metrics import save, source_record
                 save(c, source_record(run))
                 from .graph_store import build as build_graph, save as save_graph
                 save_graph(c, build_graph(run))
+                if revision:
+                    c.execute('INSERT INTO rollout_revisions VALUES (?,?,?,?,?,?)',
+                        (revision['producer'],revision['rollout_id'],revision['revision'],run['id'],revision['state'],datetime.now(timezone.utc).isoformat()))
                 result.append({"id": run["id"], "imported": cursor.rowcount == 1, "actions": analysis["metrics"]["actions"]})
         return result
 

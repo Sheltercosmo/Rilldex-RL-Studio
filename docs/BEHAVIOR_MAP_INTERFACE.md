@@ -1,5 +1,30 @@
 # One behavior map, several levels of structure
 
+Overview and Rollouts open the saved graph shown by their entry. Source links
+stay on recorded source. If a requested observer is missing, choose another
+saved observation explicitly. **Browse saved observations** releases the pinned
+view; changing observations keeps the original **Back** destination. Without an
+explicit selection, the latest saved semantic map opens, or source if none exists.
+
+## Follow and compare attempts
+
+Open **Compare rollout cases** from Training signals or Investigations. Select
+each run, checkpoint or rollout range independently. Saved comparisons retain
+their original sources and graph versions. Full task context allows matching
+across capture formats; repeated trials and missing counterparts stay visible.
+
+From Python: `Workspace("study.sqlite").compare_rollouts(reference={"experiment": "baseline"}, selected={"experiment": "candidate"})`.
+Open the returned ID at `/investigate?saved=<id>`. Step filters require the
+recorded rollout clock and basis; trainer chart steps are not copied automatically.
+
+In **Behavior & outcomes**, select a value, expand a rollout and choose **Inspect saved evidence**. Search cases or filter their recorded status, then **Open this case on the map**. The saved receipt, graph and case stay linked; **Back to Investigation** restores that case and its selected task population.
+
+In **Unit map**, choose **Failed checks** or **Retries** to follow explicit saved links through later attempts. The inspector shows returned feedback, check outcomes and change links; its attempt buttons jump to exact source units. A path displays up to 64 attempts and identifies any omitted continuation. Paths may overlap, and a passing check does not automatically establish task recovery.
+
+From a saved interval investigation, open **Compare rollout cases** and select **Failed-check paths**, **Retry paths** or **Linked attempt pairs**. Each column uses its frozen graph. Open a path to inspect the map; **Back** restores the comparison and filter. Missing check outcomes remain unrecorded. Ambiguous source-to-unit attachments cannot choose an arbitrary unit for a recheck arrow.
+
+Validation: 36 targeted backend and 371 frontend tests, desktop/mobile navigation and retained public-source replay. The public software example preserves eight retry starting points, including a three-attempt training chain and five-attempt installation chain. This checks projection and navigation over existing annotations, not independent semantic accuracy. No new model calls.
+
 ## Work path as an evidence review — 15 October 2026
 
 The previous Work path met a navigation goal: it preserved action positions, target identity and returns. It did not meet the research goal of making a repeated-work episode understandable without opening many units. Counts and lines alone do not distinguish a prerequisite repair from repeating an ineffective attempt.

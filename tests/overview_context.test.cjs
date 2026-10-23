@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 class Node{
- constructor(tag,text,cls){this.tag=tag;this.textContent=text??'';this.className=cls||'';this.children=[];}
+ constructor(tag,text,cls){this.tag=tag;this.textContent=text??'';this.className=cls||'';this.children=[];this.classes=new Set();this.classList={toggle:(name,on)=>on?this.classes.add(name):this.classes.delete(name)};}
  append(...items){this.children.push(...items);} replaceChildren(...items){this.children=items;} setAttribute(){}
 }
 const text=n=>[n.textContent,...n.children.map(text)].join(' ');
@@ -11,29 +11,31 @@ const all=n=>[n,...n.children.flatMap(all)];
 const script=fs.readFileSync(require.resolve('../tracker/web/rollout-map.js'),'utf8');
 const method=script.slice(script.indexOf('function renderMapAvailability('),script.indexOf('function render(){'));
 function setup(graph,graphs,params=''){
- const host=new Node('section'),calls=[];
- const c=vm.createContext({$:()=>host,el:(...args)=>new Node(...args),URLSearchParams,
+ const host=new Node('section'),context=new Node('div'),settings=new Node('details'),calls=[];
+ const c=vm.createContext({$:selector=>selector==='#map-context-actions'?context:selector==='.map-settings'?settings:host,el:(...args)=>new Node(...args),URLSearchParams,
   params:new URLSearchParams(params),payload:{run:{id:'run-a',metadata:{experiment:'test / alpha'}},graph,graphs},
   layout:{nodes:[{},{}],edges:[{family:'sequence'},{family:'feedback'}]},
-  clearReceipt:()=>calls.push('clear'),load:(...args)=>calls.push(args)});
- vm.runInContext(method,c);c.renderMapAvailability();return{host,calls};
+  openMapContext:field=>calls.push(['context',field]),clearReceipt:()=>calls.push('clear'),load:(...args)=>calls.push(args)});
+ vm.runInContext(method,c);c.renderMapAvailability();return{host,context,calls};
 }
 test('source-only map explains missing semantic layers and retains experiment in overview link',()=>{
  const source={observer:'source',coverage:{semantic_relations:'unavailable'}};
- const {host}=setup(source,[source]);
+ const {host,context,calls}=setup(source,[source]);
  assert.match(text(host),/No semantic observations are saved/);
- assert.equal(all(host).filter(n=>n.tag==='button').length,0);
- const link=all(host).find(n=>n.textContent==='Behavior measures →');
+ assert.equal(all(host).filter(n=>n.tag==='button').length,1);
+ all(host).find(n=>n.textContent==='Change observations').onclick();
+ assert.deepEqual(calls,[['context','map-observer']]);
+ const link=all(context).find(n=>n.textContent==='Behavior measures →');
  assert.equal(new URL(link.href,'http://localhost').searchParams.get('experiment'),'test / alpha');
  assert.equal(new URL(link.href,'http://localhost').searchParams.get('view'),'measures');
 });
 test('source map offers an explicit saved-observer switch without invoking any new inference',()=>{
  const source={observer:'source',coverage:{semantic_relations:'unavailable'}};
  const semantic={observer:'review-v2',observer_label:'Reviewed map',coverage:{semantic_relations:'available'}};
- const {host,calls}=setup(source,[source,semantic]);
+ const {host,context,calls}=setup(source,[source,semantic]);
  assert.match(text(host),/Semantic observations are also saved/);
  assert.equal(calls.length,0);
- all(host).find(n=>n.tag==='button').onclick();
+ all(context).find(n=>n.textContent==='Reviewed map').onclick();
  assert.deepEqual(calls,['clear',['run-a','review-v2']]);
 });
 test('semantic inventory excludes sequential adjacency from relationship count',()=>{
@@ -44,9 +46,9 @@ test('semantic inventory excludes sequential adjacency from relationship count',
 });
 test('pinned source view does not claim the rollout has no other saved observations',()=>{
  const source={observer:'source',coverage:{semantic_relations:'unavailable'}};
- const {host,calls}=setup(source,[source],'graph=pinned-source');
+ const {host,context,calls}=setup(source,[source],'graph=pinned-source');
  assert.doesNotMatch(text(host),/No semantic observations are saved/);
- all(host).find(n=>n.textContent==='Browse saved observations').onclick();
+ all(context).find(n=>n.textContent==='Browse saved observations').onclick();
  assert.deepEqual(calls,['clear',['run-a','source']]);
 });
 test('partial observer is not mislabeled as a source-only rollout',()=>{

@@ -17,11 +17,20 @@ from .semantic_extraction import read, write, windows, load_extraction
 
 VERSION = 'semantic-watch/1'
 ZERO = dict.fromkeys(DEFAULT_LIMITS, 0)
-BLOCKED = {'interrupted', 'failed', 'needs_candidates', 'budget_reached'}
+BLOCKED = {'interrupted', 'failed', 'needs_candidates', 'needs_evidence', 'budget_reached'}
 
 
 def now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def behavior_options():
+    """The installed pilot's relationship stages, pinned for a new worker."""
+    from .action_targets import PAGED_VERSION as TARGET
+    from .plan_relations import DIRECT_VERSION as PLAN
+    from .execution_reports import VERSION as REPORT
+    from .method_comparison import NATIVE_VERSION as METHOD
+    return dict(action_target_version=TARGET,plan_relation_version=PLAN,execution_report_version=REPORT,method_comparison_version=METHOD)
 
 
 def initialize_tables(c):
@@ -48,11 +57,22 @@ def fingerprint(options=None):
         names+=('semantic_layers.py','feedback_assessments.py','feedback_retrieval.py')
     if (options or {}).get('requested_profile'):
         names+=('semantic_layers.py','requested_work.py','requested_graph.py','request_dispatch.py')
+    if (options or {}).get('action_target_version'):
+        names+=('action_targets.py','action_scope_pairs.py','action_scope_pages.py','semantic_pages.py','work_order.py')
+    if (options or {}).get('plan_relation_version'):
+        names+=('plan_relations.py','plan_scope_pages.py','semantic_pages.py')
+        if options['plan_relation_version']=='plan-stage-correspondence/4':names+=('plan_scope_roles.py',)
+    if (options or {}).get('execution_report_version'):
+        names+=('execution_reports.py',)
+    if (options or {}).get('method_comparison_version'):
+        names+=('method_comparison.py','recurrence_context.py','work_history.py','action_comparison.py','work_correspondence.py')
     return digest({name: (Path(__file__).parent / name).read_text(encoding='utf-8') for name in names})
 
 
 def initialize(store, directory, *, experiment, label, allowance=None,
-               workspace_options=None, command=None, producer=None, citation_format=None, live_prefixes=False):
+               workspace_options=None, command=None, producer=None, citation_format=None, live_prefixes=False,
+               cache_directories=(),refresh=False):
+    if type(refresh) is not bool:raise InputError('refresh must be boolean')
     if type(live_prefixes) is not bool:
         raise InputError('live_prefixes must be boolean')
     if not isinstance(experiment, str) or not experiment.strip():
@@ -62,8 +82,17 @@ def initialize(store, directory, *, experiment, label, allowance=None,
     options = workspace_options or {}
     if not isinstance(options, dict):
         raise InputError('Workspace options must be a JSON object')
-    if set(options) - {'include_user', 'context_policy', 'activity_routing', 'reading_protocol', 'partition_standard','feedback_profile','requested_profile'}:
+    if set(options) - {'include_user', 'context_policy', 'activity_routing', 'reading_protocol', 'partition_standard','feedback_profile','requested_profile','action_target_version','plan_relation_version','execution_report_version','method_comparison_version'}:
         raise InputError('Unknown semantic workspace option')
+    from .action_targets import PAGED_VERSION as TARGET_VERSION
+    from .plan_relations import PAGED_VERSIONS
+    from .execution_reports import VERSION as REPORT_VERSION
+    from .method_comparison import NATIVE_VERSION as METHOD_VERSION
+    for name,version in [('action_target_version',TARGET_VERSION),('execution_report_version',REPORT_VERSION),('method_comparison_version',METHOD_VERSION)]:
+        if options.get(name) not in (None,version):raise InputError('Unsupported '+name)
+    if options.get('method_comparison_version') and not options.get('action_target_version'):
+        raise InputError('Approach comparison requires work-target links')
+    if options.get('plan_relation_version') not in {None,*PAGED_VERSIONS}:raise InputError('Unsupported plan_relation_version')
     from .semantic_layers import profile,requested_profile
     profile(options.get('feedback_profile'))
     requested_profile(options.get('requested_profile'),options.get('include_user',True))
@@ -90,11 +119,28 @@ def initialize(store, directory, *, experiment, label, allowance=None,
         raise InputError('Producer and citation format require a candidate command')
     cap = limits(ZERO if allowance is None else {**ZERO, **allowance})
     root = Path(directory).resolve()
+    caches=list(dict.fromkeys(str(Path(p).resolve()) for p in cache_directories))
+    for path in caches:
+        if Path(path)==root or root in Path(path).parents:
+            raise InputError('Reusable workspaces must be outside the new worker directory')
+        workspace.load(path)
     definition = {'schema': VERSION, 'database': str(store.path.resolve()), 'directory': str(root),
                   'experiment': experiment, 'label': label.strip(), 'workspace_options': options,
                   'extractor_fingerprint': fingerprint(options), 'command_hash': digest(command) if command else None,
                   'producer': producer, 'citation_format': citation_format}
     if live_prefixes: definition['live_prefixes'] = True
+    if caches:definition['cache_directories']=caches
+    path=root/'watch.json'
+    if refresh and not path.exists():raise InputError('Refresh requires an existing worker directory')
+    if path.exists():
+        previous=read(path)
+        if {**definition,'extractor_fingerprint':previous['extractor_fingerprint']}!=previous:
+            raise InputError('Worker source selection or protocol changed; use a new directory')
+        from .semantic_refresh import state,refresh as refresh_saved
+        if refresh:refresh_saved(store,root)
+        old_id='semantic-'+digest(previous)[:24]
+        if state(store,old_id,previous,definition['extractor_fingerprint'])['status']=='current':definition=previous
+        else:raise InputError('Extractor implementation changed; use semantic watch-refresh or models watch --refresh-worker to replay saved evidence offline')
     identifier = 'semantic-' + digest(definition)[:24]
     with workspace.exclusive(root):
         path = root / 'watch.json'
@@ -449,15 +495,40 @@ def _queue_handoff_changes(root, saved, queue):
     return changed
 
 
-def _publish(store, identifier, definition, run, directory):
-    result = load_extraction(run, directory)
+def materialize(identifier, definition, run, directory):
+    """Replay a publication without writing database graphs or measurements."""
+    options=definition['workspace_options']
+    result = load_extraction(run, directory,action_target_version=options.get('action_target_version'),
+                             plan_relation_version=options.get('plan_relation_version'))
     if not result['available'] or result['raw_extraction']['status'] != 'complete_local_extraction':
         raise InputError('Only an audited complete extraction may be published')
+    layers=workspace.status(directory)['layers']
+    for name,option in [('action_targets','action_target_version'),('plan_relations','plan_relation_version'),('execution_reports','execution_report_version'),('method_comparison','method_comparison_version')]:
+        if options.get(option) and layers[name]['status']!='complete':
+            raise InputError('Requested '+name+' inspection is incomplete')
+        if options.get(option) and name in {'action_targets','plan_relations'} and name not in result['validation']:
+            raise InputError('Requested '+name+' results are missing')
+    if options.get('method_comparison_version'):
+        from .method_comparison import load as load_methods
+        result['document']['method_comparison']=load_methods(run,result['document'],directory)
+        if result['document']['method_comparison']['schema']!=options['method_comparison_version']:
+            raise InputError('Requested approach comparison result is missing or uses a different protocol')
+    if options.get('execution_report_version'):
+        from .execution_reports import path_for,audit,project
+        reports=read(path_for(directory,run));validation=audit(run,reports,directory)
+        result=project(run,result,reports);result['validation']['execution_reports']=validation
     from .semantic_catalog import export_payload
-    from .observer_archive import save as archive
-    from .rollout_metrics import record_map
     result['observer'] = {'id': identifier, 'label': definition['label']}
     result['export_digest'] = digest(export_payload(result))
+    return result
+
+
+def _publish(store, identifier, definition, run, directory):
+    from .observer_archive import save as archive
+    from .rollout_metrics import record_map
+    options=definition['workspace_options']
+    result=materialize(identifier,definition,run,directory)
+    layers=workspace.status(directory)['layers']
     with store.connect() as c:
         c.execute('BEGIN IMMEDIATE')
         if not _current_complete(c, run['id'], live_prefixes=definition.get('live_prefixes',False)):
@@ -471,12 +542,16 @@ def _publish(store, identifier, definition, run, directory):
                  'extraction_hash': digest(result['raw_extraction']), 'unit_count': len(result['raw_extraction']['units']),
                  'source_complete_at_publication': not provisional,
                  'url': '/semantic-map?run=' + run['id'] + '&observer=' + identifier,
-                 'layers': {'feedback':result['validation'].get('feedback_layer'),
+                 'layers': {**layers,'feedback':result['validation'].get('feedback_layer'),
                             'requested_conditions':result['validation'].get('requested_layer')},
                  'scope': ('Immutable growing-source prefix; final rollout outcomes and completed-rollout rates remain unavailable. ' if provisional else '') +
                      'Base semantic extraction'+
                      (' plus explicit feedback references' if definition['workspace_options'].get('feedback_profile') else '')+
                      (' and versioned requested terms/checks' if definition['workspace_options'].get('requested_profile') else '')+
+                     (' with plan-to-action links' if options.get('plan_relation_version') else '')+
+                     (' and work-target links' if options.get('action_target_version') else '')+
+                     (' and approach comparisons' if options.get('method_comparison_version') else '')+
+                     (' and executor errors/warnings' if options.get('execution_report_version') else '')+
                      '. Correct interpretation, causal use, fulfillment and recovery require further evidence.'})
 
 
@@ -486,8 +561,9 @@ def run_once(store, directory, transport, *, command=None, max_rollouts=8, max_p
     root = Path(directory).resolve()
     with workspace.exclusive(root):
         identifier, definition, cap = load(store, root)
-        if fingerprint(definition['workspace_options']) != definition['extractor_fingerprint']:
-            raise InputError('Extractor implementation changed; create a new versioned worker')
+        from .semantic_refresh import state as implementation_state
+        if implementation_state(store,identifier,definition,fingerprint(definition['workspace_options']))['status']!='current':
+            raise InputError('Extractor implementation changed; run semantic watch-refresh to replay saved evidence offline')
         if (digest(command) if command else None) != definition['command_hash']:
             raise InputError('Candidate command differs from the worker configuration')
         sources = population(store, definition['experiment'], live_prefixes=definition.get('live_prefixes',False))
@@ -563,11 +639,18 @@ def run_once(store, directory, transport, *, command=None, max_rollouts=8, max_p
                 result = workspace.execute(job_root, transport, command=command, producer=definition['producer'],
                     citation_format=definition['citation_format'], budget_limits=cap,
                     budget_ledger=Ledger(store, identifier, rid),
-                    cache_directories=_prior_workspaces(store,identifier,rid,root) if definition.get('live_prefixes') else ())
+                    cache_directories=[*definition.get('cache_directories',()),
+                        *(_prior_workspaces(store,identifier,rid,root) if definition.get('live_prefixes') else ())])
                 if result['status'] == 'complete_local_extraction':
                     _publish(store, identifier, definition, run, job_root)
                 else:
-                    state = 'budget_reached' if result['status'] == 'budget_reached' else 'needs_candidates'
+                    # Requested-work annotations use the external candidate queue.
+                    # Retain its file handoff even when base extraction is complete,
+                    # so an edited candidate can resume this layer without rerunning it.
+                    requested_pending = result.get('layers', {}).get('requested_conditions', {}).get('status') == 'pending'
+                    state = ('budget_reached' if result['status'] == 'budget_reached'
+                             else 'needs_evidence' if result['status']=='needs_layers' and not requested_pending
+                             else 'needs_candidates')
                     detail = {'coverage': result['coverage'],
                               'workspace_status': result['status'], 'layers':result.get('layers',{}),
                               'directory': str(job_root)}
@@ -608,12 +691,30 @@ def status(store, directory):
     public_jobs = []
     for job in jobs.values():
         details = json.loads(job['document'])
+        if job['status'] in {'running','budget_reached','interrupted','needs_evidence'}:
+            # Page receipts remain readable while the workspace execution lock
+            # is held. Do not run audits or read the entire extraction on polls.
+            layers=dict(details.get('layers',{}))
+            for name,filename in [('plan_relations','plan-relation-progress.json'),('action_targets','action-target-progress.json'),('execution_reports','execution-report-progress.json'),('method_comparison','method-comparison-progress.json')]:
+                path=Path(directory)/'runs'/job['run_id']/filename
+                if path.exists():
+                    progress=read(path)
+                    layers[name]={'status':progress['status'],'coverage':progress['coverage']}
+            if layers:details['layers']=layers
         # Fingerprints are internal wait state; expose only the compact summary
         # so polling and --follow output do not grow with the request queue.
         details.pop('candidate_handoff', None)
         public_jobs.append({k: v for k, v in job.items() if k != 'document'} | {'details': details})
+    from .semantic_refresh import state as implementation_state
+    implementation=implementation_state(store,identifier,definition,fingerprint(definition['workspace_options']))
+    if implementation.get('refresh'):
+        receipt=implementation['refresh']
+        implementation['refresh']={k:v for k,v in receipt.items() if k!='jobs'}
+        implementation['refresh']['checked_jobs']=len(receipt['jobs'])
     return {'schema': VERSION, 'observer': identifier, 'label': definition['label'],
+            'implementation':implementation,
             'experiment': definition['experiment'], 'allowance': cap, **counters,
+            'workspace_options':definition['workspace_options'],
             'live_prefixes':definition.get('live_prefixes',False),
             'remaining': {k: max(0, cap[k] - counters['used'][k]) for k in cap},
             'current_sources': len(sources), 'waiting_for_completion': sum(s['state']=='in_progress' and not s['ready'] for s in sources.values()),

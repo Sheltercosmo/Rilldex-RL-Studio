@@ -84,15 +84,16 @@
   const repetitions=new Map(repetitionGroups.flatMap(g=>g.actionIds.map(id=>[id,g])));
   for(const [i,m]of moments.entries()){
    m.number=i+1;m.nodes=members(m).sort((a,b)=>(a.ordinal??Infinity)-(b.ordinal??Infinity));
-   m.title=m.actions.length>1?m.actions.map(n=>n.target||n.summary).join(' / '):m.actions[0]?.target||m.actions[0]?.summary||m.extras[0]?.target||m.extras[0]?.summary||(m.feedback.length?'Unpaired response':'Recorded contribution');
+   m.callLinked=m.feedback.some(n=>mapAPI.capturedResponses(layout,n.id).some(r=>r.response_card_ids.includes(n.id)));
+   m.title=m.actions.length>1?m.actions.map(n=>n.target||n.summary).join(' / '):m.actions[0]?.target||m.actions[0]?.summary||m.extras[0]?.target||m.extras[0]?.summary||(m.feedback.length?(m.callLinked?'Captured response · unit pairing unresolved':'Unpaired response'):'Recorded contribution');
    m.displayTitle=headingText(m.title);
    m.responses=m.feedback.map(n=>({node:n,...preview(n.properties.source?.text||n.properties.text),reactions:relations
     .filter(e=>reactionTypes.has(e.type)&&e.target===n.id&&byId.get(e.source)?.trajectory_id===n.trajectory_id)
     .map(e=>({edge:e,node:byId.get(e.source),momentId:owner.get(e.source).id,actor:actor(byId.get(e.source))}))}));
-   m.attempts=m.actions.map(n=>({node:n,operation:operation(n),repetition:repetitions.get(n.id)||null,responses:m.responses.filter(r=>edges.some(e=>['feedback_for','response_to'].includes(e.type)&&e.source===r.node.id&&e.target===n.id))}));
+   m.attempts=m.actions.map(n=>({node:n,operation:operation(n),repetition:repetitions.get(n.id)||null,responses:m.responses.filter(r=>edges.some(e=>['feedback_for','response_to'].includes(e.type)&&e.source===r.node.id&&e.target===n.id)),capturedResponses:mapAPI.capturedResponses(layout,n.id).filter(r=>r.action_card_ids.includes(n.id)).map(r=>({...r,...preview(r.response.properties.text)}))}));
    m.checks=m.nodes.flatMap(n=>mapAPI.stateEvidence(graph,n.id).checks).filter((n,i,a)=>a.findIndex(v=>v.id===n.id)===i);
    m.hasChange=m.links.some(e=>changeTypes.has(e.type));
-   m.hasSignal=m.hasChange||m.responses.some(r=>r.notable)||m.checks.length>0||m.links.some(e=>reactionTypes.has(e.type));
+   m.hasSignal=m.hasChange||m.responses.some(r=>r.notable)||m.attempts.some(a=>a.capturedResponses.some(r=>r.notable))||m.checks.length>0||m.links.some(e=>reactionTypes.has(e.type));
    m.activity=[...new Set(m.nodes.filter(n=>!isFeedback(n)).map(n=>n.activity))];
    m.basis=m.nodes.some(n=>n.kind==='unit')?'Saved annotations':'Source records';
   }
@@ -108,15 +109,16 @@
   const focus=nodes.find(n=>n.kind==='unit'&&actor(n)==='agent'&&n.properties.kind==='semantic'&&text(n.properties.content?.focus));
   return {schema:'rollout-story/1',graphId:graph.id,requests,context,moments,relations,reports,latestAgentText,recorded,focus,repetitionGroups,represented:nodes.length,semantic:layout.semantic,
    counts:{moments:moments.length,actions:actions.length,feedback:nodes.filter(isFeedback).length,changes:relations.filter(e=>changeTypes.has(e.type)).length,signals:moments.filter(m=>m.hasSignal).length,
-    notableOutputs:moments.reduce((n,m)=>n+m.responses.filter(r=>r.notable).length,0),repeatedDispatches:repetitionGroups.reduce((n,g)=>n+g.actionIds.length-1,0),
+    notableOutputs:new Set(moments.flatMap(m=>[...m.responses.filter(r=>r.notable).map(r=>event(r.node)?.id||r.node.id),...m.attempts.flatMap(a=>a.capturedResponses.filter(r=>r.notable).map(r=>r.response.id))])).size,repeatedDispatches:repetitionGroups.reduce((n,g)=>n+g.actionIds.length-1,0),
     feedbackWithFollowup: new Set(moments.flatMap(m=>m.responses.filter(r=>r.reactions.length).map(r=>r.node.id))).size},
    limit:'Whole-rollout view. Order is recorded sequence, not causality. Saved summaries and relationships can be wrong; missing links remain unknown.'};
  }
  function matches(m,filter,query=''){
   const hasUse=m.responses.some(r=>r.reactions.length);
-  const included=filter==='repeated'?m.attempts.some(a=>a.repetition):filter==='output'?m.responses.some(r=>r.notable):filter==='linked'?hasUse:filter==='changes'?m.hasChange:filter==='checks'?m.checks.length>0:filter==='unlinked'?m.responses.some(r=>!r.reactions.length):filter==='missing'?m.attempts.some(a=>!a.responses.length):true;
+  const captured=m.attempts.flatMap(a=>a.capturedResponses||[]);
+  const included=filter==='repeated'?m.attempts.some(a=>a.repetition):filter==='output'?m.responses.some(r=>r.notable)||captured.some(r=>r.notable):filter==='linked'?hasUse:filter==='changes'?m.hasChange:filter==='checks'?m.checks.length>0:filter==='unlinked'?m.responses.some(r=>!r.reactions.length):filter==='missing'?m.attempts.some(a=>!a.responses.length&&!a.capturedResponses?.length):true;
   const needle=query.trim().toLocaleLowerCase();
-  return Boolean(included)&&(!needle||[m.title,...m.nodes.map(n=>clean(n.properties.source?.text||n.properties.text)||n.summary),...m.responses.flatMap(r=>r.reactions.map(a=>clean(a.node.properties.source?.text||a.node.properties.text)||a.node.summary))].join('\n').toLocaleLowerCase().includes(needle));
+  return Boolean(included)&&(!needle||[m.title,...m.nodes.map(n=>clean(n.properties.source?.text||n.properties.text)||n.summary),...captured.map(r=>r.raw),...m.responses.flatMap(r=>r.reactions.map(a=>clean(a.node.properties.source?.text||a.node.properties.text)||a.node.summary))].join('\n').toLocaleLowerCase().includes(needle));
  }
  const api={project,preview,names,outputExcerpt,operation,matches,excerpt};
  if(typeof module!=='undefined'){module.exports=api;return;}
@@ -210,13 +212,15 @@
      const head=node('div',null,'rs-evidence-heading'),locate=node('button','Unit #'+r.node.ordinal+' ↗','rs-text-button');locate.onclick=()=>inspectUnit(r.node.id,m.id);head.append(node('span',r.label,'rs-response-label'),locate);box.append(head,node('p',r.text.slice(0,420)+(r.text.length>420?'…':''),'rs-response-text'));
      if(r.text!==r.raw||r.raw.length>420)box.append(disclosure('Full response',node('pre',r.raw)));outcomes.append(box);
     }
-    if(!a.responses.length)outcomes.append(node('p','No response is linked to this action.','rs-missing'));
+    for(const r of a.capturedResponses||[]){const box=node('div',null,'rs-response');box.append(node('span','Captured call feedback','rs-response-label'),node('p',r.text,'rs-response-text'),node('small','Whole-call result; not assigned to one split or partial unit.'));box.append(disclosure('Full captured response',node('pre',r.raw)));
+     for(const id of r.response_card_ids){const response=data.moments.flatMap(m=>m.nodes).find(n=>n.id===id);if(!response)continue;const b=node('button','Response unit #'+response.ordinal+' ↗','rs-text-button');b.onclick=()=>inspectUnit(id,m.id);box.append(b);}outcomes.append(box);}
+    if(!a.responses.length&&!a.capturedResponses?.length)outcomes.append(node('p','No response is linked to this action.','rs-missing'));
     attempt.append(outcomes);
-    attempt.append(followupPanel(a.responses,m));grid.append(attempt);
+    if(!a.responses.length&&a.capturedResponses?.length)attempt.append(node('p','Open the response cards to inspect any saved feedback-use links.','rs-missing'));else attempt.append(followupPanel(a.responses,m));grid.append(attempt);
    }
    if(m.actions.length)card.append(grid);
    for(const n of m.extras)card.append(content(n,n.kind==='plan_step'?'DECLARED PLAN STEP':String(n.activity).toUpperCase()));
-   if(!m.actions.length)for(const r of m.responses){const box=node('div',null,'rs-content');box.append(node('small','UNPAIRED FEEDBACK · '+r.label,'rs-eyebrow'),node('p',r.text.slice(0,420)+(r.text.length>420?'…':'')));if(r.text!==r.raw||r.raw.length>420)box.append(disclosure('Full response',node('pre',r.raw)));box.append(followupPanel([r],m));card.append(box);}
+   if(!m.actions.length)for(const r of m.responses){const box=node('div',null,'rs-content');box.append(node('small',(m.callLinked?'CAPTURED RESPONSE · UNIT PAIRING UNRESOLVED':'UNPAIRED FEEDBACK')+' · '+r.label,'rs-eyebrow'),node('p',r.text.slice(0,420)+(r.text.length>420?'…':'')));if(r.text!==r.raw||r.raw.length>420)box.append(disclosure('Full response',node('pre',r.raw)));box.append(followupPanel([r],m));card.append(box);}
    for(const check of m.checks)card.append(node('p',`Recorded check · ${check.properties.criterion_id} · ${check.properties.result}`,'rs-check'));
    for(const n of m.nodes){for(const plan of mapAPI.declaredPlans(graph,n.id)){const list=node('ol',null,'rs-plan');for(const item of plan.snapshot.items)list.append(node('li',`${item.text||item.title||item.content||item.id} — ${item.status||'state not recorded'}`));card.append(node('strong','Declared task list · agent-reported states'),list);}}
    if(m.links.length){const links=node('div',null,'rs-links'),groups=new Map();for(const l of m.links){const k=JSON.stringify([l.type,l.to]);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(l);}for(const rows of groups.values()){const l=rows[0],target=byMoment.get(l.to),b=node('button',l.label+(l.within?' · this moment':' → '+String(target.number).padStart(2,'0')+' '+target.displayTitle)+(rows.length>1?' · '+rows.length+' links':''));b.title=l.properties?.explanation||l.label;b.onclick=()=>jump(l.to);links.append(b);}card.append(links);}

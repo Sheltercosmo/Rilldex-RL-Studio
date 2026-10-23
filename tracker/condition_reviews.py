@@ -15,7 +15,14 @@ def require(condition, message):
 
 
 def supported(definition):
-    return definition['kind'] == 'custom' and definition['custom']['aggregation'] == 'incidence'
+    return (definition['kind'] == 'custom' and definition['custom']['aggregation'] == 'incidence' or
+            definition['kind'] == 'metric' and definition.get('metric','').startswith('diagnostic_'))
+
+
+def question(definition):
+    if definition['kind']=='custom':return definition['custom']['description']
+    from .rollout_metrics import DEFINITIONS
+    return DEFINITIONS[definition['metric']][1]
 
 
 def frame_row(receipt, measurement_id):
@@ -23,6 +30,7 @@ def frame_row(receipt, measurement_id):
     require('value-'+digest({k:v for k,v in value.items() if k not in {'id','created_at'}}) == measurement_id,
             'Measurement identity differs')
     state = ((value.get('details') or {}).get('detector') or {}).get('status')
+    require(value['value'] is None or value['value'] in (0,1), 'A binary review requires 0, 1 or an unavailable result')
     prediction = None if value['value'] is None else bool(value['value'])
     item = dict(measurement_id=measurement_id, run_id=receipt['run']['id'],
                 case_id='rollout', case_hash=digest(value), prediction=prediction,
@@ -56,7 +64,7 @@ def create(store, definition, ids, size, seed, version):
             receipt = monitor_evidence.read(saved,row['measurement_id'])
             require(frame_row(receipt,row['measurement_id']) == row and receipt['freshness']['current_input'],
                     'Review result differs from current evidence')
-    return dict(schema=version, review_kind='rollout_condition', monitor_id='monitor-'+digest(definition), monitor=definition,
+    return dict(schema=version, review_kind='rollout_condition', condition_question=question(definition), monitor_id='monitor-'+digest(definition), monitor=definition,
         run_ids=sorted(ids), measurement_ids=sorted(r['measurement_id'] for r in frame),
         runs_without_case_frame=sorted(set(ids)-{r['run_id'] for r in frame}), frame=frame, frame_hash=digest(frame),
         sample_ids=[r['id'] for r in picked], evidence_scopes={r['id']:None for r in picked}, requested_size=size, seed=seed,
@@ -76,6 +84,9 @@ def packet(receipt, row):
 def inputs(store, receipt):
     from .reward_detectors import lookup, MISSING
     from .monitor_evaluation_inputs import pinned
+    if receipt['monitor']['kind']!='custom':
+        return dict(declared_inputs=[],evaluator_inputs={},evaluator_reports=[],
+                    monitor_configuration={k:receipt['monitor'][k] for k in ('metric','observer')})
     spec = receipt['monitor']['custom']; record = receipt['input_record']; run = receipt['run']
     detector = spec.get('config',{}).get('reward_detector')
     declared = []

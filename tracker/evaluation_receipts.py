@@ -79,10 +79,11 @@ def validate(raw):
         raise InputError('An unfinished or errored evaluation has unknown verdict and no score')
     if raw['score'] is not None and not finite(raw['score']):
         raise InputError('Evaluation score must be finite or null')
-    text(raw['performed_at'], 'performed_at', 64)
-    try: stamp = datetime.fromisoformat(raw['performed_at'].replace('Z', '+00:00'))
-    except ValueError as error: raise InputError('Use an ISO timestamp with timezone') from error
-    if stamp.tzinfo is None: raise InputError('Evaluation time requires a timezone')
+    if raw['performed_at'] is not None:
+        text(raw['performed_at'], 'performed_at', 64)
+        try: stamp = datetime.fromisoformat(raw['performed_at'].replace('Z', '+00:00'))
+        except ValueError as error: raise InputError('Use an ISO timestamp with timezone') from error
+        if stamp.tzinfo is None: raise InputError('Evaluation time requires a timezone')
     # Earlier receipts lacked criterion scope. Preserve their report identity;
     # comparisons mark that scope missing rather than equating arbitrary checks.
     if not isinstance(raw['inputs'], dict) or set(raw['inputs']) not in (set(INPUTS), set(INPUTS)-{'criterion'}):

@@ -1,10 +1,11 @@
 'use strict';
 const InvestigationFollowups = (() => {
+ const followupReturn=()=>location.pathname+location.search+(new URLSearchParams(location.search).has('saved')?'#research-checks':location.hash);
  const labels={supports:'Supports hypothesis',contradicts:'Contradicts hypothesis',inconclusive:'Inconclusive',not_run:'Not run'};
  const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
  const button=(text,fn,cls)=>{const b=el('button',text,cls);b.type='button';b.onclick=fn;return b;};
  const url=(id,panel='checks')=>'/investigate?'+new URLSearchParams({saved:id,panel});
- const comparisonUrl=id=>url(id,'comparison')+'&return_to='+encodeURIComponent(location.pathname+location.search);
+ const comparisonUrl=id=>url(id,'comparison')+'&return_to='+encodeURIComponent(followupReturn());
  let dialogId=0;
  const link=(text,href)=>{const a=el('a',text);a.href=href;return a;};
  async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data;}
@@ -51,8 +52,8 @@ const InvestigationFollowups = (() => {
     const document={...data.document,reviews:[...data.document.reviews.filter(r=>r.previous_unit_id!==row.previous_unit_id||r.current_unit_id!==row.current_unit_id),row],revision:row.review};
     const result=await api('/api/procedure-reviews',document);form.replaceChildren(el('p','Reviewed graph saved. Existing cases, findings and measurements retain their original evidence.'));
     const links=el('div',null,'if-actions');for(const [label,href]of [
-     ['Open reviewed map','/semantic-map?'+new URLSearchParams({run:result.run_id,graph:result.graph_id,observer:result.observer,level:'work',return_to:location.pathname+location.search})],
-     ['Compare reviewed behavior','/investigate?'+new URLSearchParams({run:result.run_id,observer:result.observer,panel:'process',return_to:location.pathname+location.search})]]){
+     ['Open reviewed map','/semantic-map?'+new URLSearchParams({run:result.run_id,graph:result.graph_id,observer:result.observer,level:'work',return_to:followupReturn()})],
+     ['Compare reviewed behavior','/investigate?'+new URLSearchParams({run:result.run_id,observer:result.observer,panel:'process',return_to:followupReturn()})]]){
      const a=link(label+' (new tab)',href);a.target='_blank';a.rel='noopener';links.append(a);
     }form.append(links);
    }catch(e){error.textContent=e.message;save.disabled=false;}};
@@ -115,14 +116,14 @@ const InvestigationFollowups = (() => {
     body.append(el('h3',r.status_label),el('p',`${c.attempts.length} recorded follow-up checks · ${c.window_closed?'window resolved':'window incomplete'}`));
     for(const [i,a]of c.attempts.entries())describe(body,'Follow-up '+(i+1),a.result+' · '+(a.comparable?'Comparable recorded check':'Comparability not established')+(a.issues.length?' · '+a.issues.map(v=>v.replaceAll('_',' ')).join(', '):''));
     if(c.unknown_reasons.length)describe(body,'Why this remains unknown',c.unknown_reasons.map(v=>v.replaceAll('_',' ')).join(', '));
-    body.append(inspectLink('Open failure and follow-up checks','/semantic-map?'+new URLSearchParams({run:r.run_id,graph:r.graph_id,focus_unit:'event:'+c.failure_action_id,return_to:location.pathname+location.search})));
+    body.append(inspectLink('Open failure and follow-up checks','/semantic-map?'+new URLSearchParams({run:r.run_id,graph:r.graph_id,focus_unit:'event:'+c.failure_action_id,return_to:followupReturn()})));
    }
    body.append(inspectLink('Open originating comparison',comparisonUrl(e.investigation_id)));
    for(const limit of e.limits)body.append(el('p',limit,'if-muted'));
    if(editing)for(const a of body.querySelectorAll('a')){a.target='_blank';a.rel='noopener';}
   }else if(e.kind==='evaluation'){
    const r=e.receipt;body.append(el('p',evaluationPurpose[r.purpose]+' · '+(evaluationExecution[r.execution]||r.execution)+' · '+r.verdict,'if-question'));
-   describe(body,'Reported by',r.producer+' · '+r.performed_at);describe(body,'Summary',r.summary);
+   describe(body,'Reported by',r.producer+' · '+(r.performed_at||'Evaluation time not recorded'));describe(body,'Summary',r.summary);
    if(r.score!=null)describe(body,'Reported score',String(r.score));
    body.append(el('p',e.boundary,'if-muted'));
    if(r.source_citations?.length){
@@ -130,7 +131,7 @@ const InvestigationFollowups = (() => {
     const roles={requirement:'Requirement',implementation:'Implementation',action:'Action',observation:'Observation',context:'Context'};
     for(const c of r.source_citations){const card=el('details',null,'if-case-row');card.open=true;
      card.append(el('summary',(roles[c.role]||c.role)+' · '+c.event_id),el('pre',c.text),
-      inspectLink('Open source in map','/semantic-map?'+new URLSearchParams({run:r.run_id,observer:'source',level:'units',focus_unit:'event:'+c.event_id,return_to:location.pathname+location.search})));
+      inspectLink('Open source in map','/semantic-map?'+new URLSearchParams({run:r.run_id,observer:'source',level:'units',focus_unit:'event:'+c.event_id,return_to:followupReturn()})));
      citations.append(card);
     }body.append(citations);
    }
@@ -140,32 +141,34 @@ const InvestigationFollowups = (() => {
    }body.append(inputs);
    for(const item of r.evidence){const detail=el('details');detail.append(el('summary',item.label),el('pre',item.text));body.append(detail);}
    body.append(button('Look up selection & training use',()=>lookupTraining(r.run_id,r.source_hash,editing,onAttach)));
-   body.append(inspectLink('Open bound rollout','/semantic-map?'+new URLSearchParams({run:r.run_id,observer:'source',return_to:location.pathname+location.search})));
+   body.append(inspectLink('Open bound rollout','/semantic-map?'+new URLSearchParams({run:r.run_id,observer:'source',return_to:followupReturn()})));
   }else if(e.kind==='training_exposure'){
    body.append(el('p','Saved training evidence. Late records do not alter this snapshot.','if-muted'));trainingEvidence(body,e.snapshot);
    body.append(button('Inspect current records',()=>lookupTraining(e.run_id,e.snapshot.source_hash,editing,onAttach)));
   }else if(e.kind==='unit'){
    const unit=e.unit.properties,source=unit.source||{};
    body.append(el('p','Saved rollout unit · '+e.observer),el('blockquote',source.text||unit.text||unit.label||unit.title||'Inspect the retained unit fields below.'),
-    inspectLink('Open unit in behavior map','/semantic-map?'+new URLSearchParams({run:e.run_id,observer:e.observer,graph:e.graph_id,focus_unit:e.unit_id,level:'units',return_to:location.pathname+location.search})));
+    inspectLink('Open unit in behavior map','/semantic-map?'+new URLSearchParams({run:e.run_id,observer:e.observer,graph:e.graph_id,focus_unit:e.unit_id,level:'units',return_to:followupReturn()})));
   }else{
    const s=e.snapshot;body.append(el('p','Pinned continuation evidence · '+s.experiment));
    const rates=el('div',null,'if-rates');for(const arm of ['before','after']){const a=s.arms[arm],box=el('div');box.append(el('small',arm==='before'?'Before the region':'After the region'),el('strong',a.rate==null?'Unknown':(a.rate*100).toFixed(1)+'%'),el('span',`${a.successes} successes / ${a.observed} eligible · ${a.expected} planned`));rates.append(box);}body.append(rates);
    body.append(el('p',s.difference==null?'Comparison unavailable':`Observed difference: ${(s.difference*100).toFixed(1)} percentage points`),el('p',s.interpretation));
    for(const issue of s.issues)body.append(el('p',issue,'if-warning'));
    const cases=el('details');cases.append(el('summary','Inspect continuation cases'));
-   for(const arm of ['before','after'])for(const row of s.arms[arm].cases){const item=el('p',`${arm} · ${row.sample.id} · ${row.eligible?(row.outcome?'success':'failure'):'unresolved'}`);if(row.run_id)item.append(' · ',inspectLink('Unit map','/semantic-map?'+new URLSearchParams({run:row.run_id,level:'units',return_to:location.pathname+location.search})));cases.append(item);}body.append(cases);
+   for(const arm of ['before','after'])for(const row of s.arms[arm].cases){const item=el('p',`${arm} · ${row.sample.id} · ${row.eligible?(row.outcome?'success':'failure'):'unresolved'}`);if(row.run_id)item.append(' · ',inspectLink('Unit map','/semantic-map?'+new URLSearchParams({run:row.run_id,level:'units',return_to:followupReturn()})));cases.append(item);}body.append(cases);
   }
   const raw=el('details');raw.append(el('summary','Pinned evidence fields'),el('pre',JSON.stringify(e,null,2)));body.append(raw);
  }
- function planDialog(doc,onSaved,follows=null){
-  const {d,body}=dialog(follows?'Plan a follow-up check':'Plan a check'),form=el('form',null,'if-form');
+ async function planDialog(doc,onSaved,follows=null,withTrial=false){
+  const {d,body}=dialog(withTrial?'Prepare trial':follows?'Plan a follow-up check':'Plan a check'),form=el('form',null,'if-form');
   body.append(el('p','Uses this investigation’s saved population and case selection. No experiment or model call will run.','if-muted'),form);
   const title=field(form,'Check title',{short:true,placeholder:'Selection records for successful rollouts'}),hypothesis=field(form,'Hypothesis',{value:follows?'':doc.hypothesis||'',placeholder:'The explanation this check should examine'}),procedure=field(form,'Check to perform',{placeholder:'Inspect recorded selection and training use for the successful sample.'}),expected=field(form,'Expected result',{placeholder:'If selection is responsible, the success should be rejected or absent from the admitted population.'}),controls=field(form,'Controls, missing evidence or cost limit (optional)',{required:false});
   const branch=choice(form,'Follow-up to', [['','Independent check'],...(doc.follow_up?.checks||[]).map(c=>[c.id,c.title])]);branch.value=follows?.id||'';
-  const error=el('p',null,'if-error');error.setAttribute('role','alert');const save=el('button','Save check','primary');save.type='submit';form.append(error,save);
+  const error=el('p',null,'if-error');error.setAttribute('role','alert');const save=el('button',withTrial?'Save check & trial':'Save check','primary');save.type='submit';form.append(error,save);
+  let trialEditor=null;
+  if(withTrial){save.disabled=true;const holder=el('div');form.insertBefore(holder,error);try{trialEditor=await InvestigationTrials.editor(holder,doc);save.disabled=false;}catch(e){error.textContent=e.message;}}
   form.onsubmit=async event=>{event.preventDefault();save.disabled=true;error.textContent='';try{
-   const result=await api('/api/investigations/follow-ups',{parent_id:doc.id,action:'plan',check:{title:title.value,hypothesis:hypothesis.value,procedure:procedure.value,expected_result:expected.value,controls:controls.value,follows_check:branch.value||null}});
+   const result=await api('/api/investigations/follow-ups',{parent_id:doc.id,action:'plan',check:{title:title.value,hypothesis:hypothesis.value,procedure:procedure.value,expected_result:expected.value,controls:controls.value,follows_check:branch.value||null,...(trialEditor?{trial:trialEditor.read()}: {})}});
    d.close();await onSaved(result);
   }catch(e){error.textContent=e.message;save.disabled=false;}};
  }
@@ -247,7 +250,7 @@ const InvestigationFollowups = (() => {
      if(!choose.value){list.append(el('p','No rollout is bound to this investigation. Attach a saved receipt by identity.'));return;}
      const page=await api('/api/evaluations?'+new URLSearchParams({run_id:choose.value,limit:10,offset}));if(current!==request||token!==loadId||!d.isConnected)return;
      if(!page.receipts.length&&!append)list.append(el('p','No evaluation reports for this rollout. Send a report from your worker; missing reports are not passing checks.','if-empty'));
-     for(const r of page.receipts){const card=el('article',null,'if-case-row'),actions=el('div',null,'if-actions');card.append(el('strong',r.label),el('small',`${evaluationPurpose[r.purpose]} · ${evaluationExecution[r.execution]||r.execution} · ${r.verdict}`),el('small',r.producer+' · '+r.performed_at));
+     for(const r of page.receipts){const card=el('article',null,'if-case-row'),actions=el('div',null,'if-actions');card.append(el('strong',r.label),el('small',`${evaluationPurpose[r.purpose]} · ${evaluationExecution[r.execution]||r.execution} · ${r.verdict}`),el('small',r.producer+' · '+(r.performed_at||'Evaluation time not recorded')));
       actions.append(button('Inspect report',()=>showEvidence({kind:'evaluation',title:r.label,receipt:r,boundary:page.boundary},true,add)),button('Attach report',async()=>{try{await add({kind:'evaluation',id:r.id});error.textContent='';}catch(e){error.textContent=e.message;}}));card.append(actions);list.append(card);}
      offset+=page.receipts.length;more.hidden=!page.more;
     }catch(e){if(current===request&&token===loadId&&d.isConnected)error.textContent=e.message;}finally{if(current===request)more.disabled=false;}}
@@ -282,7 +285,7 @@ const InvestigationFollowups = (() => {
   const section=el('section',null,'iv-panel if-workflow');section.id='investigation-checks';const head=el('div',null,'if-heading');head.append(el('div'));
   head.firstChild.append(el('span','QUESTION → CHECK → FINDING','eyebrow'),el('h2','Checks & findings'));section.append(head);
   if(!doc){section.append(el('p','Save this comparison to preserve its population and start an investigation.'),button('Save comparison first',onNotes,'primary'));return section;}
-  head.append(button('Plan a check',()=>planDialog(doc,onSaved),'primary'));
+  const headActions=el('div',null,'if-actions');headActions.append(button('Plan a check',()=>planDialog(doc,onSaved)),button('Prepare trial',()=>planDialog(doc,onSaved,null,true),'primary'));head.append(headActions);
   const checks=doc.follow_up?.checks||[],pending=checks.filter(c=>!c.results.length).length;
   section.append(el('p',doc.hypothesis||doc.title,'if-question'),el('p',`${checks.length} ${checks.length===1?'check':'checks'} · ${pending} awaiting a finding · Original evidence stays pinned`,'if-muted'));
   const history=el('div',null,'if-revisions');if(doc.parent_id)history.append(link('Previous revision',url(doc.parent_id)));
@@ -294,6 +297,7 @@ const InvestigationFollowups = (() => {
    if(c.follows_check){const previous=checks.find(x=>x.id===c.follows_check);card.append(link('Follows: '+(previous?.title||'Earlier check'),'#'+c.follows_check));}
    describe(card,'Hypothesis',c.hypothesis);describe(card,'Expected result',c.expected_result);
    const design=el('details');design.append(el('summary','Check design & original scope'));describe(design,'Check to perform',c.procedure);describe(design,'Controls / missing evidence / cost',c.controls);design.append(link('Open original case selection',comparisonUrl(c.basis_id)));card.append(design);
+   InvestigationTrials.render(card,doc,c,onSaved);
    if(latest)finding(card,latest,false);
    if(c.results.length>1){const older=el('details');older.append(el('summary',`${c.results.length-1} earlier findings`));for(const r of c.results.slice(0,-1))finding(older,r);card.append(older);}
    const actions=el('div',null,'if-actions');actions.append(button(latest?'Add another finding':'Record finding',()=>resultDialog(doc,c,onSaved)),button('Plan follow-up',()=>planDialog(doc,onSaved,c)));card.append(actions);cards.append(card);

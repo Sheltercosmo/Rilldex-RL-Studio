@@ -12,6 +12,10 @@ from .schema import InputError
 
 VERSION='integration-contracts/1'
 ROUTES=[
+ {'name':'W&B Weave','route':'Saved JSON / JSONL calls export → Import files or rilldex import',
+  'validation':'Pinned upstream schema and recorded OpenAI tool payload replay; grouping, context, source graph, CLI and HTTP tests',
+  'boundary':'Preserves call IDs, nesting, source links and available W&B run/step context. Input histories stay context; wrapper/scorer calls are not agent actions. No live account sync, arbitrary object dereferencing or optimizer-use inference.',
+  'sources':[('Import guide','/integration-guide#weave-import'),('Native call schema','https://github.com/wandb/weave/blob/25398c8b06a027f2333e2635b969169c6940982d/weave/shared/trace_server_interface.py')]},
  {'name':'mini-SWE-agent v2','route':'Public save hook → MiniCapture → durable outbox',
   'validation':'Native 2.4.6 DefaultAgent + LocalEnvironment: seven deterministic cases, capture-on/off equality, 39 delivered revisions and 14 evidence-linked measurements',
   'boundary':'Text, tool-call and Responses records tested. Parsed actions do not prove execution; normal limit stops remain complete traces without implying success. Authored outputs do not establish policy quality, container compatibility or distributed training.',
@@ -108,6 +112,10 @@ def inspect(run):
       {'name':'Visual / audio behavior','state':'uninspected' if media else 'not_recorded',
        'detail':f'{media} events contain media references. Text-only measurements do not inspect their contents.'},
     ]
+    if run['adapter']=='weave':
+        capture=meta['weave_capture']
+        functions.insert(0,{'name':'Weave call export','state':'available',
+            'detail':f"{capture['calls']} calls · {capture['model_output_calls']} decoded model outputs · {capture['unfinished_calls']} unfinished · {len(capture['missing_parent_ids'])} missing parents. Open the source map to follow native nesting and call links. Export completeness is unverified."})
     return {'adapter':run['adapter'],'adapter_version':run['adapter_version'],'source_id':run['id'],
       'source_unit':describe(run),'source_preview':preview(run),
       'counts':dict(counts),'trajectory_count':len({e['trajectory_id'] for e in events}),

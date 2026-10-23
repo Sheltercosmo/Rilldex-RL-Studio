@@ -8,6 +8,22 @@
  function comparisonLabel(c){return c.status==='unavailable'?'Input comparison unavailable':c.basis==='recorded_fields'?(c.status==='unchanged'?'Recorded tool and inputs unchanged':'Recorded tool or inputs changed'):(c.status==='unchanged'?'Recorded action text unchanged':'Recorded action text changed');}
  function valueText(v){return !v.present?'(not present)':v.characters===0?'(empty)':v.preview+(v.truncated?'…':'');}
  function changeTitle(row){return row.path==='/text'?'Recorded action text':row.path==='/tool'?'Tool name':row.path.startsWith('/arguments/')?'Input '+row.path.slice('/arguments'.length):row.path||'Recorded inputs';}
+ function dispatchRows(path){
+  const groups=new Map();
+  for(const row of path.rows){
+   const id=row.dispatch_id||row.action_id;
+   if(!groups.has(id))groups.set(id,{dispatch_id:id,action_id:row.action_id,action_ids:[],roles:[],rows:[],responses:[]});
+   const group=groups.get(id);group.rows.push(row);
+   if(!group.action_ids.includes(row.action_id))group.action_ids.push(row.action_id);
+   for(const role of row.roles)if(!group.roles.includes(role))group.roles.push(role);
+   for(const response of row.responses){
+    let saved=group.responses.find(r=>r.node_id===response.node_id);
+    if(!saved){saved={...response,assessments:[]};group.responses.push(saved);}
+    for(const assessment of response.assessments)if(!saved.assessments.some(a=>JSON.stringify(a)===JSON.stringify(assessment)))saved.assessments.push(assessment);
+   }
+  }
+  return [...groups.values()];
+ }
  function model(data,rootId){
   const byId=new Map(data.nodes.map(n=>[n.id,n])),byLink=new Map(data.links.map(e=>[e.id,e]));
   const stages=data.links.filter(e=>e.type==='contains'&&e.source===rootId&&byId.get(e.target)?.kind==='plan_step').map(e=>byId.get(e.target));
@@ -66,14 +82,16 @@
    const tools=el('div',null,'pap-toolbar'),all=el('button','All linked work'),attempts=el('button','Compare attempts'),scope=el('span',`${count(path.counts.preparations,'preparation')} · ${count(path.counts.checks,'check')} · ${count(path.counts.returns,'action')} with return links`);all.setAttribute('aria-pressed','true');attempts.setAttribute('aria-pressed','false');tools.append(all,attempts,scope);body.append(tools);
    const columns=el('div',null,'pap-columns');for(const text of ['Dispatched work','Returned feedback','Agent assessment'])columns.append(el('span',text));body.append(columns);
    const trail=el('div',null,'pap-trail'),svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('pap-return-rails');svg.setAttribute('aria-hidden','true');trail.append(svg);body.append(trail);
-   const cards=new Map(),interludes=new Map();let attemptNumber=0;
-   for(const row of path.rows){const a=m.byId.get(row.action_id),article=el('article',null,'pap-row');article.dataset.action=a.id;cards.set(a.id,article);
+   const cards=new Map(),interludes=new Map(),dispatches=dispatchRows(path);let attemptNumber=0;
+   for(const row of dispatches){const a=m.byId.get(row.action_id),article=el('article',null,'pap-row');article.dataset.action=a.id;article.dataset.dispatch=row.dispatch_id;for(const id of row.action_ids)cards.set(id,article);
     const left=el('div',null,'pap-action');if(row.roles.includes('attempts_plan_step'))attemptNumber++;
     const meta=el('div',null,'pap-meta');for(const role of row.roles)meta.append(el('span',roles[role]+(role==='attempts_plan_step'?' '+attemptNumber:''),'pap-role '+role));meta.append(el('span',`Record ${a.event_index+1}`,'pap-record'));left.append(meta);
-    const action=el('button',a.target||a.label,'pap-action-title');action.onclick=()=>showEvidence(a);left.append(action);
-    if(a.operation&&a.operation!==a.target)left.append(el('p',a.operation,'pap-operation'));
-    const pairs=m.returns(path,a.id);for(const pair of pairs){const b=m.byId.get(pair.target),link=el('div',null,'pap-return'),jump=el('button',`${pair.error?'After error report · ':''}Same work as record ${b.event_index+1}`),evidence=el('button','Relationship evidence');jump.onclick=()=>{all.click();const card=cards.get(pair.target);card.scrollIntoView({block:'center',behavior:'auto'});card.classList.add('pap-highlight');setTimeout(()=>card.classList.remove('pap-highlight'),1800);};evidence.onclick=()=>inspectReturn(pair);link.append(jump);
-     const record=m.comparison(path,a.id,pair.target);if(record){const c=record.comparison,compare=el('button','Compare inputs & intervening work','pap-compare-button');link.append(el('strong',comparisonLabel(c),'pap-change-summary'));compare.onclick=()=>inspect({id:'dispatch-comparison:'+c.id,label:`What changed · records ${b.event_index+1} → ${a.event_index+1}`,state:comparisonLabel(c),source_node_ids:[b.id,a.id],dispatch_comparison:record});link.append(compare);}link.append(evidence);left.append(link);}
+    if(row.action_ids.length>1)left.append(el('small',`${row.action_ids.length} activity units in this call`,'pap-record'));
+    for(const id of row.action_ids){const n=m.byId.get(id),action=el('button',n.target||n.label,'pap-action-title');action.onclick=()=>showEvidence(n);left.append(action);
+     if(n.operation&&n.operation!==n.target)left.append(el('p',n.operation,'pap-operation'));
+     for(const pair of m.returns(path,id)){const b=m.byId.get(pair.target),link=el('div',null,'pap-return'),jump=el('button',`${pair.error?'After error report · ':''}Same work as record ${b.event_index+1}`),evidence=el('button','Relationship evidence');jump.onclick=()=>{all.click();const card=cards.get(pair.target);card.scrollIntoView({block:'center',behavior:'auto'});card.classList.add('pap-highlight');setTimeout(()=>card.classList.remove('pap-highlight'),1800);};evidence.onclick=()=>inspectReturn(pair);link.append(jump);
+      const record=m.comparison(path,id,pair.target);if(record){const c=record.comparison,compare=el('button','Compare inputs & intervening work','pap-compare-button');link.append(el('strong',comparisonLabel(c),'pap-change-summary'));compare.onclick=()=>inspect({id:'dispatch-comparison:'+c.id,label:`What changed · records ${b.event_index+1} → ${n.event_index+1}`,state:comparisonLabel(c),source_node_ids:[b.id,n.id],dispatch_comparison:record});link.append(compare);}link.append(evidence);left.append(link);}
+    }
     const middle=el('div',null,'pap-feedback'),right=el('div',null,'pap-assessment');
     if(!row.responses.length)middle.append(el('p','No linked response in this view.','pap-missing'));
     const assessed=new Map();for(const response of row.responses){const r=m.byId.get(response.node_id),box=el('div',null,'pap-response'),raw=plain(r.source_text||r.label);box.append(el('small',`RETURNED · RECORD ${r.event_index+1}`));const text=el('p',raw.slice(0,360)+(raw.length>360?'…':''),'pap-excerpt');box.append(text);
@@ -82,15 +100,15 @@
     }
     for(const {node:n,records}of assessed.values()){const box=el('div',null,'pap-review');box.append(el('small',`ASSESSMENT · RECORD ${n.event_index+1}`),el('p',n.summary||n.source_text||n.label),el('span',`Assesses feedback at record${records.length>1?'s':''} ${records.join(', ')}`,'pap-review-source'));const b=el('button','Inspect assessment','pap-inline');b.onclick=()=>showEvidence(n);box.append(b);right.append(box);}
     if(!assessed.size)right.append(el('p','No assessment link saved.','pap-missing'));
-    if(row.roles.includes('attempts_plan_step')){const between=m.between(path,a.id);if(between.length){const context=el('div',null,'pap-between');context.hidden=true;context.append(el('small',attemptNumber===1?'LINKED WORK BEFORE FIRST ATTEMPT':'OTHER LINKED WORK SINCE PRIOR ATTEMPT'));for(const r of between){const n=m.byId.get(r.action_id),b=el('button',n.target||n.label);b.onclick=()=>showEvidence(n);context.append(b);}trail.append(context);interludes.set(a.id,context);}}
+    if(row.roles.includes('attempts_plan_step')){const between=m.between(path,row.rows.find(r=>r.roles.includes('attempts_plan_step')).action_id);if(between.length){const context=el('div',null,'pap-between');context.hidden=true;context.append(el('small',attemptNumber===1?'LINKED WORK BEFORE FIRST ATTEMPT':'OTHER LINKED WORK SINCE PRIOR ATTEMPT'));for(const r of between){const n=m.byId.get(r.action_id),b=el('button',n.target||n.label);b.onclick=()=>showEvidence(n);context.append(b);}trail.append(context);interludes.set(a.id,context);}}
     article.append(left,middle,right);trail.append(article);
    }
-   const lastAttempt=path.rows.map(r=>r.roles.includes('attempts_plan_step')).lastIndexOf(true);
-   if(lastAttempt>=0&&lastAttempt<path.rows.length-1){const tail=el('div',null,'pap-between');tail.hidden=true;tail.append(el('small','LINKED WORK AFTER FINAL RECORDED ATTEMPT'));for(const row of path.rows.slice(lastAttempt+1)){const n=m.byId.get(row.action_id),b=el('button',n.summary||n.target||n.label);b.onclick=()=>showEvidence(n);tail.append(b);}trail.append(tail);interludes.set('tail',tail);}
+   const lastAttempt=dispatches.map(r=>r.roles.includes('attempts_plan_step')).lastIndexOf(true);
+   if(lastAttempt>=0&&lastAttempt<dispatches.length-1){const tail=el('div',null,'pap-between');tail.hidden=true;tail.append(el('small','LINKED WORK AFTER FINAL RECORDED ATTEMPT'));for(const row of dispatches.slice(lastAttempt+1))for(const id of row.action_ids){const n=m.byId.get(id),b=el('button',n.summary||n.target||n.label);b.onclick=()=>showEvidence(n);tail.append(b);}trail.append(tail);interludes.set('tail',tail);}
    function drawRails(){if(!trail.isConnected)return;svg.replaceChildren();svg.setAttribute('viewBox',`0 0 32 ${Math.max(1,trail.offsetHeight)}`);svg.style.height=trail.offsetHeight+'px';let index=0;
-    for(const row of path.rows){const start=cards.get(row.action_id);if(start.hidden)continue;for(const pair of m.returns(path,row.action_id)){const end=cards.get(pair.target);if(!end||end.hidden)continue;const y1=start.offsetTop+30,y2=end.offsetTop+30,x=4+(index++%3)*7,p=document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',`M30 ${y1} H${x+5} Q${x} ${y1} ${x} ${y1-5} V${y2+5} Q${x} ${y2} ${x+5} ${y2} H30 m-5 -4 5 4 -5 4`);svg.append(p);}}
+    const drawn=new Set();for(const row of path.rows){const start=cards.get(row.action_id);if(start.hidden)continue;for(const pair of m.returns(path,row.action_id)){const end=cards.get(pair.target),key=JSON.stringify([start.dataset.dispatch,end?.dataset.dispatch]);if(!end||end.hidden||end===start||drawn.has(key))continue;drawn.add(key);const y1=start.offsetTop+30,y2=end.offsetTop+30,x=4+(index++%3)*7,p=document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',`M30 ${y1} H${x+5} Q${x} ${y1} ${x} ${y1-5} V${y2+5} Q${x} ${y2} ${x+5} ${y2} H30 m-5 -4 5 4 -5 4`);svg.append(p);}}
    }
-   function filter(only){all.setAttribute('aria-pressed',String(!only));attempts.setAttribute('aria-pressed',String(only));for(const row of path.rows){const card=cards.get(row.action_id);card.hidden=only&&!row.roles.includes('attempts_plan_step');card.classList.remove('pap-last');}const visible=[...cards.values()].filter(n=>!n.hidden);visible.at(-1)?.classList.add('pap-last');for(const node of interludes.values())node.hidden=!only;drawRails();}
+   function filter(only){all.setAttribute('aria-pressed',String(!only));attempts.setAttribute('aria-pressed',String(only));for(const row of dispatches){const card=cards.get(row.action_id);card.hidden=only&&!row.roles.includes('attempts_plan_step');card.classList.remove('pap-last');}const visible=[...new Set(cards.values())].filter(n=>!n.hidden);visible.at(-1)?.classList.add('pap-last');for(const node of interludes.values())node.hidden=!only;drawRails();}
    all.onclick=()=>filter(false);attempts.onclick=()=>filter(true);resize=new ResizeObserver(()=>{if(!trail.isConnected){resize.disconnect();observers.delete(resize);return;}drawRails();});observers.add(resize);resize.observe(trail);requestAnimationFrame(drawRails);
    filter(path.counts.returns>0);
    if(path.other_action_ids.length)body.append(el('p',`${path.other_action_ids.length} other action${path.other_action_ids.length===1?'':'s'} occur in the same recorded span and remain outside this step. Open the Unit map to inspect them.`, 'pap-guide'));
@@ -98,5 +116,5 @@
   }
   draw();
  }
- return {model,render,renderComparison,comparisonLabel,valueText,changeTitle,plain,clear};
+ return {model,render,renderComparison,comparisonLabel,valueText,changeTitle,plain,clear,dispatchRows};
 });

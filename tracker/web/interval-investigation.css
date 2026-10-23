@@ -5,6 +5,7 @@
 .ii-question-grid{align-items:start}.ii-jumps{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.ii-jumps a{padding:6px 10px;border:1px solid #dbe3ef;border-radius:7px;text-decoration:none;font-size:13px;background:#f7faff}.ii-panel{scroll-margin-top:82px}.ii-panel>h2{font-size:18px}.ii-panel>h3{font-size:14px}
 
 .ii-witness{border-left:2px solid #7693d1;padding:12px;margin:12px 0;background:#f8faff}.ii-witness small{display:block;color:#59687d;margin-top:6px}
+.ii-receipt{padding:12px 0;border-bottom:1px solid #e3e8f0}.ii-receipt>summary{font-weight:600;cursor:pointer}.ii-receipt>a{display:inline-block;margin:12px 12px 12px 0}.ii-case-tools{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.ii-case-tools input,.ii-case-tools select{flex:1 1 180px;min-width:0;max-width:100%;font-size:13px}.ii-measured-case{margin:12px 0;border:1px solid #e3e8f0;border-radius:8px;padding:12px;overflow-wrap:anywhere}.ii-measured-case>summary{font-size:13px;font-weight:600;cursor:pointer}.ii-measured-case>a{display:inline-block;margin:12px 0;font-size:13px}.ii-measured-case p{font-size:13px;line-height:1.6}
 
 /* Presets are an optional setup tool; the registry remains the primary view. */
 .workspace .monitor-preset-library{margin:0 0 18px;padding:0;border:1px solid var(--line,#dce3ef);border-radius:10px;background:#fff}

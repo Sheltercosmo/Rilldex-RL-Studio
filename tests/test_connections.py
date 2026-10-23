@@ -116,7 +116,7 @@ class ConnectionTests(unittest.TestCase):
         finally:service.close()
 
     def test_config_errors_fail_before_persisting(self):
-        for extra in [{'interval':float('nan')},{'max_files':True},{'metadata':[]},{'root':''},{'producer':None}]:
+        for extra in [{'interval':float('nan')},{'max_files':True},{'metadata':[]},{'root':''},{'producer':42}]:
             with self.subTest(extra=extra),self.assertRaises(InputError):create(self.store,{**self.config,**extra})
         self.assertEqual(definitions(self.store),[])
 

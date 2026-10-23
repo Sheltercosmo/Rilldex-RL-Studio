@@ -15,7 +15,7 @@ def initialize(directory,source_directory,run_id,cache_directories=(),target_ver
     root=Path(directory).resolve();source=Path(source_directory).resolve()
     if not run_id.isalnum():raise InputError('Invalid history run ID')
     if root==source or root.is_relative_to(source):raise InputError('Use a separate output directory outside the source workspace')
-    if target_version not in {action_targets.VERSION,action_targets.SCOPED_VERSION,action_targets.CHARACTERIZED_VERSION,action_targets.SCOPE_VERSION,action_targets.PAIRWISE_VERSION}:
+    if target_version not in {action_targets.VERSION,action_targets.SCOPED_VERSION,action_targets.CHARACTERIZED_VERSION,action_targets.SCOPE_VERSION,action_targets.PAIRWISE_VERSION,action_targets.PAGED_VERSION}:
         raise InputError('Unknown target correspondence version')
     if reference_rule not in {feedback_assessments.REFERENCE_RULE,feedback_assessments.DIRECT_SET_RULE}:
         raise InputError('Unknown feedback reference rule')

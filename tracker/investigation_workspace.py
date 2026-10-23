@@ -204,8 +204,9 @@ def capture(store,raw):
                 sources.append({**r,'outcome':source.get('outcome',{})})
         from .question_bundles import listing
         questions=listing(saved,experiment,environment)['questions']
+        from .case_comparisons import capture as capture_cases
         snapshot=dict(captured_at=m.now(),scope=dict(experiment=experiment,environment=environment,baseline=baseline,current=current),
-            population=members,source_rows=sources,panels=panels,training_lineage=lineage,declared_populations=pending,
+            population=members,source_rows=sources,case_evidence=capture_cases(saved,sources),panels=panels,training_lineage=lineage,declared_populations=pending,
             history=events,questions=questions,learning_context=learning_context(lineage,sources),native_telemetry=native_telemetry,excluded=dict(missing_coordinates=sum(type(r['metadata'].get('training_step')) is not int for r in runs),
                 unselected_monitors=len(definitions)-len(requested)),
             clock_boundary='Windows select recorded source training coordinates. Configurations and clocks remain separate cohorts. Learner updates are joined through exact source revisions, not equal step numbers. Generation declarations retain their own clock; unaligned declarations cannot establish closure of this source population.')

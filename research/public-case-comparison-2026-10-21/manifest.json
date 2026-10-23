@@ -1,0 +1,164 @@
+{
+  "github_commit": "40f164d5b8f1d249bf95a6df8b74b577fd8e519d",
+  "sources": [
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "task_id": "astropy__astropy-12907",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_gpt-5-mini/trajs/astropy__astropy-12907/astropy__astropy-12907.traj.json",
+      "sha256": "48ba6508e431427e0794710cfb9c95c59dec4dc961c52df7f6ebf088e9bd4373",
+      "bytes": 99162,
+      "messages": 26
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "task_id": "astropy__astropy-13033",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_gpt-5-mini/trajs/astropy__astropy-13033/astropy__astropy-13033.traj.json",
+      "sha256": "52fad26f0d3427969cd98350fb08adefc876000c95bd5d04b29ed10194f94f74",
+      "bytes": 127538,
+      "messages": 29
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "task_id": "astropy__astropy-13453",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_gpt-5-mini/trajs/astropy__astropy-13453/astropy__astropy-13453.traj.json",
+      "sha256": "267f7f244187a0b62d11c0a8327fdf0d3a4861cdf954b62f72dd821830c56bfd",
+      "bytes": 643275,
+      "messages": 55
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "task_id": "django__django-11964",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_gpt-5-mini/trajs/django__django-11964/django__django-11964.traj.json",
+      "sha256": "6309ae1987f8a16d6b134843f36f121453834e9a7015e2fed378fc544dcc6c05",
+      "bytes": 321230,
+      "messages": 60
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "task_id": "sympy__sympy-18698",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_gpt-5-mini/trajs/sympy__sympy-18698/sympy__sympy-18698.traj.json",
+      "sha256": "653280ceff39b822069fcbcf98acbb644c7e2be8e9eadfc16c7e2c71b7cc228c",
+      "bytes": 265871,
+      "messages": 64
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "task_id": "sympy__sympy-23950",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_gpt-5-mini/trajs/sympy__sympy-23950/sympy__sympy-23950.traj.json",
+      "sha256": "e63aea69bd00df296c2ee055570d6f73013e4fb10bb2e8791783733b7a8e0cf7",
+      "bytes": 396798,
+      "messages": 72
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "task_id": "sympy__sympy-24562",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_gpt-5-mini/trajs/sympy__sympy-24562/sympy__sympy-24562.traj.json",
+      "sha256": "a45698ae480124fc24414f33361f54eada1b3762655f7dfb343440390655f032",
+      "bytes": 176827,
+      "messages": 38
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "task_id": "sympy__sympy-24661",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_gpt-5-mini/trajs/sympy__sympy-24661/sympy__sympy-24661.traj.json",
+      "sha256": "9b3a65124c38d22d0e63cd0b571302e21a893ae55d617d6d3990977b37fe12d7",
+      "bytes": 195240,
+      "messages": 34
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "task_id": "astropy__astropy-12907",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_claude-4-5-sonnet-high/trajs/astropy__astropy-12907/astropy__astropy-12907.traj.json",
+      "sha256": "6b61e41f9b92465758933e670e06de8240e8b7267f9ed182e34ed8cfa81033bc",
+      "bytes": 477133,
+      "messages": 78
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "task_id": "astropy__astropy-13033",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_claude-4-5-sonnet-high/trajs/astropy__astropy-13033/astropy__astropy-13033.traj.json",
+      "sha256": "1c5e84c495bee1f757b5c6643315a6ee8c9591fcd057fcf1ae8678a36a0cbb69",
+      "bytes": 431398,
+      "messages": 61
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "task_id": "astropy__astropy-13453",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_claude-4-5-sonnet-high/trajs/astropy__astropy-13453/astropy__astropy-13453.traj.json",
+      "sha256": "633dd18d145fbdfa13272aa2e0677e5b0fa73d0694ead6fd70ba714d2d09c284",
+      "bytes": 730090,
+      "messages": 125
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "task_id": "django__django-11964",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_claude-4-5-sonnet-high/trajs/django__django-11964/django__django-11964.traj.json",
+      "sha256": "a239e012a6ca0406563bacb457394c480ad2d0ddaace0a6e874098f7a10d4eac",
+      "bytes": 703217,
+      "messages": 123
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "task_id": "sympy__sympy-18698",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_claude-4-5-sonnet-high/trajs/sympy__sympy-18698/sympy__sympy-18698.traj.json",
+      "sha256": "b604ecf8c5caf3fe6e35a6b0eaa081096543f4ad35c1d99470370b224b420d5a",
+      "bytes": 1041844,
+      "messages": 165
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "task_id": "sympy__sympy-23950",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_claude-4-5-sonnet-high/trajs/sympy__sympy-23950/sympy__sympy-23950.traj.json",
+      "sha256": "19e74f8cca4d11d8091826897a3956b6d34d4fc98d02309c577a113cdaa7dc3d",
+      "bytes": 790536,
+      "messages": 117
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "task_id": "sympy__sympy-24562",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_claude-4-5-sonnet-high/trajs/sympy__sympy-24562/sympy__sympy-24562.traj.json",
+      "sha256": "18d1db5f3dae1ed662502afd50a92dead802c7994e6a0a3cc3a8ba1d1f00a6ae",
+      "bytes": 397069,
+      "messages": 69
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "task_id": "sympy__sympy-24661",
+      "url": "https://swe-bench-submissions.s3.amazonaws.com/bash-only/20260217_mini-v2.0.0_claude-4-5-sonnet-high/trajs/sympy__sympy-24661/sympy__sympy-24661.traj.json",
+      "sha256": "4593dea0c7a2529443af690b92bdd3ff1434e9c371c1ae418c21e35b76c93e70",
+      "bytes": 513108,
+      "messages": 84
+    }
+  ],
+  "selection": {
+    "selection": "First and last sorted task in each reported outcome pairing; purposive coverage, not a prevalence sample",
+    "tasks": [
+      "astropy__astropy-12907",
+      "astropy__astropy-13033",
+      "astropy__astropy-13453",
+      "django__django-11964",
+      "sympy__sympy-18698",
+      "sympy__sympy-23950",
+      "sympy__sympy-24562",
+      "sympy__sympy-24661"
+    ],
+    "population_counts": {
+      "(True, True)": 268,
+      "(False, False)": 130,
+      "(False, True)": 89,
+      "(True, False)": 13
+    }
+  },
+  "reports": [
+    {
+      "submission": "20260217_mini-v2.0.0_claude-4-5-sonnet-high",
+      "url": "https://raw.githubusercontent.com/SWE-bench/experiments/40f164d5b8f1d249bf95a6df8b74b577fd8e519d/evaluation/verified/20260217_mini-v2.0.0_claude-4-5-sonnet-high/per_instance_details.json",
+      "sha256": "c7f61049937deafa6327e0d5f17c0baf482751388530530bb9f5d53ce0fbf7cc"
+    },
+    {
+      "submission": "20260217_mini-v2.0.0_gpt-5-mini",
+      "url": "https://raw.githubusercontent.com/SWE-bench/experiments/40f164d5b8f1d249bf95a6df8b74b577fd8e519d/evaluation/verified/20260217_mini-v2.0.0_gpt-5-mini/per_instance_details.json",
+      "sha256": "b98b3f03cf9fbcf0eaa878ccde6d34a72483149ceb04559c90fd52277cb9d1ae"
+    }
+  ]
+}

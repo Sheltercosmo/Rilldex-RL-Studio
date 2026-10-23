@@ -25,6 +25,9 @@ FAMILIES = {
 def population(doc):
     if doc['schema'] == 'training-investigation/1':
         return {s['run_id']:'focus' for s in doc['selected_samples'] if s.get('run_id')}
+    if doc['schema'] in {'interval-investigation/1', 'case-investigation/1'}:
+        return {rid: 'focus' if side == 'current' else 'reference'
+                for side, ids in doc['snapshot']['population'].items() for rid in ids}
     return {r['id']:'focus' if r.get('focus') else 'reference' for r in doc['snapshot']['rows']
             if r.get('focus') or r.get('reference')}
 

@@ -1,0 +1,44 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict');
+const base=process.env.REVIEW_TEST_URL,output=process.env.REVIEW_OUTPUT_DIR;
+(async()=>{
+ const browser=await chromium.launch({headless:true,channel:'msedge'}),errors=[];
+ try{
+  const page=await browser.newPage({viewport:{width:1500,height:1050}});page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(base+'/?view=health&experiment=case-candidate&signals_compare=case-reference');
+  await page.getByRole('button',{name:'Compare rollout cases',exact:true}).click();
+  const setup=page.locator('.case-setup');await setup.getByRole('combobox',{name:'Reference run',exact:true}).waitFor();
+  assert.ok((await setup.boundingBox()).width<=870,'Setup should remain compact');
+  assert.equal(await setup.getByRole('combobox',{name:'Reference run',exact:true}).inputValue(),'case-reference');
+  assert.equal(await setup.getByRole('combobox',{name:'Selected run',exact:true}).inputValue(),'case-candidate');
+  assert.equal(await setup.getByRole('combobox',{name:'Selected rollouts',exact:true}).inputValue(),'all');
+  assert.equal(await setup.getByRole('spinbutton',{name:'Selected first step',exact:true,includeHidden:true}).isDisabled(),true);
+  if(output)await page.screenshot({path:output+'/case-selection-desktop.png'});
+  await setup.getByRole('button',{name:'Compare captured rollouts',exact:true}).click();
+  await page.waitForURL(/\/investigate\?saved=/);const saved=new URL(page.url()).searchParams.get('saved');
+  await page.locator('.case-group').first().waitFor();assert.match(await page.locator('#investigation-app').innerText(),/2 reference \/ 3 selected rollouts/);
+  await page.getByRole('combobox',{name:'Rollout outcome filter'}).selectOption('regressed');
+  await page.waitForFunction(()=>document.querySelectorAll('.case-group').length===1);
+  await page.getByRole('button',{name:'Compare evidence',exact:true}).click();await page.locator('.case-unit').first().waitFor();
+  const firstGraph=await page.locator('.case-column header a').first().getAttribute('href');
+  await page.locator('.case-unit a').first().click();await page.locator('#detail-title').waitFor();
+  await page.getByRole('link',{name:/Back to/}).click();await page.locator('.case-dialog .case-unit').first().waitFor();
+  await page.reload();await page.locator('.case-dialog .case-unit').first().waitFor();
+  assert.equal(await page.locator('.case-column header a').first().getAttribute('href'),firstGraph);
+  await page.locator('.case-dialog').getByRole('button',{name:'Close',exact:true}).click();
+  const report=await page.request.get(base+'/api/investigations/'+saved+'/report');assert.equal(report.status(),200);assert.match(await report.text(),/regressed/);
+  if(output)await page.screenshot({path:output+'/case-study-desktop.png'});
+  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'New comparison',exact:true}).click();
+  await page.getByRole('combobox',{name:'Reference rollouts',exact:true}).selectOption('checkpoint');
+  assert.equal(await page.getByRole('combobox',{name:'Reference checkpoint',exact:true}).isEnabled(),true);
+  await page.getByRole('combobox',{name:'Selected rollouts',exact:true}).selectOption('range');
+  assert.equal(await page.getByRole('spinbutton',{name:'Selected first step',exact:true}).inputValue(),'10');
+  assert.equal(await page.getByRole('spinbutton',{name:'Selected last step',exact:true}).inputValue(),'20');
+  assert.ok(await page.locator('.case-setup .case-dialog-body').evaluate(n=>n.scrollWidth<=n.clientWidth+1));
+  if(output)await page.screenshot({path:output+'/case-selection-mobile.png'});
+  await page.locator('.case-setup').getByRole('button',{name:'Close',exact:true}).click();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  assert.deepEqual(errors,[]);
+  console.log('Passed: chart entry, independent selectors, saved comparison, task filters, map/back/reload, report, and mobile controls.');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});

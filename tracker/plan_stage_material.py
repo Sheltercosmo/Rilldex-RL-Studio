@@ -5,7 +5,7 @@ whether an action caused a returned state. No new base activity is introduced.
 """
 from pathlib import Path
 from .schema import InputError,digest
-from .semantic_extraction import read,write,replay_decision
+from .semantic_extraction import read,write,replay_decision,checked_span
 from .execution_reports import bound_responses,POLICY
 from .readable_context import project,source_fragments
 from .response_material import FORMS
@@ -27,6 +27,22 @@ def dependencies(document):
             for u in units.values() if u['id'] in ids]}
 
 
+def correspondence_events(run,action,plan):
+    """Resolve saved unit anchors without joining different recorded sessions."""
+    ae=checked_span(run,action['source']);pe=checked_span(run,plan['source'])
+    if (pe['index'],plan['source']['end'])>(ae['index'],action['source']['start']):
+        raise InputError('Plan correspondence crosses source cutoff')
+    if ((action['actor'],action['trajectory_id'])!=(plan['actor'],plan['trajectory_id']) or
+        (ae['actor'],ae['trajectory_id'])!=(action['actor'],action['trajectory_id']) or
+        (pe['actor'],pe['trajectory_id'])!=(plan['actor'],plan['trajectory_id'])):
+        raise InputError('Plan correspondence crosses participant')
+    if ae.get('context_id')!=pe.get('context_id'):
+        raise InputError('Plan correspondence crosses recorded context')
+    if ae['kind']!='action' or ae.get('copied_context') or pe.get('copied_context'):
+        raise InputError('Plan correspondence requires original source work')
+    return ae,pe
+
+
 def pairs(run,document):
     if document['source_hash']!=digest(run):raise InputError('Plan material source differs')
     units={u['id']:u for u in document['units']};events={e['id']:e for e in run['events']}
@@ -39,8 +55,7 @@ def pairs(run,document):
         step=next((s for s in plan.get('plan_structure',{}).get('steps',[]) if s['id']==rel.get('plan_step_id')),None)
         if not step or action['kind']!='action' or action['actor']!=plan['actor'] or action['trajectory_id']!=plan['trajectory_id']:
             raise InputError('Invalid stage material correspondence')
-        ae=events[action['source']['event_id']];pe=events[plan['source']['event_id']]
-        if (pe['index'],plan['source']['end'])>(ae['index'],action['source']['start']):raise InputError('Plan is future to dispatch')
+        ae,_=correspondence_events(run,action,plan)
         for response in by_action.get(ae['id'],[]):
             key=(plan['id'],step['id'],action['id'],response['id'])
             if key in seen:continue

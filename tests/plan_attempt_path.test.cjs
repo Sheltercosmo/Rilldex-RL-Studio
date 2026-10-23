@@ -1,6 +1,25 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {model,plain}=require('../tracker/web/plan-attempt-path.js');
 const {comparisonLabel,valueText,changeTitle}=require('../tracker/web/plan-attempt-path.js');
+const {dispatchRows}=require('../tracker/web/plan-attempt-path.js');
+test('one captured call renders one attempt with all activity and response witnesses',()=>{
+ const response={node_id:'feedback',assessments:[{node_id:'review',link_id:'assessment'}]};
+ const path={rows:[
+  {action_id:'a',dispatch_id:'event:call',roles:['attempts_plan_step'],responses:[response]},
+  {action_id:'b',dispatch_id:'event:call',roles:['checks_plan_step'],responses:[response,{node_id:'feedback-tail',assessments:[]}]},
+  {action_id:'c',dispatch_id:'event:later',roles:['attempts_plan_step'],responses:[]}]};
+ const before=JSON.stringify(path),rows=dispatchRows(path);
+ assert.equal(rows.length,2);assert.deepEqual(rows[0].action_ids,['a','b']);
+ assert.deepEqual(rows[0].roles,['attempts_plan_step','checks_plan_step']);
+ assert.deepEqual(rows[0].responses.map(r=>r.node_id),['feedback','feedback-tail']);
+ assert.equal(rows[0].responses[0].assessments.length,1);
+ assert.equal(rows[0].rows.length,2);assert.equal(JSON.stringify(path),before);
+});
+test('missing source dispatch identity does not merge annotations by their text or order',()=>{
+ const row={roles:['attempts_plan_step'],responses:[]};
+ const path={rows:[{...row,action_id:'a'},{...row,action_id:'b'},{...row,action_id:'c',dispatch_id:'first'},{...row,action_id:'d',dispatch_id:'second'}]};
+ assert.equal(dispatchRows(path).length,4);
+});
 function fixture(){return {nodes:[{id:'p',kind:'plan'},{id:'a',kind:'plan_step'},{id:'b',kind:'plan_step'},{id:'unrelated',kind:'plan_step'}],links:[
  {id:'pa',source:'p',target:'a',type:'contains'},{id:'pb',source:'p',target:'b',type:'contains'},
  {id:'same',source:'try2',target:'try1',type:'same_action_target'},{id:'err',source:'try2',target:'try1',type:'revisits_after_error_report'},

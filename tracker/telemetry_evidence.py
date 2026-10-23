@@ -85,13 +85,15 @@ def capture(store,*,experiment,lineage,limit=500):
 def evidence(store,*,producer,experiment,record_id):
     """On-demand point evidence; available without a saved investigation."""
     from .training_lineage import snapshot
+    from .experiment_details import execution_context
     with store.read_snapshot() as saved:
         with saved.connect() as c:
             if not c.execute("SELECT 1 FROM sqlite_master WHERE name='trainer_telemetry'").fetchone():
                 raise InputError('This workspace has no native trainer logs')
             row=c.execute('SELECT * FROM trainer_telemetry WHERE producer=? AND experiment=? AND record_id=?',
                 (producer,experiment,record_id)).fetchone()
+            executions=execution_context(c,experiment=experiment,producer=producer,record_id=record_id)
         if row is None:raise InputError('Unknown native trainer log')
         linked='training_uses' in json.loads(row['document'])
         index=_index({'recorded':snapshot(saved,experiment=experiment)['samples']}) if linked else {}
-        return dict(schema=VERSION,**_project(row,index),boundary=BOUNDARY)
+        return dict(schema=VERSION,**_project(row,index),boundary=BOUNDARY,executions=executions)

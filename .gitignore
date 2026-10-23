@@ -11,12 +11,19 @@ __pycache__/
 *.sqlite-*
 *.db
 *.db-*
+*.models/
 *.pem
 *.key
 outputs/
 dist/
 # Local experiment workspaces and retained third-party research checkouts.
-research/
+research/*
+# Reproducible public replay only; downloaded traces remain under .tracker/.
+!research/replay_public_case_comparisons.py
+!research/public-case-comparison-2026-10-21/
+research/public-case-comparison-2026-10-21/*
+!research/public-case-comparison-2026-10-21/README.md
+!research/public-case-comparison-2026-10-21/manifest.json
 tests/*browser*.cjs
 scripts/check_semantic_map.cjs
 test-results/

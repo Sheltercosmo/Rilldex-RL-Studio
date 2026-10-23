@@ -132,6 +132,30 @@ Each call sees fresh committed data; joins within one call share a read snapshot
         """Discover experiment names and saved observation sets without a UI."""
         return self.data.options(experiment=self.scope['experiment'],history=self.scope['history'])
 
+    def compare_rollouts(self, *, reference, selected, title='Rollout case comparison', hypothesis='',monitor_ids=None):
+        """Save current source snapshots from two explicit selections for UI or code use.
+
+        Each selection specifies its experiment; table-access scope is not applied.
+        No inference is run. Open the returned ID in /investigate?saved=<id>.
+        """
+        from . import case_studies
+        from .store import Store
+        with self.data.snapshot() as source:
+            if source.frozen: raise InputError('Saving a comparison requires the live workspace or a full restore')
+        return case_studies.save(Store(self.data.path), dict(reference=reference, selected=selected, title=title, hypothesis=hypothesis,monitor_ids=monitor_ids))
+
+    def compare_trainer_rollouts(self, *, reference, selected, title='Linked rollout comparison', hypothesis='',monitor_ids=None):
+        """Save linked rollout evidence for two native metric intervals.
+
+        Each side specifies series_id, as_of and optional start/end, taken from
+        trainer_signals(). No rollout clock is inferred from trainer steps.
+        """
+        from . import trainer_case_studies
+        from .store import Store
+        with self.data.snapshot() as source:
+            if source.frozen: raise InputError('Saving a comparison requires the live workspace or a full restore')
+        return trainer_case_studies.save(Store(self.data.path),dict(reference=reference,selected=selected,title=title,hypothesis=hypothesis,monitor_ids=monitor_ids))
+
     def monitor(self,name,*,version,description,unit='value',aggregation='mean',config=None,group='Behavior',evaluations=None):
         """Register a code-defined monitor whose saved results appear in the UI.
 
@@ -201,6 +225,30 @@ Each call sees fresh committed data; joins within one call share a read snapshot
     def metrics(self,**filters): return self.table('measurements',**filters)
 
     def telemetry(self,**filters): return self.table('trainer_telemetry',**filters)
+
+    def trainer_signals(self, **selection):
+        """Full native curves with optional worker/session scope; builds the scalar index."""
+        from .store import Store
+        from .telemetry_queries import query
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Trainer signals require a full workspace database')
+        return query(Store(self.data.path),experiment=self.scope['experiment'],environment=self.scope.get('environment'),**selection)
+
+    def trainer_sessions(self, **selection):
+        """Browse all captured trainer sessions independently of chart limits."""
+        from .store import Store
+        from .telemetry_queries import sessions
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Trainer sessions require a full workspace database')
+        return sessions(Store(self.data.path),experiment=self.scope['experiment'],environment=self.scope.get('environment'),**selection)
+
+    def trainer_context(self, *, producer, session, as_of=None):
+        """Find process capture for an exact trainer session, using recorded links."""
+        from .store import Store
+        from .run_records import trainer_context
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Trainer context requires a full workspace database')
+        return trainer_context(Store(self.data.path),experiment=self.scope['experiment'],producer=producer,session=session,as_of=as_of)
 
     def execution_view(self, *, saved=None, **selection):
         """Read synchronized execution evidence without running a UI or model."""
@@ -279,6 +327,33 @@ Each call sees fresh committed data; joins within one call share a read snapshot
                     (result['id'],dumps(result),result['captured_at']))
         return result
 
+    def compare_behavior(self,*,saved=None,save=False,parent_id=None,title=None,**controls):
+        """Compare saved behavior observations; optionally retain or reopen a capture.
+
+        parent_id with save=True captures new evidence for the original windows.
+        Category counts, coverage and source graph links are retained together.
+        """
+        from .store import Store
+        from . import behavior_distributions as behavior
+        if self.scope['history']:raise InputError('Behavior comparisons use latest rollout revisions; select history=False')
+        if type(save) is not bool:raise InputError('save must be boolean')
+        if saved and (save or parent_id or controls or title):raise InputError('Reopen a saved comparison without new controls')
+        if parent_id and (not save or controls):raise InputError('Use parent_id with save=True and no new controls')
+        if title is not None and not save:raise InputError('A title requires save=True')
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Behavior comparisons require a full workspace database')
+        store=Store(self.data.path)
+        existing=behavior.read_comparison(store,saved or parent_id) if saved or parent_id else None
+        for key in ('experiment','observer'):
+            scoped=self.scope[key]
+            if scoped is not None:
+                if existing and existing['controls'].get(key)!=scoped:raise InputError('Comparison is outside this '+key+' scope')
+                if key in controls and controls[key]!=scoped:raise InputError('Comparison is outside this '+key+' scope')
+                controls[key]=scoped
+        if saved:return existing
+        if save:return behavior.save_comparison(store,dict(parent_id=parent_id,title=title) if parent_id else dict(controls=controls,title=title))
+        return behavior.snapshot(store,**controls)
+
     def investigate_interval(self,*,baseline,current,monitor_ids=None,environment=None,title=None,hypothesis='',save=True,parent_id=None):
         """Freeze linked outcome, population, training-use and behavior evidence.
 
@@ -302,6 +377,68 @@ Each call sees fresh committed data; joins within one call share a read snapshot
                 raw['monitor_ids']=sorted(allowed) if monitor_ids is None else monitor_ids
             value=capture(ReadSnapshot(self.data.path,source.c),raw)
         return persist(Store(self.data.path),value) if save else value
+
+    def run_records(self, **filters):
+        """Read console, hardware, runtime and file metadata directly from this workspace."""
+        from .run_records import records
+        from .store import Store
+        with self.data.snapshot() as source:
+            if source.frozen: raise InputError('Run capture requires a full workspace database')
+        return records(Store(self.data.path),experiment=self.scope['experiment'],**filters)
+
+    def hardware_history(self, **filters):
+        """Read complete machine-sample statistics and bounded plots by process session."""
+        from .hardware_history import query
+        from .store import Store
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Hardware history requires a full workspace database')
+        return query(Store(self.data.path),experiment=self.scope['experiment'],**filters)
+
+    def download_file(self, sequence, destination, *, storage_options=None, opener=None):
+        """Retrieve an embedded or referenced file on this Python host, checking recorded identity."""
+        from .store import Store
+        from .run_files import retrieve
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('File retrieval requires a full workspace database')
+        return retrieve(Store(self.data.path),experiment=self.scope['experiment'],sequence=sequence,
+            destination=destination,storage_options=storage_options,opener=opener)
+
+    def organize(self, **labels):
+        """Set this experiment's title, project, tags, notes, pinned or archived state."""
+        from .run_records import organize
+        from .store import Store
+        with self.data.snapshot() as source:
+            if source.frozen: raise InputError('Organization requires a full workspace database')
+        return organize(Store(self.data.path),experiment=self.scope['experiment'],**labels)
+
+    def organize_experiments(self, experiments, **changes):
+        """Move, tag, pin or archive explicit experiments atomically in this workspace."""
+        from .experiment_management import organize_many
+        from .store import Store
+        if self.scope['experiment'] and experiments != [self.scope['experiment']]:
+            raise InputError('Use an unscoped Workspace to organize multiple experiments')
+        with self.data.snapshot() as source:
+            if source.frozen: raise InputError('Organization requires a full workspace database')
+        return organize_many(Store(self.data.path), experiments=experiments, **changes)
+
+    def compare_settings(self, experiments, **options):
+        """Compare recorded snapshots; reuse returned source IDs to keep a comparison fixed."""
+        from .configuration_comparison import compare
+        from .store import ReadSnapshot
+        if self.scope['experiment'] and any(e!=self.scope['experiment'] for e in experiments):
+            raise InputError('Use an unscoped Workspace to compare runs')
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Settings comparison requires a full workspace database')
+            return compare(ReadSnapshot(self.data.path,source.c),experiments=experiments,**options)
+
+    def experiment_details(self, *, section='settings', environment=None, q='', limit=20, offset=0):
+        """Page recorded settings, trainer streams or run history for this experiment."""
+        from .experiment_details import details
+        from .store import ReadSnapshot
+        with self.data.snapshot() as source:
+            if source.frozen:raise InputError('Run details require a full workspace database')
+            return details(ReadSnapshot(self.data.path,source.c),experiment=self.scope['experiment'],
+                environment=environment,section=section,q=q,limit=limit,offset=offset)
 
     def annotate_history(self,*,kind,title,detail,step,clock,basis,environment=None,investigation_id=None):
         """Append a researcher event on its explicit native clock."""
@@ -346,6 +483,49 @@ Each call sees fresh committed data; joins within one call share a read snapshot
             if any(r['source'] not in ids or r['target'] not in ids for r in e):raise InputError('Graph contains dangling links')
             return GraphResult(graph_id,header.rows[0],n,e,saved.captured_at)
 
+    def extract_work_contents(self, graph_id, unit_id, directory, *, candidate_calls=0,
+                              decision_calls=0, input_bytes=0, **options):
+        """Inspect one saved semantic unit with resumable local/API generation.
+
+        Saves experimental contents/qualifications after every stage and scope
+        decision. The existing graph is unchanged; its unit inspector can read
+        these records without another model call.
+        Budgets are lifetime totals for the directory; no export is required.
+        relations=True adds paged local relationship selection without another
+        generative proposal call. Existing contents and attributes are reused.
+        """
+        from rilldex.scopes import extract
+        from .work_mentions import packet
+        from . import work_content_results
+        from .store import Store
+        with self.data.snapshot() as snapshot:
+            if snapshot.frozen:
+                raise InputError('Extract into the original workspace; portable snapshots are read-only')
+        captured = self.graph(graph_id)
+        graph = dict(captured.header['header'], nodes=captured.nodes, edges=captured.edges)
+        prepared=packet(graph,[unit_id]);store=Store(self.data.path)
+        observer=options.pop('on_progress',None);saved={}
+        if observer is not None and not callable(observer):raise InputError('on_progress must be callable')
+        def progress(result):
+            saved.update(work_content_results.save(store,graph,prepared,result,syntax=options.get('syntax')))
+            if observer:observer(result)
+        result=extract(prepared,unit_id,directory,candidate_calls=candidate_calls,
+                       decision_calls=decision_calls,input_bytes=input_bytes,on_progress=progress,**options)
+        return dict(result,saved=saved)
+
+    def work_contents(self, graph_id, unit_id=None):
+        """Read saved extraction progress and attachments without calling models."""
+        from .work_content_results import for_graph
+        from .store import ReadSnapshot
+        captured=self.graph(graph_id)
+        if unit_id is not None and not any(n['id']==unit_id and n['kind']=='unit' for n in captured.nodes):
+            raise InputError('Unknown unit in this graph')
+        graph=dict(captured.header['header'],nodes=captured.nodes,edges=captured.edges)
+        with self.data.snapshot() as snapshot:
+            if snapshot.frozen:
+                raise InputError('Use content_extractions, work_contents, work_attachments and work_content_relations tables in a portable snapshot')
+            return for_graph(ReadSnapshot(self.data.path,snapshot.c),graph,unit_id)
+
     def work_structure(self, graph_id, *, cutoff_event_id=None, limit=100000):
         """Branch effort and decision windows from one exact scoped graph.
 
@@ -356,6 +536,12 @@ Each call sees fresh committed data; joins within one call share a read snapshot
         captured = self.graph(graph_id, limit=limit)
         graph = dict(captured.header['header'], nodes=captured.nodes, edges=captured.edges)
         return project(graph, cutoff_event_id)
+
+    def repeated_work(self, graph_id, *, limit=100000):
+        """Compare inputs and feedback for saved same-work pairs, without model calls."""
+        from .repeated_work import project
+        captured = self.graph(graph_id, limit=limit)
+        return project(dict(captured.header['header'], nodes=captured.nodes, edges=captured.edges))
 
     def map_foundation(self, graph_id, *, limit=100000):
         """Audit exact source anchors and necessary relationship boundaries.

@@ -1,5 +1,11 @@
 # Earlier source evidence
 
+The experimental content workflow now separates operations from stated purposes
+before extracting qualifications. Feature generation no longer proposes attachment
+scopes; Jev evaluates each content. Optional local syntax improved one retained
+ownership error, while invalid question-feature probes still failed. [Usage and
+current development results](SCOPE_MEMBERSHIP.md).
+
 Graph transitions and sequence links now respect sessions and native parallel
 dispatches. Relationship queries retain matches before an order gap; unresolved
 windows are excluded and inspectable in monitor evidence. Existing graph snapshots
@@ -494,3 +500,7 @@ motivates probability-gap tails and replayed probability/ratio exclusion rules.
 Rilldex now records these diagnostics from supplied token probabilities, with counts
 and rule disagreement. Controlled, randomized and storage tests validate the
 calculation, not optimizer superiority or real-training failure prediction.
+
+## Qualification scope
+
+Per-content qualification decisions distinguish proposed-work membership from direct argument ownership. Automatic Luna proposals exposed omitted content and role ambiguity; Jev’s initial scope selection matched 17/20 authored expectations. A direct-ownership contrast corrected two retained errors, preserved a passing control and retained one failure. The resumable extractor remains experimental; this is not independent whole-map accuracy. [Usage, cost and replay](SCOPE_MEMBERSHIP.md).

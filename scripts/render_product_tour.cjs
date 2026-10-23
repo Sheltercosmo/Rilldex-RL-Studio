@@ -7,13 +7,14 @@ const {model}=require('../tracker/web/training-execution.js');
 const data=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
 assert.equal(data.synthetic,true);
 const out=path.resolve(__dirname,'../docs/assets/demo');
+const brand=fs.readFileSync(path.resolve(__dirname,'../tracker/web/rilldex-logo.svg'),'utf8').replace(/<svg[^>]*>/,'<svg x="44" y="30" width="132" height="31" viewBox="0 0 340 80">');
 const ink='#172339',muted='#65748a',blue='#355cdb',teal='#008d7b',orange='#ce653b',line='#e3e8f1';
 const colors=[blue,teal,orange],esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 const text=(x,y,s,size=19,color=ink,weight=400,extra='')=>`<text x="${x}" y="${y}" font-size="${size}" fill="${color}" font-weight="${weight}" ${extra}>${esc(s)}</text>`;
 const rect=(x,y,w,h,fill='#fff',stroke='none',r=16,extra='')=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}" stroke="${stroke}" ${extra}/>`;
 const rule=(x,y,x2,y2,color=line,width=1,extra='')=>`<path d="M${x} ${y}L${x2} ${y2}" fill="none" stroke="${color}" stroke-width="${width}" ${extra}/>`;
 function frame(title,subtitle,section,h){
- return `<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="${h}" viewBox="0 0 1440 ${h}" role="img" aria-labelledby="title desc"><title id="title">${esc(title)}</title><desc id="desc">${esc(subtitle)} Synthetic product demonstration, not measured training results.</desc><defs><pattern id="pending" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 8L8 0" stroke="#b1c2f1" stroke-width="2"/></pattern></defs>${rect(0,0,1440,h,'#f6f8fc','none',24)}<g font-family="Segoe UI,Arial,sans-serif">${rect(44,32,32,32,'#19212f','none',9)}<path d="M54 56V41h6c5 0 7 2 7 5s-2 5-7 5h-6" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="m60 51 7 5" stroke="#75e2ca" stroke-width="2.5" stroke-linecap="round"/>${text(88,56,'Rilldex',23,ink,700)}${text(193,55,'/  '+section,15,muted)}${text(1396,55,'SIMULATED DEMO',14,muted,600,'text-anchor="end" letter-spacing="1.4"')}${text(44,116,title,38,ink,650)}${text(46,153,subtitle,20,muted)}`;
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="${h}" viewBox="0 0 1440 ${h}" role="img" aria-labelledby="title desc"><title id="title">${esc(title)}</title><desc id="desc">${esc(subtitle)} Synthetic product demonstration, not measured training results.</desc><defs><pattern id="pending" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 8L8 0" stroke="#b1c2f1" stroke-width="2"/></pattern></defs>${rect(0,0,1440,h,'#f6f8fc','none',24)}<g font-family="Segoe UI,Arial,sans-serif">${brand}${text(193,55,'/  '+section,15,muted)}${text(1396,55,'SIMULATED DEMO',14,muted,600,'text-anchor="end" letter-spacing="1.4"')}${text(44,116,title,38,ink,650)}${text(46,153,subtitle,20,muted)}`;
 }
 function finish(s,name,h,note){
  s+=text(44,h-27,note,15,muted)+text(1396,h-27,'RILLDEX RL STUDIO',12,muted,600,'text-anchor="end" letter-spacing="1.5"')+'</g></svg>';
@@ -120,4 +121,58 @@ s+=rule(1090,654,1372,654)+text(1090,687,'Linked retry',20,ink,650)+text(1090,72
 s+=text(1090,751,(retry.timing.end-retry.timing.start).toFixed(1)+' s · same source rollout',16,muted);
 s+=rule(1090,781,1372,781)+text(1090,816,'Open source rollout →',20,blue,650)+text(1090,851,'Request completion does not',16,muted)+text(1090,876,'establish task success.',16,muted);
 finish(s,'execution-timeline.svg',992,'Seeded simulation · hatched spans are unfinished · recorded retry relationship · no inferred end times');
-console.log(JSON.stringify({assets:['run-comparison.svg','execution-timeline.svg'],logs:data.runs.map(r=>r.snapshot.records),operations:execution.counts.executions}));
+// The overview retains the detailed chart-panel treatment used in the app.
+const selected=data.runs[1],selectedSeries=selected.snapshot.series;
+s=frame('Follow one run in detail','Inspect native metrics, measurement coverage and the rollouts behind each update.','OVERVIEW',990);
+s+=rect(44,184,1352,70,'#fff',line,14)+text(68,214,'TRAINING RUN',12,muted,650,'letter-spacing="1.2"')+text(68,240,selected.label+'  ⌄',20,ink,650);
+['Summary','Training','Behavior','Execution','Training data'].forEach((label,i)=>{const xx=465+i*169;s+=text(xx,228,label,18,i===0?blue:muted,i===0?650:400);if(i===0)s+=rule(xx,252,xx+93,252,blue,3);});
+s+=text(46,302,'Training signals',24,ink,650)+text(1392,302,'Open training comparison →',18,blue,600,'text-anchor="end"');
+s+=text(46,337,'Chart options  ·  50-step EMA',17,muted)+text(434,337,'601 recorded logs',17,muted)+text(1392,337,'Faint: raw  ·  Bold: EMA',17,muted,400,'text-anchor="end"');
+const reward=selectedSeries.find(q=>q.group==='reward'),gap=selectedSeries.find(q=>q.group==='mismatch');
+[[reward,'Outcome','Task success','fraction'],[gap,'Policy mismatch','Mean absolute sampled probability gap','probability difference']].forEach(([series,label,subtitle,unit],i)=>{
+ const xx=44+i*686,latest=series.points.at(-1),values=series.points.map(p=>p.value),lo=Math.min(...values),hi=Math.max(...values);
+ s+=rect(xx,366,666,520,'#fff',line,16)+text(xx+26,406,label,24,ink,650)+text(xx+638,405,'Options',16,muted,400,'text-anchor="end"')+text(xx+26,441,subtitle,17,muted);
+ s+=rule(xx+27,465,xx+27,552,blue,4)+text(xx+43,495,latest.value.toFixed(4),32,ink,650);
+ s+=text(xx+43,524,selected.label+' · '+unit,16,muted)+text(xx+43,548,series.points.length+'/'+series.points.length+' measured · latest at '+latest.step,15,muted);
+ const px=v=>xx+83+v/1800*545,py=v=>742-(v-lo)/(hi-lo||1)*158;
+ [0,1,2].forEach(k=>{const value=lo+(hi-lo)*k/2,yy=py(value);s+=rule(xx+83,yy,xx+628,yy,'#e6eaf1')+text(xx+69,yy+5,value.toFixed(i?3:2),14,muted,400,'text-anchor="end"');});
+ [0,450,900,1350,1800].forEach(step=>s+=rule(px(step),584,px(step),742,'#e6eaf1')+text(px(step),769,step.toLocaleString('en-US'),14,muted,400,'text-anchor="middle"'));
+ s+=`<path d="${curve(series.points,px,py)}" fill="none" stroke="${blue}" stroke-width="1.3" stroke-opacity=".17"/><path d="${curve(smoothPoints(series.points,50),px,py)}" fill="none" stroke="${blue}" stroke-width="3"/>`;
+ s+=rule(xx+26,792,xx+640,792)+text(xx+27,824,'Inspect updates',18,blue,650)+text(xx+244,824,'Compare linked rollouts',18,blue,600)+text(xx+27,864,'▸ Definition & sources',16,muted);
+});
+s+=text(46,929,'Behavior maps →',19,blue,600)+text(420,929,'Saved comparisons →',19,blue,600)+text(890,929,'Execution timeline →',19,blue,600);
+finish(s,'training-overview.svg',990,'Authored training simulation · focused product panels · native populations and metric definitions retained');
+
+if(process.argv[3]){
+ const authored=JSON.parse(fs.readFileSync(process.argv[3],'utf8'));assert.equal(authored.synthetic,true);
+ const d=authored.snapshot,f=d.approach_followup,statuses=['reported_again','no_reported_error','followup_unknown'];
+ const fills=[orange,teal,'#a5afc1'];
+ s=frame('Compare attempts and their follow-up','Inspect how recorded approaches and later responses differ across two saved windows.','BEHAVIOR',952);
+ s+=rect(44,184,1352,60,'#fff',line,14)+text(68,221,'Procedure changes',20,ink,650)+text(371,221,'Same task & configuration',18,muted)+text(828,221,'Equal rollout weight',18,muted)+text(1370,221,'Save latest comparison',18,blue,650,'text-anchor="end"');
+ s+=rect(44,266,1002,555,'#fff',line,18)+text(70,305,'What followed an earlier error?',24,ink,650);
+ [['Error reported again',orange],['No error reported',teal],['Unresolved',fills[2]]].forEach(([label,color],i)=>{const xx=72+i*290;s+=rect(xx,329,12,12,color,'none',3)+text(xx+22,341,label,17,muted);});
+ s+=text(366,390,'Earlier · steps 0–2',18,ink,600)+text(698,390,'Later · steps 3–5',18,ink,600);
+ f.earlier.rows.forEach((row,i)=>{
+  const yy=436+i*85;const short=['Same procedure','Changed settings / inputs','Different procedure','Procedure unknown'][i];
+  s+=text(70,yy+9,short,18,ink,600);
+  [f.earlier.rows[i],f.later.rows[i]].forEach((r,j)=>{
+   const xx=366+j*332,w=286;let offset=0;
+   if(!r.total)s+=rect(xx,yy-14,w,27,'#f1f4f8','none',4)+text(xx,yy+36,'No eligible pairs',15,muted);
+   else{
+    for(let k=0;k<statuses.length;k++){const fraction=r.shares[statuses[k]];if(fraction)s+=rect(xx+offset,yy-14,w*fraction,27,fills[k],'none',0);offset+=w*(fraction||0);}
+    s+=text(xx,yy+36,`${r.total} eligible ${r.total===1?'pair':'pairs'} · ${r.eligible_rollouts} rollout`,15,muted);
+   }
+  });
+ });
+ s+=text(70,800,'Within each approach · unresolved follow-up remains in the denominator',16,muted);
+ s+=rect(1066,266,330,555,'#fff',line,18)+text(1090,305,'MEASUREMENT CONTEXT',13,muted,650,'letter-spacing="1.2"');
+ s+=text(1090,359,d.observed_rollouts+' / '+d.population,35,ink,650)+text(1090,390,'Rollouts with saved observations',16,muted);
+ s+=rule(1090,415,1372,415)+text(1090,453,'7 → 5',31,ink,650)+text(1090,485,'Pairs following an earlier error',16,muted);
+ s+=text(1090,531,'2 later pairs excluded',20,ink,600)+text(1090,559,'No earlier error was reported.',16,muted);
+ s+=rule(1090,589,1372,589)+text(1090,625,'Inspect matching pairs →',19,blue,650)+text(1090,657,'Open the earlier action, change',16,muted)+text(1090,682,'and subsequent response.',16,muted);
+ s+=text(1090,733,'No error reported does not',16,muted)+text(1090,758,'establish successful recovery.',16,muted);
+ s+=text(68,863,'Save latest comparison',20,ink,650)+text(414,863,'Capture latest evidence',20,ink,650)+text(866,863,'Keep both for review',20,ink,650);
+ s+=text(68,892,'Fixed membership and observations',16,muted)+text(414,892,'Refresh the same windows explicitly',16,muted)+text(866,892,'Return to the exact supporting pairs',16,muted);
+ finish(s,'behavior-comparison.svg',952,'Authored behavior examples · aggregated by the product pipeline · no model calls or measured accuracy claim');
+}
+console.log(JSON.stringify({logs:data.runs.map(r=>r.snapshot.records),operations:execution.counts.executions,behavior:!!process.argv[3]}));

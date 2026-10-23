@@ -12,7 +12,8 @@ LIMITS=('This overview groups dispatched operations using saved immediate-target
         'exploration, exploitation, causal response, progress or successful completion. '
         'Positions are source order within one actor and trajectory, not elapsed time. '
         'One operation counts once even if it relates to several requests, plans or checks.')
-OPEN_STATUSES={'unresolved','multiple_distinct_targets','needs_target_candidate_retrieval'}
+OPEN_STATUSES={'unresolved','multiple_distinct_targets','needs_target_candidate_retrieval',
+               'evidence_too_large','pending','inspecting'}
 
 
 def build(run,document):

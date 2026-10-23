@@ -33,8 +33,8 @@ DEFINITIONS = {
  'target_revisit_after_error_count': ('Target revisits after error reports', 'Unique actions revisiting a selected earlier target whose response already reported an executor error. Temporal association, not causal retry or recovery.'),
  'plan_stage_change_count': ('Observed Plan-stage changes', 'Changes between selected stage correspondences within one Plan in recorded source order. Unassigned gaps remain recorded; ambiguous batch order is excluded. Not active-goal changes or progress.'),
  'plan_stage_reentry_count': ('Observed Plan-stage re-entries', 'Stage changes returning to a stage observed earlier in the same Plan. Not a mental return, failure or wasted work.'),
- 'plan_stage_material_coverage': ('Plan product-response inspection coverage', 'Inspected stage-product response pairs / eligible source-bound responses to stage attempts and checks. Preparation is excluded. Coverage is not accuracy.'),
- 'plan_stages_with_contents_fraction': ('Plan stages with recorded contents', 'Distinct Plan stages with a contents selection / extracted Plan stages. Returned contents may contain unsupported claims or be stored artifacts. Not completion or verification.'),
+ 'plan_stage_material_coverage': ('Plan product-response inspection coverage', 'Distinct stage/dispatch/response pairs with at least one saved inspection / eligible pairs for attempts and checks. Annotation splits count once. Preparation is excluded; conflicting readings are inspected, not resolved. Coverage is not accuracy.'),
+ 'plan_stages_with_contents_fraction': ('Plan stages with recorded contents', 'Distinct Plan stages with a contents reading uncontradicted by other inspections of that response / extracted Plan stages. Returned contents may contain unsupported claims or be stored artifacts. Not completion or verification.'),
  'operation_outcome_coverage': ('Operation-response outcome coverage', 'Inspected source-bound response pairs / eligible visible response pairs. Includes unresolved outcomes; not accuracy.'),
  'operation_failed_fraction': ('Failed operation fraction', 'Calls with a failed outcome / calls with completed, failed or partial outcomes and complete consistent response sets. Pending and unknown calls are excluded. Not task failure rate.'),
  'operation_unknown_fraction': ('Unknown operation outcome fraction', 'Calls without a complete consistent outcome, including uninspected calls / calls with an eligible source-bound response. Missing response calls remain outside this denominator.'),
@@ -153,15 +153,17 @@ def semantic_record(run,bundle):
     m['plan_stage_attempt_fraction']=measurement(numerator=len(attempts),denominator=len(stages),evidence=[p+':'+s for p,s in sorted(attempts)])
     if 'plan_relation_review' in d:
         from .plan_execution import build as project_plans
-        plans=project_plans(run,d)['plans']
+        projection=project_plans(run,d);plans=projection['plans']
+        result['plan_projection_schema']=projection['schema']
         if plans:
             transitions=[t for p in plans for t in p['stage_transitions'] if t['order_status']=='source_order']
             for name,selected in [('plan_stage_change_count',transitions),('plan_stage_reentry_count',[t for t in transitions if t['reentry']])]:
                 m[name]=measurement(len(selected),evidence=[t['to_action_event_id'] for t in selected])
         if d.get('plan_stage_material'):
-            from .plan_stage_material import pairs
-            rows=d['plan_stage_material']['observations'];observed={(r['plan_unit_id'],r['stage_id']) for r in rows if r['form']=='contents'}&stages
-            m['plan_stage_material_coverage']=measurement(numerator=len(rows),denominator=len(pairs(run,d)),evidence=[r['response_event_id'] for r in rows])
+            eligible=[(p['plan_unit_id'],s['stage_id'],r) for p in plans for s in p['stages'] for r in s['response_evidence'] if set(r['roles'])&{'attempts','checks'}]
+            inspected=[r for _,_,r in eligible if r['material_indices']]
+            observed={(p,s) for p,s,r in eligible if r['material_form']=='contents'}&stages
+            m['plan_stage_material_coverage']=measurement(numerator=len(inspected),denominator=len(eligible),evidence=[r['response_event_id'] for r in inspected])
             m['plan_stages_with_contents_fraction']=measurement(numerator=len(observed),denominator=len(stages),evidence=[p+':'+s for p,s in sorted(observed)])
     reports=d.get('execution_reports')
     if reports:
@@ -280,6 +282,44 @@ def apply_agent_activity_measures(record, units):
             numerator=len(evidence),denominator=len(selected),evidence=evidence)
 
 
+def refresh_plan_measurements(store,connection):
+    """Append corrected Plan counts from the same saved observation, offline."""
+    from .plan_execution import VERSION as PLAN_VERSION
+    from .semantic_catalog import load
+    from .measurement_lineage import semantic_input_hash
+    keys=('plan_stage_attempt_fraction','plan_stage_change_count','plan_stage_reentry_count',
+          'plan_stage_material_coverage','plan_stages_with_contents_fraction')
+    rows=connection.execute('''SELECT m.document,r.document source FROM rollout_measurements m
+        JOIN runs r ON r.id=m.run_id
+        WHERE json_extract(m.document,'$.schema')=?
+        AND json_extract(m.document,'$.observation_kind')='semantic'
+        AND coalesce(json_extract(m.document,'$.plan_projection_schema'),'')!=?
+        AND (json_extract(m.document,'$.metrics.plan_stage_change_count.value') IS NOT NULL
+          OR json_extract(m.document,'$.metrics.plan_stage_material_coverage.value') IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM rollout_measurements newer
+            WHERE newer.run_id=m.run_id AND newer.observer=m.observer
+            AND (newer.created_at>m.created_at OR (newer.created_at=m.created_at AND newer.id>m.id)))''',
+        (VERSION,PLAN_VERSION)).fetchall()
+    for row in rows:
+        record=json.loads(row['document']);run=json.loads(row['source'])
+        if digest(run)!=record['source_hash']:continue
+        try:
+            bundle=load(run,record['observer'],store)
+            if not bundle.get('available') or semantic_input_hash(bundle['document'])!=record['annotation_hash']:
+                raise InputError('Saved observation differs')
+            fresh=semantic_record(run,bundle)
+            if fresh.get('plan_projection_schema')!=PLAN_VERSION:raise InputError('Plan review missing')
+        except (InputError,OSError,KeyError,ValueError):
+            for key in keys:
+                record['metrics'][key]=measurement(reason='Reopen the original saved Plan observation to refresh these counts. Its source-bound evidence is unavailable or invalid under the current counting rules.')
+            record['plan_projection_status']='needs_saved_evidence'
+        else:
+            for key in keys:record['metrics'][key]=fresh['metrics'][key]
+            record.pop('plan_projection_status',None)
+        record['plan_projection_schema']=PLAN_VERSION
+        save(connection,record)
+
+
 def ensure_current(store):
     """Append compatible metric extensions before any dashboard reads them.
 
@@ -355,6 +395,7 @@ def ensure_current(store):
                 # Migrating an older observation must not make it newer than a
                 # subsequently measured result for this observer.
                 save(c,record,created_at=saved['created_at'])
+        refresh_plan_measurements(store,c)
         return c.total_changes-before
 
 
@@ -365,10 +406,21 @@ def report(store):
     with store.connect() as c:
         raw={r['id']:json.loads(r['document']) for r in c.execute('SELECT id,document FROM runs') if r['id'] in by_id}
         stored=c.execute('SELECT * FROM rollout_measurements ORDER BY created_at,id').fetchall()
+    # A deterministic projection refresh is the same annotation population,
+    # not a second rollout or a competing annotation. Historical receipts stay
+    # in storage, while current curves use its latest corrected projection.
+    from .plan_execution import VERSION as PLAN_VERSION
+    plan_current={}
+    for saved in stored:
+        r=json.loads(saved['document'])
+        if r.get('plan_projection_schema')==PLAN_VERSION:
+            plan_current[(r['run_id'],r['observer'],r['source_hash'],r.get('annotation_hash'))]=saved['id']
     for saved in stored:
         if saved['run_id'] not in by_id:continue
         record=json.loads(saved['document']);summary=by_id[saved['run_id']]
         if record['schema']!=VERSION or record['source_hash']!=digest(raw[record['run_id']]):continue
+        replacement=plan_current.get((record['run_id'],record['observer'],record['source_hash'],record.get('annotation_hash')))
+        if replacement and replacement!=saved['id']:continue
         # Newly available optional observers do not retroactively measure old
         # observations. Extend the read projection with explicit missingness.
         for name in TOOL_CONTRACT_DEFINITIONS:

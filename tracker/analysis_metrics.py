@@ -6,6 +6,7 @@ state-sensitive rates retain all opportunities and exclude unresolved ones.
 from .schema import InputError, digest
 from . import work_episodes, work_state, investigation_plans, graph_store, adaptation_patterns, history_evidence, feedback_opportunities
 from . import work_structure_metrics
+from . import repeated_work
 from . import work_return_references, retry_outcomes, work_visits, declared_plans, work_order, work_consistency, feedback_timing
 
 VERSION='analysis-measures/1'
@@ -25,6 +26,7 @@ DEFINITIONS={
     'check_input_binding':('work_state','check_binding','Checks bound to recorded input state','opportunity_ratio'),
     'resume_after_preparation':('adaptation_patterns','resume_after_preparation','Same procedure after a separate correction attempt','count'),
     'procedure_change_fraction':('adaptation_patterns','procedure_change','Procedure changes among compared recurrences','opportunity_ratio'),
+    'error_report_repeat_fraction':('adaptation_patterns','error_report_repeat','Error reports on the next same-work attempt','opportunity_ratio'),
     'feedback_reference':('feedback_opportunities','reference','Explicit feedback reference within three text events','opportunity_ratio'),
     'feedback_assessment_after_actions':('feedback_timing','after_actions','First saved assessment after other actions','opportunity_ratio'),
 }
@@ -44,6 +46,7 @@ DETAILS={
     'check_input_binding':'Checks bound to a recorded input snapshot / recognized or captured checks. Binding alone does not establish stable inputs or a passing result.',
     'resume_after_preparation':'Recorded recurrences using the same dispatched procedure after a separately linked correction/preparation attempt. This does not establish a necessary prerequisite, successful correction or unchanged effective inputs.',
     'procedure_change_fraction':'Reconfigured or alternative procedures / recurrences with a saved exact-pair procedure comparison or named source review. Unknown comparisons are excluded and reported. Review provenance and observer versions remain separate. Covers recorded same-work recurrences, not all actions or all changes of strategy.',
+    'error_report_repeat_fraction':'Next same-work attempts reporting an error / pairs with an earlier error and decidable later executor reports. Unknown earlier/later reports remain visible as possible opportunities. Earlier inspected responses without an error are excluded. No reported error is not verified success; errors may concern handled components.',
     'feedback_reference':'Visible tool responses explicitly described or interpreted in the next three agent text events / decidable visible tool responses. Unknown windows, segmentation, inspection or candidate coverage are retained. Does not measure silent uptake, correctness or recovery.',
     'feedback_assessment_after_actions':'Responses whose earliest eligible saved assessment follows one or more recorded same-recipient dispatches / responses with a supported assessment and comparable order. Missing links stay unknown and outside the denominator. This is conditional on saved annotations; it does not locate the first actual assessment or establish ignored feedback, execution latency or causal use.',
 }
@@ -57,6 +60,9 @@ def catalog(*, legacy=False):
     for name, (basis,label,description) in work_structure_metrics.MEASURES.items():
         result[name] = dict(operation='work_structure',key=name,label=label,aggregation='count',unit='value',
             version=VERSION+'|'+investigation_plans.OPS['work_structure'],description=description+' '+work_structure_metrics.LIMIT)
+    for name, (key,label,description) in repeated_work.MEASURES.items():
+        result[name] = dict(operation='repeated_work',key=key,label=label,aggregation='opportunity_ratio',unit='fraction',
+            version=VERSION+'|'+repeated_work.RECIPE,description=description+' '+repeated_work.LIMIT)
     if not legacy:
         # Keep the earlier work_episodes definitions readable for frozen
         # receipts. New counters share the exact eligibility used by the
@@ -188,7 +194,7 @@ def measure(output,spec):
     if spec['operation'] in {'work_visits','work_return_references'} and output.get('scope_consistency')!=spec.get('scope_consistency'):
         raise InputError('Work-consistency policy differs from the saved measure definition')
     readers = {'declared_plans': declared_plans.measure, 'retry_outcomes': retry_outcomes.measure,
-               'work_structure': work_structure_metrics.measure}
+               'work_structure': work_structure_metrics.measure, 'repeated_work': repeated_work.measure}
     if spec['operation'] in readers:
         return readers[spec['operation']](output,key)
     if spec['operation']=='work_return_references':
@@ -271,6 +277,10 @@ def measure(output,spec):
         for row in output['records']:
             if key=='procedure_change':
                 taken=None if row['procedure']=='unresolved' else row['procedure']!='same_procedure'
+            elif key=='error_report_repeat':
+                category=row['error_followup']['category']
+                if category=='no_prior_error':continue
+                taken=True if category=='reported_again' else False if category=='no_reported_error' else None
             elif key=='resume_after_preparation':
                 taken=row['procedure']=='same_procedure' and bool(row['preparation_edge_ids'])
             elif key in {'same_procedure','reconfigured_procedure','alternative_procedure'}:
@@ -278,8 +288,8 @@ def measure(output,spec):
             else:raise InputError('Unknown procedure measure')
             if spec['aggregation']=='count' and not taken:continue
             e=row['episode']
-            cases.append({'id':row['id'],'label':row['target'],'taken':taken,'status':row['procedure'],
-                          'node_ids':[c['unit_id'] for c in e['cards']], 'edge_ids':e['edge_ids'],
+            cases.append({'id':row['id'],'label':row['target'],'taken':taken,'status':row['error_followup']['category'] if key=='error_report_repeat' else row['procedure'],
+                          'node_ids':list(dict.fromkeys([c['unit_id'] for c in e['cards']]+[r['node_id'] for side in ('previous','current') for r in row.get('response_context',{}).get(side,{}).get('records',[])])), 'edge_ids':e['edge_ids'],
                           'episode':e,'adaptation':{k:v for k,v in row.items() if k!='episode'}})
         if spec['aggregation']=='count':
             return {'value':len(cases) if output['observed'] else None,'numerator':None,'denominator':None,
@@ -288,7 +298,7 @@ def measure(output,spec):
         n=sum(c['taken'] is True for c in cases);d=sum(c['taken'] is not None for c in cases)
         return {'value':n/d if d else None,'numerator':n,'denominator':d,'opportunities':len(cases),
                 'unknown':len(cases)-d,'cases':cases,'coverage':output['coverage'],
-                'reason':None if d else 'No established exact-pair procedure comparisons.'}
+                'reason':None if d else 'No earlier-error pairs with decidable follow-up reports.' if key=='error_report_repeat' else 'No established exact-pair procedure comparisons.'}
     if spec['operation']=='work_episodes':
         observed=bool(output['counts']['identity_reviewed'] or output['episodes'])
         for e in output['episodes']:

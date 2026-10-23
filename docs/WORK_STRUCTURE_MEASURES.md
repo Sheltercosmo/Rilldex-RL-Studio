@@ -1,5 +1,58 @@
 # From work maps to rollout measures
 
+## Compare repeated attempts
+
+Open **Overview → Behavior → Distributions → Revisit patterns** to compare
+changed inputs, changed feedback and repeated records across rollout windows.
+Select a category, then a case, to open both attempts and their recorded input
+differences. **Compare attempts** reopens the evidence; the back link restores
+the chart selection. Links retain the original graph version.
+
+Distribution shares include unresolved pairs. Unlinked actions are outside
+this population; missing observations and observed rollouts with no pairs are
+shown separately. [Validation](../research/revisit-distributions-2026-10-21/README.md).
+
+**Behavior map → Work path → Review repeated work** uses the same comparisons. Select a
+repeated target to see native input differences, ordered feedback and linked
+assessments. **Compare pair** opens the return context and its source evidence.
+Feedback fragments are grouped by their source record, without duplicating
+returned results. [Validation](../research/work-review-native-2026-10-21/README.md).
+
+For inspected **Approach changes**, case cards show the agent's selected stated
+reason alongside earlier and later responses. Search these passages, expand the
+recorded dispatches, or use **Inspect stated reason** to open its exact source.
+Work path shows the same reason. A later response is evidence to inspect, not an
+automatic recovery verdict; exports retain its source and comparison version.
+
+**Errors on repeated work** tracks errors reported on the next same-work attempt
+after an earlier error. Case cards and Work path show both inspections and link
+to the original responses. Unknown inspections remain visible; inspected earlier
+responses without an error are excluded. No reported error is not verified
+success. Continuous workers with work links and execution inspection add this
+monitor automatically; saved graphs without the report observations remain unknown.
+
+In **Review repeated work**, select **Errors on both attempts** to find affected
+targets. **Work timeline → Procedure changes** shows approach and response status
+together; select a mark to open its exact pair. Counts follow the visible window.
+
+In **Monitors**, add **Changed inputs on work revisits** or **Repeated inputs and
+feedback**, and select a saved work-identity observer. Continuous model observation
+adds both automatically. Open a chart point, then **Explain value**, to inspect
+input differences, both responses and intervening operations.
+
+```python
+from rilldex import Workspace
+result = Workspace("study.sqlite").repeated_work(graph_id)
+```
+
+Native tool arguments are compared when available; text exports use the full
+recorded action text. Feedback is compared in source order. Unknown comparisons
+remain outside the rate and retain their evidence. Matching records do not prove
+a failed loop: files or prerequisites may have changed between attempts. No model
+calls are made. [Validation](../research/repeated-work-2026-10-21/README.md).
+
+## Work structure
+
 Open **Behavior map → Plans & attempts**. Expand the available work summary to
 compare branch effort and depth. **Track across rollouts** opens a prefilled
 monitor with the same evidence observer and experiment (when recorded). Review
@@ -48,8 +101,18 @@ is not a generation-time claim. Source revisions replace a sample's current
 population contribution, while previous measurement receipts and graphs remain
 available. Replaying unchanged evidence reuses the cached projection.
 
-Definition: `work-structure-measures/1`, projection dependency
-`work-hierarchy/12`. The registered `work_structure` operation and seven count
+Annotations bound to one recorded action count once, including across Plan
+steps and work branches. Their individual cards and relationship witnesses stay
+inspectable. Identical text from separate calls is counted separately; without
+an exact source binding, action identities remain separate.
+
+An attempt-path card groups activity units from the same captured call. Stage
+response counts also ignore annotation splits; conflicting material readings
+remain visible. Plan measures exclude cross-session bindings and unknown order.
+Saved counts refresh offline from the same evidence, retaining earlier receipts.
+
+Definition: `work-structure-measures/2`, projection dependency
+`work-hierarchy/13`. The registered `work_structure` operation and seven count
 measures share the projection used by the map. They do not estimate exploration
 quality, exploitation, causal efficiency, ignored plans or verified success.
 Independent semantic accuracy and RL training benefit remain unestablished.
@@ -105,6 +168,11 @@ Their `decision_ids`, `binding_ids`, action memberships and response links make
 custom investigation possible without exporting the database or re-tagging.
 This is an inspectable deterministic join over reviewed evidence, not a newly
 validated semantic classifier or a universal exploration/exploitation measure.
+
+In **Overview → Behavior → Distributions → Approach changes**, **After an error** compares
+the response following each approach in the selected windows. Select a segment
+to inspect or export its exact attempt pairs. Unresolved follow-up stays visible;
+an inspected response with no reported error does not establish task success.
 
 The design applies the [Graphectory paper's](https://arxiv.org/html/2512.02393v3)
 separation of contextual phases and action outcomes without assuming that tool

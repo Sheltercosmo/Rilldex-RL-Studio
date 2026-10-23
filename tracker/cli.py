@@ -26,6 +26,18 @@ def main(argv=None, *, _metadata=None):
     parser.add_argument('--version', action='version', version=f'Rilldex {__version__}')
     parser.add_argument("--db", default=".tracker/tracker.sqlite")
     commands = parser.add_subparsers(dest="command", required=True)
+    record = commands.add_parser('record', help='Capture console logs, environment and hardware from any training command')
+    record.add_argument('--name', required=True)
+    record.add_argument('--project', default='default')
+    record.add_argument('--experiment', help='Attach to an existing experiment identity')
+    record.add_argument('--producer', help='Stable worker identity')
+    record.add_argument('--endpoint', help='Collector URL; uses a durable outbox')
+    record.add_argument('--offline', action='store_true', help='Only queue locally; transfer the outbox later')
+    record.add_argument('--encoding', default='utf-8', help='Child console encoding (default: utf-8)')
+    record.add_argument('--outbox', default='.rilldex/record-outbox.sqlite')
+    record.add_argument('--no-hardware', action='store_true')
+    record.add_argument('--interval', type=float, default=10)
+    record.add_argument('argv', nargs=argparse.REMAINDER)
     launch = commands.add_parser('launch', help='Run a reusable launch file; paths are relative to the file, not the terminal')
     launch.add_argument('path')
     launch_mode=launch.add_mutually_exclusive_group()
@@ -67,6 +79,10 @@ def main(argv=None, *, _metadata=None):
     workspace_commands.add_parser('snapshot', help='Create a new portable inspection archive; no inference').add_argument('path')
     workspace_commands.add_parser('inspect', help='Verify an archive and show its manifest without restoring').add_argument('path')
     workspace_commands.add_parser('restore', help='Restore into a new --db path; collection and inference stay paused').add_argument('path')
+    workspace_commands.add_parser('list', help='List recent local workspaces and their server status')
+    workspace_add=workspace_commands.add_parser('add', help='Add an existing workspace to the local picker')
+    workspace_add.add_argument('path')
+    workspace_add.add_argument('--name', help='Readable name in the workspace picker')
     continuations = commands.add_parser('continuation-studies', help='Import or inspect recorded prefix-continuation experiments')
     continuation_commands = continuations.add_subparsers(dest='continuation_command', required=True)
     continuation_commands.add_parser('import').add_argument('path')
@@ -217,6 +233,22 @@ def main(argv=None, *, _metadata=None):
     # Setup describes paths on a possibly different host; preserve its spelling.
     if args.command!='setup':args.db = str(Path(args.db).expanduser())
     try:
+        if args.command == 'record':
+            from rilldex.run import record_command
+            from .capture import Outbox
+            import platform
+            outbox=Outbox(args.outbox,endpoint=args.endpoint or 'http://127.0.0.1:8765',producer=args.producer or platform.node() or 'local') if args.endpoint or args.offline else None
+            if outbox and not args.offline: outbox.start()
+            try:
+                code=record_command(args.argv,name=args.name,project=args.project,experiment=args.experiment,
+                    producer=args.producer,workspace=args.db,target=outbox,hardware=not args.no_hardware,interval=args.interval,encoding=args.encoding)
+            finally:
+                if outbox:
+                    if not args.offline: outbox.drain()
+                    status=outbox.close()
+                    if status.get('pending') or status.get('blocked'): print('Rilldex: undelivered records retained in '+args.outbox,file=sys.stderr)
+            if code: parser.exit(code if code>0 else 1)
+            return
         if args.command == 'telemetry':
             from .telemetry_cli import run as run_telemetry
             print(json.dumps(run_telemetry(args),indent=2));return
@@ -271,6 +303,17 @@ def main(argv=None, *, _metadata=None):
             print(json.dumps(result, indent=2))
             if result.get('complete') is False:
                 parser.exit(1, 'Some packets need attention. Retrying preserves accepted receipts.\n')
+            return
+        if args.command == 'workspace' and args.workspace_command in {'list','add'}:
+            from .workspace_directory import Directory, database_path, validate_database
+            directory=Directory()
+            if args.workspace_command=='add':
+                path=database_path(args.path)
+                validate_database(path)
+                result=directory.remember(path,args.name)
+            else:
+                result={'workspaces':directory.list(None)}
+            print(json.dumps(result,indent=2,ensure_ascii=False))
             return
         if args.command == 'workspace' and args.workspace_command in {'restore','inspect'}:
             from . import workspace_snapshot

@@ -15,6 +15,7 @@ SCOPED_VERSION='action-target-correspondence/2'
 CHARACTERIZED_VERSION='action-target-correspondence/3'
 SCOPE_VERSION='action-target-correspondence/4'
 PAIRWISE_VERSION='action-target-correspondence/5'
+PAGED_VERSION='action-target-correspondence/6'
 EVIDENCE_LAYOUT='source-once/1'
 SCOPED_LAYOUT='target-meaning-and-shared-tools/1'
 LIMIT=32
@@ -202,7 +203,11 @@ def argument_delta(before,after):
         'meaning':'Exact source argument differences. List values are compared as whole ordered values. This is not a method, intent or outcome judgment.'}
 
 
-def build(run,extraction,choose,*,evidence_layout=EVIDENCE_LAYOUT,version=VERSION,decide=None):
+def build(run,extraction,choose,*,evidence_layout=EVIDENCE_LAYOUT,version=VERSION,decide=None,progress=None):
+    if version==PAGED_VERSION:
+        from .action_scope_pages import build as build_pages
+        if decide is None:raise InputError('Scope comparison requires the multi-question decision interface')
+        return build_pages(run,extraction,decide,progress=progress)
     if version==PAIRWISE_VERSION:
         from .action_scope_pairs import build as build_pairs
         if decide is None:raise InputError('Scope comparison requires the multi-question decision interface')
@@ -255,7 +260,7 @@ def build(run,extraction,choose,*,evidence_layout=EVIDENCE_LAYOUT,version=VERSIO
 
 
 def path_for(directory,extraction,version=VERSION):
-    if version not in {VERSION,SCOPED_VERSION,CHARACTERIZED_VERSION,SCOPE_VERSION,PAIRWISE_VERSION}:raise InputError('Unknown target correspondence version')
+    if version not in {VERSION,SCOPED_VERSION,CHARACTERIZED_VERSION,SCOPE_VERSION,PAIRWISE_VERSION,PAGED_VERSION}:raise InputError('Unknown target correspondence version')
     layout=SCOPED_LAYOUT if version!=VERSION else EVIDENCE_LAYOUT
     return Path(directory)/'action_targets'/extraction['run_id']/version.replace('/','-')/layout.replace('/','-')/f'{digest(extraction)}.json'
 
@@ -276,9 +281,9 @@ def audit(run,extraction,result,directory):
         'argmax_replayed':True,'semantic_accuracy':'not independently measured'}
 
 
-def execute(run,extraction,engine,*,version=VERSION):
+def execute(run,extraction,engine,*,version=VERSION,progress=None):
     audit_result(run,extraction,engine.directory)
-    result=build(run,extraction,engine.choose,decide=engine.decide,version=version)
+    result=build(run,extraction,engine.choose,decide=engine.decide,version=version,progress=progress)
     validation=audit(run,extraction,result,engine.directory)
     write(Path(engine.directory)/'action_target_snapshots'/f'{digest(result)}.json',result)
     write(path_for(engine.directory,extraction,version),result)

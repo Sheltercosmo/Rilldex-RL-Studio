@@ -1,0 +1,65 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const {spawn}=require('child_process'),fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
+const root=process.env.RILLDEX_UI_OUTPUT,py=process.env.RILLDEX_TEST_PYTHON;fs.mkdirSync(root,{recursive:true});
+const server=spawn(py,['-I','-u',path.join(__dirname,'experiment_management_fixture.py'),root],{cwd:require('os').tmpdir(),windowsHide:true,stdio:['pipe','pipe','pipe']});
+let output='';server.stdout.on('data',d=>output+=d);server.stderr.on('data',d=>output+=d);
+(async()=>{let browser,page;const errors=[];try{
+ const deadline=Date.now()+30000;while(!/Rilldex: (http:\/\/127\.0\.0\.1:\d+)/.test(output)){if(server.exitCode!==null||Date.now()>deadline)throw Error(output);await new Promise(r=>setTimeout(r,100));}
+ const base=output.match(/Rilldex: (http:\/\/127\.0\.0\.1:\d+)/)[1];browser=await chromium.launch({headless:true,channel:'msedge'});
+ page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(base);const list=page.locator('#experiment-browser'),search=list.getByRole('searchbox',{name:'Search experiments'});
+ const rowCount=async n=>page.waitForFunction(n=>document.querySelectorAll('#experiment-browser tbody tr').length===n,n);
+ const selected=async n=>page.waitForFunction(n=>document.querySelector('.experiment-bulk-actions strong')?.textContent.startsWith(n+' selected'),n);
+ const updated=async()=>{await page.waitForFunction(()=>document.querySelector('#experiment-browser>[role=status]')?.textContent==='40 runs updated.');};
+ const perform=async value=>{await list.getByRole('combobox',{name:'Selected run action'}).selectOption(value);await list.getByRole('button',{name:'Apply',exact:true}).click();};
+ const saveDialog=async()=>{const d=page.locator('dialog[open]');await d.locator('form button[type=submit]').click();await d.waitFor({state:'detached'});await updated();};
+ await rowCount(30);await list.getByRole('checkbox',{name:'Select this page',exact:true}).check();await selected(30);
+ await list.getByRole('button',{name:'Next',exact:true}).click();await rowCount(10);
+ assert.match(await list.locator('.experiment-bulk-actions strong').innerText(),/30 outside this page/);
+ await list.getByRole('checkbox',{name:'Select this page',exact:true}).check();await selected(40);
+ await search.fill('Seed 00');await rowCount(1);assert.match(await list.locator('.experiment-bulk-actions strong').innerText(),/39 outside/);
+ assert.equal(await list.getByRole('button',{name:'Compare curves',exact:true}).isDisabled(),true);
+ await perform('project');await page.getByRole('dialog').getByLabel('Project · leave empty to unassign',{exact:true}).fill('Review λ');await saveDialog();
+ let data=await(await page.request.get(base+'/api/experiments?project='+encodeURIComponent('Review λ')+'&limit=100')).json();assert.equal(data.total,40);
+ await page.reload();await rowCount(30);await selected(40);
+ await perform('tags');let d=page.getByRole('dialog');await d.getByLabel('Add tags · comma separated',{exact:true}).fill('reviewed');await d.getByLabel('Remove tags · comma separated',{exact:true}).fill('sweep');await saveDialog();
+ data=await(await page.request.get(base+'/api/experiments?limit=100')).json();assert.ok(data.rows.every(r=>r.tags.includes('reviewed')&&!r.tags.includes('sweep')&&r.tags.length===2));
+ await perform('archive');await rowCount(0);await selected(40);
+ await list.getByRole('combobox',{name:'Run filter',exact:true}).selectOption('archived');await rowCount(30);
+ await perform('restore');await rowCount(0);
+ await list.getByRole('combobox',{name:'Run filter',exact:true}).selectOption('active');await rowCount(30);
+ await perform('pin');await updated();await page.waitForFunction(()=>[...document.querySelectorAll('#experiment-browser tbody td:nth-child(2)>a')].every(a=>a.textContent.startsWith('★')));
+ await updated();await list.evaluate(n=>n.scrollIntoView({block:'start'}));await page.screenshot({path:path.join(root,'bulk-desktop.png')});
+ await page.setViewportSize({width:390,height:844});await list.evaluate(n=>n.scrollIntoView({block:'start'}));
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2),false);
+ const selectLayout=await list.locator('.experiment-page-selection').evaluate(n=>getComputedStyle(n).flexDirection);assert.equal(selectLayout,'row');
+ await page.screenshot({path:path.join(root,'bulk-mobile.png')});
+ await list.getByRole('button',{name:'Clear selection',exact:true}).click();await search.fill('Seed 00');await rowCount(1);
+ await list.getByRole('checkbox',{name:'Select sweep/seed-00',exact:true}).check();
+ assert.match(await list.locator('.experiment-comparison-hint').innerText(),/no trainer logs/);
+ assert.equal(await list.getByRole('button',{name:'Apply',exact:true}).isDisabled(),true);
+ await perform('project');d=page.getByRole('dialog');await d.getByLabel('Project · leave empty to unassign',{exact:true}).fill('');
+ await d.locator('form button[type=submit]').click();await d.waitFor({state:'detached'});
+ await list.getByRole('button',{name:'Clear selection',exact:true}).click();
+ for(const id of ['01','02']){await search.fill('Seed '+id);await rowCount(1);await list.getByRole('checkbox',{name:'Select sweep/seed-'+id,exact:true}).check();}
+ await selected(2);assert.equal(await list.getByRole('button',{name:'Compare 2 runs',exact:true}).isDisabled(),false);
+ await list.getByText('Review selection',{exact:true}).click();await list.getByRole('button',{name:'Remove sweep/seed-02 from selection',exact:true}).click();await selected(1);
+ assert.equal(await list.getByRole('checkbox',{name:'Select sweep/seed-02',exact:true}).isChecked(),false);
+ await list.getByRole('checkbox',{name:'Select sweep/seed-02',exact:true}).check();await selected(2);
+ await list.getByRole('button',{name:'Save selection',exact:true}).click();await page.getByRole('dialog').getByLabel('Name · saving an existing name replaces that selection',{exact:true}).fill('Review pair');
+ await page.getByRole('dialog').locator('form button[type=submit]').click();await page.getByRole('dialog').waitFor({state:'detached'});
+ await list.getByRole('button',{name:'Compare 2 runs',exact:true}).click();await page.waitForURL(u=>u.searchParams.get('experiment')==='sweep/seed-01'&&u.searchParams.get('signals_compare')==='sweep/seed-02');
+ await page.goto(base);await rowCount(30);await selected(2);
+ const identity=await(await page.request.get(base+'/api/workspace-identity')).json();
+ const key='rilldex.experiments.selection:'+JSON.stringify([identity.identity,null]);
+ await page.evaluate(key=>localStorage.setItem(key,JSON.stringify(['sweep/seed-01','no-longer-present'])),key);await page.reload();await rowCount(30);await selected(1);
+ assert.match(await list.locator(':scope>[role=status]').innerText(),/1 unavailable runs removed/);
+ const isolated=await(await page.request.post(base+'/api/workspaces/open',{data:{create:true,path:'second-study.sqlite',name:'Second study'}})).json();
+ assert.ok(isolated.url,JSON.stringify(isolated));await page.goto(isolated.url);await list.getByRole('searchbox',{name:'Search experiments'}).waitFor();
+ assert.equal(await list.locator('.experiment-bulk').isVisible(),false);
+ assert.deepEqual(errors,[]);
+ fs.writeFileSync(path.join(root,'browser-report.json'),JSON.stringify({passed:true,desktop:[1440,1100],mobile:[390,844],runs:40,checks:['selection across pages and search','reload persistence','exact bulk project/tag changes','archive and restore hidden selections','pin','process-only organization','comparison eligibility and navigation','saved comparison','stale selection recovery','workspace isolation','responsive overflow'],errors},null,2));
+ console.log('Experiment management browser checks passed');
+ }catch(e){if(page){await page.screenshot({path:path.join(root,'failure.png')});fs.writeFileSync(path.join(root,'failure.html'),await page.content());}throw e;}
+ finally{if(browser)await browser.close();server.stdin.end();await new Promise(resolve=>server.exitCode!==null?resolve():server.once('exit',resolve));}
+})().catch(e=>{console.error(e);process.exitCode=1;});

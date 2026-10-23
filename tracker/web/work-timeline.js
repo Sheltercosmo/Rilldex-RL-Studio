@@ -2,6 +2,27 @@
 ((root,factory)=>{const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.WorkTimeline=api;})(typeof window==='undefined'?globalThis:window,()=>{
  const categories={continued:'Consecutive same work',returned:'Return after other work',resumed:'Resumed after a gap in work assignment',interrupted:'Recurrence with incomplete order or coverage'};
  const procedures={same_procedure:{label:'Same dispatched procedure',symbol:'=',className:'method-same'},reconfigured_procedure:{label:'Changed settings or inputs',symbol:'Δ',className:'method-settings'},alternative_procedure:{label:'Different procedure',symbol:'↔',className:'method-alternative'},unresolved:{label:'Procedure not established',symbol:'?',className:'method-unknown'}};
+ const reports={
+  reported_again:{label:'Error reported on both attempts',symbol:'!',className:'report-again'},
+  no_reported_error:{label:'Earlier error; none reported in the inspected later response',symbol:'−',className:'report-none'},
+  followup_unknown:{label:'Earlier error; later response unresolved',symbol:'?',className:'report-unknown'},
+  no_prior_error:{label:'No error reported in the inspected earlier response',symbol:'·',className:'report-context'},
+  unknown:{label:'Earlier response inspection unresolved',symbol:'?',className:'report-unknown'}
+ };
+ function followupFor(comparison){
+  const saved=comparison?.record?.error_followup,key=Object.hasOwn(reports,saved?.category)?saved.category:'unknown';
+  return {key,...reports[key]};
+ }
+ function followupCounts(pairs){
+  const counts=Object.fromEntries(Object.keys(reports).map(k=>[k,0]));
+  for(const pair of pairs)counts[(pair.followup||followupFor(pair.comparison)).key]++;
+  return {...counts,total:pairs.length,after_error:counts.reported_again+counts.no_reported_error+counts.followup_unknown};
+ }
+ function followupText(c){
+  if(!c?.total)return null;
+  return {main:c.after_error?`${c.after_error} pairs after errors · ${c.reported_again} error again · ${c.no_reported_error} none reported · ${c.followup_unknown} later unresolved`:'No inspected earlier-error pairs',
+   coverage:`${c.no_prior_error} pairs with no earlier error · ${c.unknown} earlier reports unresolved`};
+ }
  function comparisonFor(data,observations,episode,scopeAudit=null){
   const unknown=reason=>({key:'unresolved',...procedures.unresolved,reason,record:null});
   if(data.axis==='contributions')return unknown('Procedure comparisons apply to recorded actions, not arbitrary contributions.');
@@ -65,14 +86,16 @@
     const before=result.points.filter(p=>p.visit_id===link.target&&p.occurrence.unit_id===e.previous_unit_id),after=result.points.filter(p=>p.visit_id===link.source&&p.occurrence.unit_id===e.current_unit_id);
     if(before.length!==1||after.length!==1||before[0].position>=after[0].position||before[0].row_id!==after[0].row_id||after[0].disputed||!after[0].visit.group_id)continue;
     const comparison=comparisonFor(data,procedureObservations,e,scopeAudit);
-    const pair={link,before:before[0].id,after:after[0].id,category:e.category,label:categories[e.category],comparison};
+    const pair={link,before:before[0].id,after:after[0].id,category:e.category,label:categories[e.category],comparison,followup:data.axis==='contributions'?null:followupFor(comparison)};
     result.pairs.push(pair);after[0].pairs.push(pair);seen.add(link.episode_id);
    }
+   for(const row of result.rows)row.followups=data.axis==='contributions'?null:followupCounts(row.points.flatMap(p=>p.pairs));
   }
   const totals=Object.fromEntries(Object.keys(procedures).map(k=>[k,0]));for(const p of paths)for(const pair of p.pairs)totals[pair.comparison.key]++;
   const opportunities=Object.values(totals).reduce((a,b)=>a+b,0);
   return {graph_id:data.graph_id,axis:data.axis==='contributions'?'Contribution':'Action',paths,unavailable_paths:paths.filter(p=>!p.available).length,
    procedures:data.axis==='contributions'?null:{counts:totals,opportunities,compared:opportunities-totals.unresolved,unknown:totals.unresolved},
+   followups:data.axis==='contributions'?null:followupCounts(paths.flatMap(p=>p.pairs)),
    count:paths.reduce((n,p)=>n+p.points.length,0),limit:'Positions show recording order, not time or effort. Work rows use saved identity; separate rows do not establish exploration.'};
  }
  function overview(path){
@@ -93,12 +116,18 @@
    for(const [key,text]of [['work','Work returns'],['procedure','Procedure changes']]){const b=node('button',text);b.type='button';b.dataset.lens=key;b.setAttribute('aria-pressed',String(methodLens?key==='procedure':key==='work'));b.onclick=()=>onLens(key);control.append(b);}tools.prepend(control);
   }
   if(methodLens){const c=value.procedures;host.append(node('p',`${c.compared} of ${c.opportunities} recurrence pairs compared in view · ${c.unknown} not established. Click a comparison to inspect both dispatches and intervening work.`,'wtl-coverage'));}
+  const followups=followupText(value.followups);
+  if(followups){const summary=node('div',null,'wtl-followups');summary.append(node('strong',followups.main),node('span',followups.coverage));host.append(summary);}
   const readout=node('div','Hover or focus a mark to read its work and recorded position.','wtl-readout');readout.setAttribute('role','status');host.append(readout);
   const scroller=node('div',null,'wtl-scroll');scroller.tabIndex=0;scroller.setAttribute('role','region');scroller.setAttribute('aria-label','Work occurrence timeline; scroll for all work and positions');host.append(scroller);
   const legend=node('div',null,'wtl-legend');
   const points=value.paths.flatMap(p=>p.points),combined=!allWork&&value.paths.some(p=>p.available&&overview(p).some(r=>r.aggregate));
   const methodLegend=methodLens?Object.entries(procedures).map(([k,p])=>[p.className,p.symbol+' '+p.label+' · '+value.procedures.counts[k],value.procedures.counts[k]>0]):[];
   for(const [cls,label,show]of [...methodLegend,['','Recorded work',!methodLens],['method-context','· Context / no comparable pair in view',methodLens],['is-return','↩ Return after other work',!methodLens&&points.some(p=>p.pairs.some(e=>e.category==='returned'))],['is-other','Other work · expand for separate identities',combined&&!methodLens],['is-unknown','? Unresolved or unannotated',points.some(p=>p.unresolved)],['is-other','— No immediate work target',points.some(p=>p.not_applicable)],['is-unordered','∥ Order not established',points.some(p=>!p.order_known)],['is-disputed','! Identity disputed',points.some(p=>p.disputed)]]){if(!show)continue;const item=node('span',null,cls);item.append(node('i'),document.createTextNode(label));legend.append(item);}host.append(legend);
+  if(followups){const key=node('div',null,'wtl-report-key');key.append(node('strong','Response badge'));
+   for(const [cls,symbol,text,show]of [['report-again','!','Error on both attempts',value.followups.reported_again],['report-none','−','Earlier error; none later',value.followups.no_reported_error],['report-unknown','?','Inspection unresolved',value.followups.unknown+value.followups.followup_unknown],['report-context','·','No earlier error reported',value.followups.no_prior_error]]){
+    if(show){const item=node('span'),badge=node('b',symbol,'wtl-result '+cls);badge.setAttribute('aria-hidden','true');item.append(badge,document.createTextNode(text));key.append(item);}
+   }key.append(node('span','No badge: no unique paired comparison. Diagnostics do not establish task success.','wtl-report-note'));host.append(key);}
   host.append(node('p',methodLens?'Comparisons describe the dispatched procedure. The same command can act on changed files or state; a different procedure does not establish exploration or improvement.':value.limit,'wtl-caption'));
   for(const path of value.paths){
    const section=node('section',null,'wtl-path');scroller.append(section);
@@ -112,15 +141,17 @@
    const selectedPair=path.pairs.find(p=>p.link.id===selectedLink);
    const rows=allWork?path.rows:overview(path);
    for(const row of rows){
-    const line=node('div',null,'wtl-row'+(row.disputed?' is-disputed':'')),label=node('div',null,'wtl-name'),title=node('span',row.target),total=node('b',String(row.points.length)),track=node('div',null,'wtl-track');title.title=row.target;label.append(title,total);
+    const hasFollowups=row.points.some(p=>p.pairs.length===1&&p.pairs[0].followup),line=node('div',null,'wtl-row'+(row.disputed?' is-disputed':'')+(hasFollowups?' has-followups':'')),label=node('div',null,'wtl-name'),title=node('span',row.target),total=node('b',String(row.points.length)),track=node('div',null,'wtl-track');title.title=row.target;label.append(title,total);
     if(row.disputed)label.append(node('small','Identity disputed; visits kept separate'));
     line.append(label,track);chart.append(line);
     for(const point of row.points){
      const method=point.pairs.length===1?point.pairs[0].comparison:null,returning=point.pairs.some(p=>p.category==='returned'),symbol=point.disputed?'!':point.unresolved?'?':point.not_applicable?'—':!point.order_known?'∥':methodLens?(method?.symbol||'·'):returning?'↩':'',button=node('button',symbol,'wtl-mark'+(row.aggregate||point.not_applicable?' is-other':'')+(returning?' is-return':'')+(point.unresolved?' is-unknown':'')+(!point.order_known?' is-unordered':'')+(point.disputed?' is-disputed':'')+(methodLens&&!point.disputed&&!point.unresolved&&point.order_known?' '+(method?.className||'method-context'):''));
      button.type='button';button.dataset.point=point.id;button.dataset.visit=point.visit_id;button.style.gridColumn=String(point.position-path.start+1);
+     const followup=point.pairs.length===1?point.pairs[0].followup:null;
+     if(followup){const badge=node('span',followup.symbol,'wtl-result '+followup.className);badge.setAttribute('aria-hidden','true');button.append(badge);button.dataset.report=followup.key;}
      const unknowns={source_gap:'Unannotated source',not_applicable:'No immediate work target',unreviewed:'Identity not reviewed'},context=point.disputed?'Identity disputed':point.not_applicable?'No immediate work target':point.unresolved?(unknowns[point.identity_status]||'Identity unresolved'):point.pairs.map(p=>p.label).join('; '),description=value.axis+' '+point.position+' · '+point.visit.target+(context?' · '+context:'')+(!point.order_known?' · Recording position only; execution order not established':'')+(methodLens?' · '+(method?.label||'Context / no comparable pair in view'):'');
-     button.setAttribute('aria-label',description);button.setAttribute('aria-pressed',String(selectedPair?[selectedPair.before,selectedPair.after].includes(point.id):point.visit_id===selectedVisit));
-     const show=()=>{readout.replaceChildren(node('strong',description));const source=point.occurrence.source?.text;if(source)readout.append(node('span',source.replace(/\s+/g,' ').slice(0,250)));};
+     button.setAttribute('aria-label',description+(followup?' · '+followup.label:''));button.setAttribute('aria-pressed',String(selectedPair?[selectedPair.before,selectedPair.after].includes(point.id):point.visit_id===selectedVisit));
+     const show=()=>{readout.replaceChildren(node('strong',description));if(followup)readout.append(node('span',followup.label+' · Select to inspect both attempts and responses.','wtl-report-readout'));const source=point.occurrence.source?.text;if(source)readout.append(node('span',source.replace(/\s+/g,' ').slice(0,250)));};
      if(selectedPair?selectedPair.after===point.id:point.visit_id===selectedVisit)show();
      button.onmouseenter=show;button.onfocus=show;
      button.onclick=()=>point.pairs.length===1?onPair(point.pairs[0].link):onVisit(point.visit);
@@ -141,5 +172,5 @@
   }
   if(active){const button=[...host.querySelectorAll('[data-point]')].find(b=>b.dataset.point===active);button?.focus({preventScroll:true});}
  }
-  return {project,overview,render,comparisonFor,dispatchDiff};
+  return {project,overview,render,comparisonFor,dispatchDiff,followupFor,followupCounts,followupText};
 });

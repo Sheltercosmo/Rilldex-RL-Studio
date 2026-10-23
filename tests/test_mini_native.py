@@ -27,12 +27,21 @@ def result(cid=None, **kwargs):
 
 
 class MiniNativeTests(unittest.TestCase):
+    def test_native_model_and_agent_version_are_kept_without_inventing_checkpoints(self):
+        doc=source([assistant([action()])])
+        doc['info']['config']={'model':{'model_name':'provider/released-model'}}
+        run=normalize(doc)[0]
+        self.assertEqual(run['metadata']['model'],'provider/released-model')
+        self.assertEqual(run['metadata']['agent_version'],'2.4.6')
+        self.assertNotIn('checkpoint',run['metadata'])
+        self.assertEqual(normalize(doc,meta={'model':'explicit-model'})[0]['metadata']['model'],'explicit-model')
+
     def test_parsed_actions_win_over_displayed_fences_and_bind_batch_results(self):
         doc=source([assistant([action('one','a'),action('two','b')],content='```bash\nwrong\n```'),result('b'),result('a')])
         run=normalize(doc)[0];calls=[e for e in run['events'] if e['kind']=='action']
         self.assertEqual([e['text'] for e in calls],['one','two']);self.assertEqual(len(links(run)['records']),2)
         self.assertEqual(links(run)['by_action'][calls[0]['id']][0]['native_call_id'],'a')
-        self.assertEqual(run['adapter_version'],'mini-swe-agent/2');self.assertEqual(run['raw'],doc)
+        self.assertEqual(run['adapter_version'],'mini-swe-agent/3');self.assertEqual(run['raw'],doc)
 
     def test_positional_text_results_and_interruption_do_not_become_goal_changes(self):
         doc=source([assistant([action('one'),action('two')]),result(),result(),

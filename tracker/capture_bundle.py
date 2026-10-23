@@ -18,7 +18,7 @@ VERSION = 'jev-capture-bundle/1'
 MAX_RECORDS = 50000
 MAX_PACKET = 20 * 1024 * 1024
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
-PACKETS = ('training_records', 'training_recipes', 'continuation_studies', 'execution_records', 'generation_cohorts', 'trainer_telemetry')
+PACKETS = ('training_records', 'training_recipes', 'continuation_studies', 'execution_records', 'generation_cohorts', 'trainer_telemetry', 'run_records')
 
 
 def kind(payload):
@@ -245,7 +245,7 @@ def acknowledge(outbox, receipt_file):
                 else:
                     prefix = {'training_records':'training-packet-', 'training_recipes':'recipe-packet-',
                               'continuation_studies':'continuation-packet-', 'execution_records':'execution-packet-',
-                              'generation_cohorts':'cohort-packet-', 'trainer_telemetry':'telemetry-packet-'}[packet_kind]
+                              'generation_cohorts':'cohort-packet-', 'trainer_telemetry':'telemetry-packet-', 'run_records':'run-packet-'}[packet_kind]
                     expected = prefix + digest(payload[packet_kind])
                 if receipt.get('id') != expected:
                     raise InputError('Receipt acknowledges different data')

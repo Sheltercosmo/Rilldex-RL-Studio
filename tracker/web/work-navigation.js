@@ -65,7 +65,7 @@
   if(data.recurrence_order)host.append(node('p','Return counts include complete observed parallel work between ordered endpoints. Sibling calls remain unordered. Measurement: “Returns after other work · parallel work included”.','wn-note'));
   if(!data.available){host.append(node('p','Work identities have not been observed for this graph. Open Unit map to inspect the source.','wn-empty'));return()=>{};}
   const repeated=recurringWork(data,scopeAudit,options.procedures);
-  const reviewModel=window.WorkReview?.project(data,options.graph,scopeAudit,options.procedures),canReview=reviewModel?.available;
+  const reviewModel=window.WorkReview?.project(data,options.graph,scopeAudit,options.procedures,options.inputComparisons),canReview=reviewModel?.available;
   let view=['route','timeline'].includes(options.view)?options.view:canReview?'review':'timeline',lens=options.lens==='procedure'?'procedure':'work',reviewFilter=options.reviewFilter||'all';
   let focusRow=repeated.find(r=>r.id===options.focus)||null;
   if(!focusRow&&view==='review'&&initialVisit)focusRow=repeated.find(r=>r.visits.some(v=>v.id===initialVisit))||null;

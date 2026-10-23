@@ -14,6 +14,34 @@ class IntervalHTTPTests(unittest.TestCase):
     start_server=transport.GenerationCohortTransportTests.start_server
     stop_server=staticmethod(transport.GenerationCohortTransportTests.stop_server)
 
+    def test_cross_run_case_capture_report_and_followup(self):
+        for name,success in [('candidate',False),('reference',True)]:
+            self.store.add(normalize(chat_document([dict(role='assistant',content='Attempt '+name)],
+                metadata=dict(experiment=name,task_id='task',task_revision='1',environment='terminal',
+                    environment_version='1',split='eval',reward_definition='check/1'),success=success)))
+        endpoint=self.start_server()
+        def call(path,body=None):
+            req=Request(endpoint+path,data=json.dumps(body).encode() if body else None,headers={'Content-Type':'application/json'})
+            with urlopen(req,timeout=20) as response:return json.load(response)
+        self.assertEqual(len(call('/api/case-comparisons/scopes')['experiments']),2)
+        saved=call('/api/investigations/cases',dict(reference={'experiment':'reference'},selected={'experiment':'candidate'}))
+        from rilldex import Workspace
+        later=Workspace(self.store.path,observer='source').monitor('Later code measure',version='test/1',description='Created after comparison')
+        options=call('/api/investigations/'+saved['id']+'/measures')
+        self.assertIn(later.id,[r['id'] for r in options['choices']])
+        self.assertNotIn(later.id,[r['id'] for r in saved['snapshot']['behavior']['choices']])
+        self.assertEqual(call('/api/investigations/'+saved['id']),saved)
+        listing=call('/api/case-comparisons?investigation='+saved['id'])
+        self.assertEqual(listing['counts'],{'regressed':1})
+        revised=call('/api/investigations/follow-ups',dict(parent_id=saved['id'],action='plan',check=dict(
+            title='Inspect regression',hypothesis='Different checks',procedure='Review saved checks',expected_result='A concrete check difference')))
+        self.assertEqual(revised['snapshot'],saved['snapshot'])
+        with urlopen(endpoint+'/api/investigations/'+revised['id']+'/report',timeout=20) as response:
+            html=response.read().decode();self.assertIn('regressed',html);self.assertIn('candidate',html)
+        with self.assertRaises(HTTPError) as error:
+            call('/api/investigations/cases',dict(reference={'experiment':'reference'},selected={'experiment':'reference'}))
+        self.assertEqual(error.exception.code,400)
+
     def test_full_http_capture_followup_history_and_assets(self):
         for step in range(4):
             run=normalize(chat_document([dict(role='assistant',content='Attempt '+str(step))],
@@ -24,7 +52,8 @@ class IntervalHTTPTests(unittest.TestCase):
         def call(path,body=None):
             req=Request(endpoint+path,data=json.dumps(body).encode() if body else None,headers={'Content-Type':'application/json'})
             with urlopen(req,timeout=20) as response:return json.load(response)
-        for path in ['/interval-investigation.js','/interval-investigation.css']:
+        for path in ['/interval-investigation.js','/interval-investigation.css','/case-comparisons.js','/case-comparisons.css',
+                     '/inspection-paths.js','/inspection-view.js','/inspection-paths.css','/case-behavior.js','/case-behavior.css','/measurement-case-links.js']:
             with urlopen(endpoint+path,timeout=10) as response:
                 self.assertEqual(response.status,200);self.assertGreater(len(response.read()),100)
         self.assertEqual(len(call('/api/monitoring/questions')['questions']),5)

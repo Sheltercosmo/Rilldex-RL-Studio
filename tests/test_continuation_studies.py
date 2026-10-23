@@ -253,7 +253,8 @@ class ContinuationTests(unittest.TestCase):
     def test_design_only_scope_is_selectable_without_source_rollouts(self):
         from tracker.monitoring import snapshot
         cs.receive(self.store,self.design);v=snapshot(self.store)
-        self.assertEqual(v['experiments'],[{'id':self.design['experiment'],'count':0}])
+        self.assertEqual(v['experiments'],[{'id':self.design['experiment'],
+            'label':self.design['experiment'],'count':0}])
         self.assertEqual(v['environments'],['text-control'])
 
     def test_outbox_lost_ack_and_wrong_ack(self):

@@ -24,3 +24,18 @@
 .work-contents .wc-component-row{padding:10px 0;border-top:1px solid #e4eaf2;font-size:12px;overflow-wrap:anywhere}
 .work-contents .wc-component-row strong{font-size:12px;color:#354961}.work-contents .wc-component-row p{font-size:12px!important;line-height:1.6!important;margin:6px 0;color:#687b96}
 @media(max-width:480px){.work-contents{padding:12px}.work-contents .wc-card{padding:10px}}
+.work-contents .wc-status{font-size:11px;color:#3c5092;background:#eef1ff;padding:3px 7px;border-radius:5px}
+.work-contents .wc-card-meta{flex-wrap:wrap}.work-contents .wc-card-meta>span:last-child{margin-left:auto;color:#67758b}
+.work-contents .wc-attachments{display:grid;gap:5px;margin-top:9px;min-width:0}
+.work-contents .wc-attachment{border-top:1px solid #e4e8f1;padding-top:6px;margin:0!important}
+.work-contents .wc-attachment summary{display:grid;grid-template-columns:minmax(56px,auto) minmax(0,1fr);gap:3px 8px;align-items:start;list-style:none;overflow-wrap:anywhere}
+.work-contents .wc-attachment summary b{color:#3c5092;font-size:11px}.work-contents .wc-attachment summary small{grid-column:2;color:#627088;font-size:10px}
+.work-contents .wc-uncertain{border-top-style:dashed}.work-contents .wc-uncertain summary b{color:#80671c}
+.work-contents .wc-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;min-width:0}
+.work-contents .wc-tools select{flex:1 1 150px;width:auto!important;min-width:0;max-width:100%;font-size:12px!important;height:auto!important;padding:7px 28px 7px 9px!important;line-height:1.5}
+.work-contents .wc-tools button{flex:0 0 auto}.work-contents .wc-provenance a{font-size:12px}
+.work-contents .wc-provenance pre{max-width:100%;overflow:auto;white-space:pre;font:11px/1.6 ui-monospace,monospace;padding:10px;background:#f5f7fb;border-radius:6px}
+.work-contents .wc-link{margin:7px 0!important}.work-contents .wc-relation-ends{display:grid;gap:6px;margin-top:10px}
+.work-contents .wc-relation-ends button{text-align:left;white-space:normal;overflow-wrap:anywhere;line-height:1.5}
+.work-contents .wc-focused{outline:2px solid #5570d9;outline-offset:2px}.work-contents .wc-uncertain.wc-link{border-style:dashed}
+.work-contents .wc-local-relations{margin:0 0 14px}.work-contents .wc-local-relations h4{margin-top:10px}

@@ -182,7 +182,7 @@
      $('#upload-result').textContent=report.concat(file.name+': validating every record…').join('\n');
      const body={file:{name:file.name,base64:base64(new Uint8Array(await file.arrayBuffer()))},format:$('#upload-format').value,metadata};
      const checked=await api('/api/import-file/check',body);batchPreflight(file.name,checked);
-     if(save){$('#upload-result').textContent=report.concat(file.name+': saving '+(checked.total_records??checked.total_rollouts)+' records…').join('\n');const r=await api('/api/import-file',body);report.push(file.name+': '+r.runs.filter(x=>x.imported).length+' imported, '+r.runs.filter(x=>!x.imported).length+' already present');const a=el('a','Browse imported records from '+file.name);a.href='/runs'+(metadata.experiment?'?experiment='+encodeURIComponent(metadata.experiment):'');$('#import-links').append(a,el('br'));for(const [index,row] of r.runs.slice(0,3).entries()){const link=el('a','Inspect '+SourcePreview.recordLabel(checked.runs[index]||{},index)+' →');link.href='/semantic-map?'+new URLSearchParams({run:row.id,observer:'source',return_to:'/connections#snapshot-section'});$('#import-links').append(link,el('br'));}}
+     if(save){$('#upload-result').textContent=report.concat(file.name+': saving '+(checked.total_records??checked.total_rollouts)+' records…').join('\n');const r=await api('/api/import-file',body);report.push(file.name+': '+r.runs.filter(x=>x.imported).length+' imported, '+r.runs.filter(x=>!x.imported).length+' already present');if(r.readiness){const handoff=el('section');handoff.append(el('h3',file.name+' · ready to inspect'));FirstSession.features(handoff,r.readiness);$('#import-links').append(handoff);}const a=el('a','Browse imported records from '+file.name);a.href='/runs'+(metadata.experiment?'?experiment='+encodeURIComponent(metadata.experiment):'');$('#import-links').append(a,el('br'));for(const [index,row] of r.runs.slice(0,3).entries()){const link=el('a','Inspect '+SourcePreview.recordLabel(checked.runs[index]||{},index)+' →');link.href='/semantic-map?'+new URLSearchParams({run:row.id,observer:'source',return_to:'/connections#snapshot-section'});$('#import-links').append(link,el('br'));}}
      else report.push(file.name+': checked, nothing saved');
     }catch(err){report.push(file.name+': '+err.message);}
     $('#upload-result').textContent=report.join('\n');
@@ -241,7 +241,7 @@
 
 // Presentation-only capture routes. Forms retain their values when switching.
 (()=>{
- const groups={setup:'setup',import:'sources',watch:'sources',code:'sources',config:'sources',readiness:'health',workers:'health',outputs:'outputs'};
+ const groups={models:'models',setup:'setup',import:'sources',watch:'sources',code:'sources',config:'sources',readiness:'health',workers:'health',outputs:'outputs'};
  const target=()=>{try{return document.getElementById(decodeURIComponent(location.hash.slice(1)));}catch{return null;}};
  function show(){
   const anchor=target(),views=anchor?.closest('[data-capture-view]')?.dataset.captureView.split(' ')||[];
@@ -265,7 +265,7 @@
   cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
    if(saved)scrollTo({left:saved.x,top:saved.y,behavior:'instant'});
    else if(!WorkspaceNavigation.restore?.()){
-    if(tabs||!location.hash)scrollTo({top:0,left:0,behavior:'instant'});
+    if(tabs||!location.hash||anchor?.matches('section[data-capture-view]'))scrollTo({top:0,left:0,behavior:'instant'});
     else anchor?.scrollIntoView({block:'start',behavior:'instant'});
    }
    requestAnimationFrame(()=>{positioning=false;remember();});

@@ -22,6 +22,24 @@ class TelemetryTests(unittest.TestCase):
 
     def logger(self,**kwargs):return TrainerTelemetry(self.store,**{**self.config,**kwargs})
 
+    def test_grpo_native_reward_is_a_default_outcome_without_inventing_success(self):
+        self.logger().log({'reward':.7},step=1)
+        series=t.snapshot(self.store)['series'][0]
+        self.assertEqual((series['native_key'],series['group'],series['unit']),('reward','reward','reward'))
+        self.assertIn('Not advantage, task success',series['definition'])
+        self.assertNotIn('reward',t.PROFILES['trl-ppo'])
+
+    def test_sb3_profiles_keep_native_meanings_and_relevant_missing_groups(self):
+        self.logger(framework='stable-baselines3',framework_version='2.9.0',objective='dqn',clock='environment_timesteps').log(
+            {'train/loss':.3,'time/fps':120,'rollout/ep_rew_mean':20,'rollout/exploration_rate':.4},step=256)
+        snapshot=t.snapshot(self.store);by={s['native_key']:s for s in snapshot['series']}
+        self.assertEqual(snapshot['missing_groups'],[])
+        self.assertEqual(by['time/fps']['unit'],'environment transitions / second')
+        self.assertEqual(by['rollout/exploration_rate']['label'],'DQN epsilon')
+        self.logger(framework='stable-baselines3',framework_version='2.9.0',objective='ppo',session='ppo').log(
+            {'train/entropy_loss':-.7,'train/approx_kl':.005,'train/clip_fraction':.1},step=128)
+        self.assertNotIn('tokens',t.snapshot(self.store)['missing_groups'])
+
     def test_native_definitions_do_not_merge_truncation_clipping_or_kl(self):
         self.logger().log({'loss':-.03,'entropy':.8,'kl':.01,'clip_ratio/region_mean':.4,'completions/clipped_ratio':.2,'num_tokens':2048,'train_tokens_per_second':100},step=3)
         result=t.snapshot(self.store);by={s['native_key']:s for s in result['series']}

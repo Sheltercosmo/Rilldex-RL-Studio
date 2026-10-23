@@ -107,7 +107,7 @@ class PopulationReadinessTests(unittest.TestCase):
     def test_lifecycle_before_sources_is_selectable_and_frozen_separately_from_step_windows(self):
         self.execution(0,'running')
         snapshot=m.snapshot(self.store,experiment='arrival-study')
-        self.assertIn(dict(id='arrival-study',count=0),snapshot['experiments'])
+        self.assertIn(dict(id='arrival-study',label='arrival-study',count=0),snapshot['experiments'])
         self.assertEqual(snapshot['population'],0)
         self.assertEqual(snapshot['execution_context']['groups'][0]['unfinished'],1)
         frozen=self.capture();self.execution(1,'completed')

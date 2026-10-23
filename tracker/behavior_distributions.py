@@ -11,11 +11,15 @@ from urllib.parse import urlencode
 from .schema import InputError, digest, dumps
 from . import strategy_profiles as profiles
 from . import investigation_plans, work_episodes, adaptation_patterns, work_visits, work_order, task_mix, work_consistency
-from . import distribution_readiness
+from . import distribution_readiness, repeated_work
 
 VERSION = 'behavior-distribution/1'
+COMPARISON_VERSION = 'behavior-comparison/1'
+CONTROLS = ('lens','grouping','observer','cohort_id','weighting','population_mode',
+            'a_start','a_end','b_start','b_end','experiment','environment','recurrence_order')
 WORK_VERSION = 'work-distribution/1|' + work_episodes.VERSION + '|' + adaptation_patterns.VERSION
-WORK_LENSES = {'recurrence':'work_episodes', 'procedure':'adaptation_patterns', 'work_visits':'work_visits'}
+REVISIT_VERSION = 'revisit-distribution/1|' + repeated_work.RECIPE
+WORK_LENSES = {'recurrence':'work_episodes', 'procedure':'adaptation_patterns', 'work_visits':'work_visits', 'revisit':'repeated_work'}
 ACTIVITIES = ('orient','knowledge','plan','inspect','reason','hypothesize','decide','construct','execute','report','verify','coordinate','decline','social')
 COLORS = ['#6b68b3','#5594a2','#b78b54','#719273','#ad7694','#7c8ba7']
 DEFAULT_GROUPS = [
@@ -33,6 +37,8 @@ LENSES = {
                    'limit':'One position per recorded action. Recurrence needs a saved same-work relationship. An action without a recurrence witness may be first, uninspected or unresolved; it is not classified as exploration. Returns do not establish deviation or recovery.'},
     'procedure': {'label':'Approach changes','grain':'recorded same-work recurrences','question':'How does the procedure change when the agent returns to the same work?',
                   'limit':'Procedure comparisons concern the exact earlier/later work pair. Unknown comparisons remain in these shares. These shares differ from the procedure-change monitor, which excludes unknown comparisons. A different procedure does not establish exploration, improvement or a new objective.'},
+    'revisit': {'label':'Revisit patterns','grain':'saved same-work pairs','question':'Changes between attempts',
+                'limit':'Each saved pair belongs to one category: changed inputs first; otherwise compare feedback. Unknown comparisons remain in the shares. '+repeated_work.LIMIT},
     'work': {'label':'Activities','grain':'agent units','question':'Where is the agent allocating its expressed work?',
              'limit':'Unit share measures recorded contributions, not time, tokens, distinct attempts or correctness. Boundaries and selected labels affect the result.'},
     'feedback': {'label':'Feedback review','grain':'feedback windows','question':'How often is returned feedback assessed before the next action?',
@@ -49,6 +55,9 @@ FIXED = {
                     ('disputed','Disputed work identity')],
     'recurrence': [('continued','Consecutive same-work recurrence'),('returned','Return after intervening work'),('interrupted','Recurrence across an observation gap'),('unknown','Recurrence not established')],
     'procedure': [('same_procedure','Same procedure'),('reconfigured_procedure','Changed settings or inputs'),('alternative_procedure','Different procedure'),('unknown','Procedure not established')],
+    'revisit': [('changed_inputs','Changed recorded inputs'),('changed_feedback','Same inputs, different feedback'),
+                ('exact_repeat','Same inputs and feedback'),('feedback_unknown','Same inputs, feedback unavailable'),
+                ('unknown','Input comparison unresolved')],
     'feedback': [('assessed','Assessed before acting'),('unassessed','No expressed assessment'),('unknown','Window unresolved')],
     'failure': [('adjustment','Linked adjustment → retry'),('retry','Retry; adjustment path unresolved'),('unknown','Return not established')],
     'outcome': [('completed','Completed'),('failed','Failed'),('partial','Partial'),('unknown','Outcome unresolved')],
@@ -61,7 +70,9 @@ def initialize(c):
         CREATE TABLE IF NOT EXISTS behavior_unit_inputs(
         id TEXT PRIMARY KEY,graph_id TEXT NOT NULL REFERENCES rollout_graphs(id),
         run_id TEXT NOT NULL REFERENCES runs(id),observer TEXT NOT NULL,
-        version TEXT NOT NULL,document TEXT NOT NULL,UNIQUE(graph_id,version));''')
+        version TEXT NOT NULL,document TEXT NOT NULL,UNIQUE(graph_id,version));
+        CREATE TABLE IF NOT EXISTS behavior_comparisons(
+        id TEXT PRIMARY KEY,document TEXT NOT NULL,created_at TEXT NOT NULL);''')
 
 
 def validate_grouping(raw):
@@ -131,7 +142,7 @@ def sync(store, *, graph_ids=None):
         return added
 
 
-def work_inputs(store,lens,run_ids=None,recurrence_order=None):
+def work_inputs(store,lens,run_ids=None,recurrence_order=None,*,cache_store=None):
     """Reuse cached graph projections, retaining native opportunity identities.
 
     No new semantic decision or population inferred from positive links alone.
@@ -152,7 +163,7 @@ def work_inputs(store,lens,run_ids=None,recurrence_order=None):
             plan['nodes'][0]['params']['recurrence_order']=recurrence_order
         if lens=='work_visits':
             plan['nodes'][0]['params']['scope_consistency']=work_consistency.POLICY
-        saved=investigation_plans.execute(store,plan);output=saved['outputs']['observation'];records=[]
+        saved=investigation_plans.execute(store,plan,cache_store=cache_store);output=saved['outputs']['observation'];records=[]
         def url(uid,episode=None):
             args={'run':row['run_id'],'observer':row['observer'],'graph':row['id'],'level':'work','focus_unit':uid}
             if episode:args['work_episode']=episode
@@ -177,16 +188,27 @@ def work_inputs(store,lens,run_ids=None,recurrence_order=None):
                     'unit_id':uid,'episode':p['episode'],'edge_ids':p['edge_ids'],
                     'map_url':url(uid)+(('&work_visit='+p['id'])), 'record':p})
             coverage=output['coverage']
+        elif lens=='revisit':
+            for p in output['rows']:
+                category=('unknown' if p['inputs_changed'] is None else 'changed_inputs' if p['inputs_changed']
+                          else {'changed':'changed_feedback','unchanged':'exact_repeat','unavailable':'feedback_unknown'}[p['feedback']['status']])
+                records.append({'id':p['id'],'category':category,'text':p['episode']['target'],
+                    'episode':p['episode'],'repeated_work':p,'edge_ids':p['edge_ids'],
+                    'map_url':'/semantic-map?'+urlencode({'run':row['run_id'],'observer':row['observer'],
+                        'graph':row['id'],'level':'units','revisit':output['id'],'revisit_case':p['id']})})
+            coverage=output['coverage']
+            if not records and not coverage['identity_reviewed']:continue
         else:
             for p in output['records']:
                 records.append({'id':p['id'],'category':p['procedure'] if p['procedure']!='unresolved' else 'unknown',
                     'text':p['target'],'episode':p['episode'],'procedure_reason':p['procedure_reason'],
+                    'stated_reason':p.get('stated_reason'),'response_context':p.get('response_context'),'error_followup':p.get('error_followup'),
                     'correction_location':p['correction_location'],'method_request':p['method_request'],
                     'work_request':p['work_request'],'edge_ids':p['episode']['edge_ids'],
                     'map_url':url(p['current_unit_id'],p['episode_id'])})
             coverage=output['coverage']
             if not output['observed']:continue
-        result.append({'schema':(work_visits.VERSION if lens=='work_visits' else WORK_VERSION),'input_id':output['id'],'graph_id':row['id'],
+        result.append({'schema':(work_visits.VERSION if lens=='work_visits' else REVISIT_VERSION if lens=='revisit' else WORK_VERSION),'input_id':output['id'],'graph_id':row['id'],
             'run_id':row['run_id'],'observer':row['observer'],'observer_label':graph['observer_label'],
             'source_hash':row['source_hash'],'updated_at':row['created_at'],'records':records,
             'coverage':coverage,'analysis_plan_id':saved['id'],'analysis_receipt':saved['manifest'],
@@ -195,8 +217,8 @@ def work_inputs(store,lens,run_ids=None,recurrence_order=None):
     return result
 
 
-def inputs(store,lens,run_ids=None,recurrence_order=None):
-    if lens in WORK_LENSES:return work_inputs(store,lens,run_ids,recurrence_order)
+def inputs(store,lens,run_ids=None,recurrence_order=None,*,cache_store=None):
+    if lens in WORK_LENSES:return work_inputs(store,lens,run_ids,recurrence_order,cache_store=cache_store)
     with store.read_snapshot() as saved:
         return saved_inputs(saved,lens,run_ids)
 
@@ -231,6 +253,46 @@ def aggregate(points,categories,weighting):
     return {'counts':counts,'total':total,'rollouts':len(points),'eligible_rollouts':len(eligible),'shares':shares}
 
 
+def approach_followup(result):
+    """Condition procedure shares on a recorded earlier error, keeping follow-up gaps."""
+    from .approach_feedback import LABELS, LIMIT
+    statuses=('reported_again','no_reported_error','followup_unknown')
+    by_input={}
+    for case in result['cases']:
+        by_input.setdefault((case['run_id'],case['graph_id'],case['input_id'],case['category']),[]).append(case)
+
+    def summarize(points):
+        rows=[]
+        for category in result['categories']:
+            samples=[];excluded=Counter();unavailable=0
+            for point in points:
+                cases=by_input.get((point['run_id'],point['graph_id'],point['input_id'],category['id']),[])
+                counts=Counter((c.get('error_followup') or {}).get('category','unknown') for c in cases)
+                excluded['no_prior_error']+=counts['no_prior_error']
+                excluded['unknown']+=sum(v for k,v in counts.items() if k not in statuses and k!='no_prior_error')
+                unavailable+=max(0,point['counts'][category['id']]-len(cases))
+                samples.append({'counts':{k:counts[k] for k in statuses},'total':sum(counts[k] for k in statuses)})
+            rows.append({'id':category['id'],'label':category['label'],**aggregate(samples,statuses,result['weighting']),
+                         'no_prior_error':excluded['no_prior_error'],'prior_report_unknown':excluded['unknown'],
+                         'unavailable_pairs':unavailable})
+        return {'rows':rows,'total':sum(r['total'] for r in rows),
+                'no_prior_error':sum(r['no_prior_error'] for r in rows),
+                'prior_report_unknown':sum(r['prior_report_unknown'] for r in rows),
+                'unavailable_pairs':sum(r['unavailable_pairs'] for r in rows)}
+
+    def window(bounds):
+        lo,hi=bounds['start'],bounds['end']
+        points=[p for p in result['points'] if p['step'] is not None and lo is not None and lo<=p['step']<=hi]
+        return {'start':lo,'end':hi,**summarize(points)}
+
+    return {'schema':'approach-followup-distribution/1','statuses':[{'id':k,'label':LABELS[k]} for k in statuses],
+            'overall':summarize(result['points']),'earlier':window(result['baseline']),'later':window(result['current']),
+            'weighting':result['weighting'],'population':'Observed task mix' if result['population_mode']=='task_mix' else 'Selected task and configuration',
+            'denominator':('Within each approach, mean of rollout shares among pairs with a reported earlier error'
+                           if result['weighting']=='rollout' else 'Within each approach, pairs with a reported earlier error'),
+            'limit':LIMIT,'task_adjusted':False,'inference_calls':0}
+
+
 def cohort(metadata,run_id,population_mode='task'):
     value=profiles.cohort(metadata,run_id)
     # Policy/checkpoint identity is the changing quantity in a logged training
@@ -244,7 +306,70 @@ def cohort(metadata,run_id,population_mode='task'):
     return value
 
 
-def snapshot(store,*,lens='work',grouping='work-default',observer=None,cohort_id=None,
+def snapshot(store,**options):
+    # Membership, source revisions, graphs and saved observations must describe
+    # one committed workspace state, even while collectors/annotators publish.
+    # Pure projection caches are written separately and never change that view.
+    with store.read_snapshot() as pinned:
+        return _snapshot(pinned,cache_store=store,**options)
+
+
+def comparison_controls(data,scope):
+    """Resolve defaults once so a follow-up uses the original windows/cohort."""
+    controls={k:data[k] for k in ('lens','grouping','observer','cohort_id','weighting','population_mode') if data.get(k) is not None}
+    controls.update({k:scope[k] for k in ('experiment','environment') if scope.get(k) is not None})
+    for prefix,window in [('a',data['baseline']),('b',data['current'])]:
+        for field in ('start','end'):
+            if window[field] is not None:controls[prefix+'_'+field]=window[field]
+    if data.get('recurrence_order'):controls['recurrence_order']=data['recurrence_order']
+    return controls
+
+
+def save_comparison(store,raw):
+    if not isinstance(raw,dict) or set(raw)-{'controls','title','parent_id'}:raise InputError('Provide comparison controls, an optional title or parent comparison')
+    parent=read_comparison(store,raw['parent_id']) if raw.get('parent_id') else None
+    if parent and raw.get('controls') is not None:raise InputError('A follow-up keeps its parent comparison controls')
+    controls=parent['controls'] if parent else raw.get('controls',{})
+    if not isinstance(controls,dict) or set(controls)-set(CONTROLS):raise InputError('Invalid behavior comparison controls')
+    for key,value in controls.items():
+        if value is not None and (type(value) not in (str,int) or (type(value) is int and key not in ('a_start','a_end','b_start','b_end'))):
+            raise InputError('Invalid comparison control: '+key)
+    if parent and not all(controls.get(k) is not None for k in ('observer','cohort_id','a_start','a_end','b_start','b_end')):
+        raise InputError('Open the live comparison to select an annotation version, task and windows before capturing a follow-up')
+    title=raw.get('title')
+    if title is not None and (not isinstance(title,str) or not title.strip() or len(title)>160):raise InputError('Use a comparison title of 1–160 characters')
+    data=snapshot(store,**controls)
+    value={'schema':COMPARISON_VERSION,'title':title.strip() if title else parent['title'] if parent else data['definition']['label'],
+           'captured_at':datetime.now(timezone.utc).isoformat(),'controls':comparison_controls(data,controls),
+           'parent_id':parent['id'] if parent else None,'snapshot':data}
+    identifier='behavior-comparison-'+digest(value)
+    with store.connect() as c:c.execute('INSERT INTO behavior_comparisons VALUES (?,?,?)',(identifier,dumps(value),value['captured_at']))
+    return {'id':identifier,**value}
+
+
+def read_comparison(store,identifier):
+    if not isinstance(identifier,str):raise InputError('Choose a saved behavior comparison')
+    with store.connect() as c:row=c.execute('SELECT document FROM behavior_comparisons WHERE id=?',(identifier,)).fetchone()
+    if not row:raise KeyError(identifier)
+    value=json.loads(row[0])
+    if identifier!='behavior-comparison-'+digest(value):raise InputError('Saved behavior comparison identity mismatch')
+    return {'id':identifier,**value}
+
+
+def saved_comparisons(store,*,experiment=None,environment=None):
+    terms=[];values=[]
+    for key,value in [('experiment',experiment),('environment',environment)]:
+        if value is not None:terms.append("json_extract(document,'$.controls."+key+"')=?");values.append(value)
+    where=' WHERE '+' AND '.join(terms) if terms else ''
+    with store.connect() as c:
+        rows=c.execute('''SELECT id,json_extract(document,'$.title') title,
+            json_extract(document,'$.captured_at') captured_at,json_extract(document,'$.controls') controls,
+            json_extract(document,'$.parent_id') parent_id FROM behavior_comparisons'''+where+
+            ' ORDER BY created_at DESC,id LIMIT 100',values).fetchall()
+    return [{**dict(row),'controls':json.loads(row['controls'])} for row in rows]
+
+
+def _snapshot(store,*,cache_store,lens='work',grouping='work-default',observer=None,cohort_id=None,
              weighting='rollout',population_mode='task',a_start=None,a_end=None,b_start=None,b_end=None,experiment=None,environment=None,recurrence_order=None):
     if recurrence_order is not None:
         work_order.validate(recurrence_order)
@@ -256,6 +381,9 @@ def snapshot(store,*,lens='work',grouping='work-default',observer=None,cohort_id
     if not config:raise InputError('Unknown grouping')
     categories=config['groups']+[{'id':'unknown','label':'Unmapped activity','activities':[],'color':'#b9bdc8'}] if lens=='work' else [{'id':k,'label':v,'color':'#b9bdc8' if k=='unknown' else '#b7791f' if k=='disputed' else COLORS[i%len(COLORS)]} for i,(k,v) in enumerate(FIXED[lens])]
     keys=[x['id'] for x in categories]; mapping={a:g['id'] for g in config['groups'] for a in g['activities']}
+    if lens=='revisit':
+        for category in categories:
+            if category['id']=='feedback_unknown':category['color']='#a27a2a'
     from .monitoring import population,scoped
     population_rows=scoped(population(store),experiment,environment); runs={r['id']:r for r in population_rows}
     with store.connect() as c:
@@ -265,7 +393,7 @@ def snapshot(store,*,lens='work',grouping='work-default',observer=None,cohort_id
     sources={r['run_id']:r['source_hash'] for r in index if r['observer']=='source'}
     graph_index={(r['run_id'],r['observer']):r for r in index}
     eligible_runs={rid for rid,r in runs.items() if r['state'] not in {'failed','in_progress'}}
-    docs=[d for d in inputs(store,lens,eligible_runs,recurrence_order) if d['run_id'] in eligible_runs and d['source_hash']==sources.get(d['run_id'])]
+    docs=[d for d in inputs(store,lens,eligible_runs,recurrence_order,cache_store=cache_store) if d['run_id'] in eligible_runs and d['source_hash']==sources.get(d['run_id'])]
     choices={}
     for d in docs:
         choice=choices.setdefault(d['observer'],{'id':d['observer'],'label':d['observer_label'],'rollouts':0,'placed':0,'updated_at':''})
@@ -325,7 +453,7 @@ def snapshot(store,*,lens='work',grouping='work-default',observer=None,cohort_id
     deltas=[{'id':k,'before':baseline['shares'][k],'after':current['shares'][k],
              'pp':100*(current['shares'][k]-baseline['shares'][k]) if comparable else None} for k in keys]
     total=aggregate(points,keys,weighting)
-    result={'schema':work_visits.VERSION if lens=='work_visits' else WORK_VERSION if lens in WORK_LENSES else VERSION,'lens':lens,'lenses':LENSES,'definition':LENSES[lens],'categories':categories,
+    result={'schema':work_visits.VERSION if lens=='work_visits' else REVISIT_VERSION if lens=='revisit' else WORK_VERSION if lens in WORK_LENSES else VERSION,'lens':lens,'lenses':LENSES,'definition':LENSES[lens],'categories':categories,
             'grouping':grouping,'groupings':configs,'activities':list(ACTIVITIES),'weighting':weighting,
             'population_mode':population_mode,'observer':observer,'observers':choices,'cohort_id':cohort_id,'metadata':chosen['metadata'] if chosen else None,
             'cohorts':[{'id':g['id'],'metadata':g['metadata'],'rollouts':len(g['docs']),'population':len(g['runs'])} for g in ordered],
@@ -357,5 +485,6 @@ def snapshot(store,*,lens='work',grouping='work-default',observer=None,cohort_id
     if lens in WORK_LENSES:
         result['analysis_receipts']=[{'run_id':d['run_id'],'graph_id':d['graph_id'],
             'plan_id':d['analysis_plan_id'],'manifest':d['analysis_receipt'],'issues':d['issues']} for d in selected]
+    if lens=='procedure':result['approach_followup']=approach_followup(result)
     result['snapshot_id']='distribution-'+digest(result)
     return result

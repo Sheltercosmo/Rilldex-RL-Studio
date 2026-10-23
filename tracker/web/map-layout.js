@@ -92,6 +92,7 @@
   return {info,groups:[...groups.values()]};
  }
  function lane(n){const p=n.properties;if(n.kind==='plan_step')return 0;if(n.kind==='unit')return p.kind==='action'?1:p.kind==='feedback'?2:0;return p.kind==='action'?1:['observation','tool_result','feedback'].includes(p.kind)||p.role==='tool'?2:0;}
+ function capturedResponses(layout,id){return (layout.nativeResponses||[]).filter(r=>!r.visible_edge_id&&(r.action_card_ids.includes(id)||r.response_card_ids.includes(id)));}
  function project(graph,excludedEdgeIds=[],excludedUnitIds=[],sourceOrder=null){
   const sourceEvents=new Map(graph.nodes.filter(n=>n.kind==='event').map(n=>[n.properties.id,n.properties]));
   function orderInfo(n){
@@ -129,6 +130,39 @@
    if(p.actor==='agent'&&['message','reasoning'].includes(p.kind)&&!text(p.text).trim()&&!media&&!related&&children.length){folded.push({id:n.id,child_event_ids:children.map(c=>c.id)});return false;}
    return true;
   });
+  // Collapsing a source event into a semantic card must not discard its native
+  // call/result identity. Redirect only unique, whole-event cards. Split or
+  // partial annotations retain the call-level evidence without sub-unit arrows.
+  const rawById=new Map(raw.map(n=>[n.id,n])),allById=new Map(graph.nodes.map(n=>[n.id,n])),grounded=new Map();
+  for(const e of graph.edges)if(e.type==='grounded_in'&&rawById.get(e.source)?.kind==='unit'){
+   if(!grounded.has(e.target))grounded.set(e.target,[]);grounded.get(e.target).push(rawById.get(e.source));
+  }
+  const cardsFor=n=>rawById.has(n.id)?[rawById.get(n.id)]:[...new Map((grounded.get(n.id)||[]).filter(u=>u.properties.source?.event_id===n.properties.id&&u.trajectory_id===n.trajectory_id).map(u=>[u.id,u])).values()];
+  const wholeCard=(n,cards,expectedLane)=>{
+   if(cards.length!==1||lane(cards[0])!==expectedLane)return null;
+   const c=cards[0],s=c.properties.source;if(c.kind==='event')return c;
+   return s?.start===0&&s.end===Array.from(text(n.properties.text)).length&&s.text===text(n.properties.text)?c:null;
+  };
+  const nativeResponses=[],nativeProjection=new Map(),visibleReturns=new Map();
+  for(const e of graph.edges)if(['feedback_for','response_to'].includes(e.type)&&rawById.has(e.source)&&rawById.has(e.target)){
+   const key=JSON.stringify([e.source,e.target]);if(!visibleReturns.has(key))visibleReturns.set(key,e);
+  }
+  for(const e of graph.edges){
+   if(e.type!=='response_to')continue;
+   const response=allById.get(e.source),action=allById.get(e.target);
+   if(response?.kind!=='event'||action?.kind!=='event'||lane(response)!==2||lane(action)!==1)continue;
+   const a=orderInfo(action),r=orderInfo(response);
+   const hidden=n=>n.properties.copied_context||n.properties.agent_visible===false||n.properties.agent_visibility==='not_established'||n.properties.kind?.startsWith('external_');
+   if(action.trajectory_id!==response.trajectory_id||(action.properties.context_id??null)!==(response.properties.context_id??null)||JSON.stringify(a.scope)!==JSON.stringify(r.scope)||a.hidden||r.hidden||hidden(action)||hidden(response))continue;
+   const ac=cardsFor(action),rc=cardsFor(response),to=wholeCard(action,ac,1),from=wholeCard(response,rc,2);
+   const row={edge:e,action,response,action_card_ids:ac.map(n=>n.id),response_card_ids:rc.map(n=>n.id),visible_edge_id:null};nativeResponses.push(row);
+   if(!from||!to)continue;
+   const existing=visibleReturns.get(JSON.stringify([from.id,to.id]));
+   if(existing&&existing.id!==e.id&&(from.id!==e.source||to.id!==e.target)){row.visible_edge_id=existing.id;nativeProjection.set(e.id,null);continue;}
+   row.visible_edge_id=e.id;
+   nativeProjection.set(e.id,from.id===e.source&&to.id===e.target?e:{...e,stored_source:e.source,stored_target:e.target,source:from.id,target:to.id,projection:'whole_source_event'});
+  }
+  const displayEdges=graph.edges.flatMap(e=>nativeProjection.has(e.id)?(nativeProjection.get(e.id)?[nativeProjection.get(e.id)]:[]):[e]);
   const parents=new Map(graph.edges.filter(e=>e.type==='contains_plan_step').map(e=>[e.target,e.source]));
   const sort=(a,b)=>(a.event_index??Infinity)-(b.event_index??Infinity)||(a.properties.source?.start??0)-(b.properties.source?.start??0)||a.id.localeCompare(b.id);
   const ordered=raw.filter(n=>n.kind!=='plan_step').sort(sort),sequence=[];
@@ -138,10 +172,10 @@
   const byId=new Map(),occupied=new Set(),nodes=[];let lastRow=-1,ordinal=0;
   for(const n of sequence){
    const col=lane(n);let row=null;
-   if(col!==0){const pair=graph.edges.find(e=>['recorded_with','parent_message','feedback_for','response_to'].includes(e.type)&&(e.source===n.id&&byId.has(e.target)||e.target===n.id&&byId.has(e.source)));
+   if(col!==0){const pair=displayEdges.find(e=>['recorded_with','parent_message','feedback_for','response_to'].includes(e.type)&&(e.source===n.id&&byId.has(e.target)||e.target===n.id&&byId.has(e.source)));
     const prior=pair&&byId.get(pair.source===n.id?pair.target:pair.source);if(prior&&!occupied.has(prior.row+':'+col))row=prior.row;}
    if(row===null)row=++lastRow;occupied.add(row+':'+col);
-   const p=n.properties,summary=text(p.content?.summary)||text(p.text)||text(p.source?.text)||text(p.label)||(n.kind==='event'?'Empty '+(p.kind||'source')+' record · source retained':n.id);
+   const p=n.properties,summary=(p.kind==='call'?text(p.display_label):'')||text(p.content?.summary)||text(p.text)||text(p.source?.text)||text(p.label)||(n.kind==='event'?'Empty '+(p.kind||'source')+' record · source retained':n.id);
    const target=text(p.content?.work_target)||text(p.content?.target)||text(p.target),activity=n.activity|| (n.kind==='plan_step'?'plan step':p.kind||n.kind);
    const node={...n,lane:col,row,x:60+lanes.indexOf(col)*370,y:50+row*142,width:284,height:112,ordinal:n.kind==='plan_step'?null:++ordinal,summary,target,activity};
    nodes.push(node);byId.set(n.id,node);
@@ -149,11 +183,15 @@
   function checkOccurrence(id){
    if(byId.has(id))return id;
    const check=graph.nodes.find(n=>n.id===id&&n.kind==='check');if(!check)return id;
-   const event='event:'+check.properties.action_id;if(byId.has(event))return event;
-   const action=nodes.find(n=>n.kind==='unit'&&n.properties.kind==='action'&&n.properties.source?.event_id===check.properties.action_id);
-   return action?.id||id;
+   const sameTrajectory=n=>check.trajectory_id==null||n.trajectory_id===check.trajectory_id;
+   const event='event:'+check.properties.action_id,source=byId.get(event);
+   if(source?.lane===1&&sameTrajectory(source))return event;
+   const actions=nodes.filter(n=>n.kind==='unit'&&n.properties.kind==='action'&&n.properties.source?.event_id===check.properties.action_id&&sameTrajectory(n));
+   // A source-level check does not identify one sub-action in a split event.
+   // Retain its stored endpoints when the visible attachment is ambiguous.
+   return actions.length===1?actions[0].id:id;
   }
-  const projectedEdges=graph.edges.map(e=>e.type==='recorded_recheck_of'?{...e,stored_source:e.source,stored_target:e.target,
+  const projectedEdges=displayEdges.map(e=>e.type==='recorded_recheck_of'?{...e,stored_source:e.source,stored_target:e.target,
    source:checkOccurrence(e.source),target:checkOccurrence(e.target)}:e);
   const edges=projectedEdges.filter(e=>byId.has(e.source)&&byId.has(e.target)&&e.type!=='grounded_in'&&
    (!['next_record','source_order'].includes(e.type)||orderedPair(byId.get(e.source),byId.get(e.target)))).map(e=>{
@@ -163,7 +201,7 @@
   });
   for(const n of nodes)for(const link of n.properties.plan_structure?.links||[]){const source=n.id+':'+link.from,target=n.id+':'+link.to;if(byId.has(source)&&byId.has(target))edges.push({id:'plan-link:'+source+':'+target,source,target,type:'plan_'+link.kind,family:'plan',properties:{...link,basis:'stored plan_structure.links',parent_unit:n.id}});}
   if(semantic||folded.length||sourceOrder){const previous=new Map();for(const n of nodes.filter(n=>n.kind!=='plan_step'&&n.kind!=='unresolved_reference')){const scope=JSON.stringify(orderInfo(n).scope),prev=previous.get(scope);if(prev&&orderedPair(prev,n)&&!edges.some(e=>e.source===prev.id&&e.target===n.id&&e.family==='sequence'))edges.push({id:'order:'+prev.id+':'+n.id,source:prev.id,target:n.id,type:'source_order',family:'sequence',properties:{basis:'recorded source order within the same session; not execution or causality'}});previous.set(scope,n);}}
-  return {nodes,edges,byId,semantic,folded,lanes,width:Math.max(1,lanes.length)*370+30,height:Math.max(240,80+(lastRow+1)*142)};
+  return {nodes,edges,byId,semantic,folded,nativeResponses,lanes,width:Math.max(1,lanes.length)*370+30,height:Math.max(240,80+(lastRow+1)*142)};
  }
  function connectionRoute(a,b,index=0){
   // The grid's gutters belong to relationships; card interiors belong to evidence.
@@ -206,6 +244,10 @@
  }
  function relationMeaning(e){
   const meanings={
+   contains_call:['Contains call','The source records the destination call as a child of the source call. Nesting does not establish intent or semantic causality.'],
+   call_input:['Recorded input','This input was supplied to the instrumented call. Chat history is copied context, not newly generated behavior.'],
+   call_output:['Recorded output','This output was returned by the instrumented call. Function output alone does not establish task success.'],
+   call_exception:['Call exception','The instrumented call recorded this exception.'],
    recorded_with:['Recorded with','Connects an expressed contribution to its recorded action. This pairing does not establish that the action fulfilled the intention.'],
    parent_message:['Contains action','The recorded model message contains this dispatched action.'],
    feedback_for:['Response to','This returned observation belongs to the linked action. Read its result before interpreting the next attempt.'],
@@ -234,5 +276,5 @@
   return {label,meaning};
  }
  function zoomAnchor(oldZoom,newZoom,left,top,x,y){return {left:(left+x)*newZoom/oldZoom-x,top:(top+y)*newZoom/oldZoom-y};}
- const api={project,requestedHistory,requestedClauses,requestContext,historyEvidence,stateEvidence,declaredPlans,declaredWork,route,connectionRoute,family,colors,patterns,cardStyle,text,connectionView,relationMeaning,zoomAnchor};if(typeof module!=='undefined')module.exports=api;else root.RolloutMapLayout=api;
+ const api={project,capturedResponses,requestedHistory,requestedClauses,requestContext,historyEvidence,stateEvidence,declaredPlans,declaredWork,route,connectionRoute,family,colors,patterns,cardStyle,text,connectionView,relationMeaning,zoomAnchor};if(typeof module!=='undefined')module.exports=api;else root.RolloutMapLayout=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -1,17 +1,12 @@
 /* Work descriptions stay inside their source unit. Links never imply hierarchy. */
 (()=>{
  'use strict';
- const cache=new Map(),modes={proposed:'Proposed',asserted:'Source claim',hypothetical:'Possibility'},
+ const modes={proposed:'Proposed',asserted:'Source claim',hypothetical:'Possibility'},
   names={purpose:'Intended purpose',before:'Stated order',condition:'Condition for',response_to:'In response to'};
  const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
- async function load(graph){
-  if(!cache.has(graph.id)){
-   const promise=fetch('/api/work-mentions?'+new URLSearchParams({graph:graph.id})).then(async response=>{
-    const data=await response.json();if(!response.ok)throw Error(data.error||'Work contents unavailable');return data;
-   }).catch(error=>{cache.delete(graph.id);throw error;});
-   cache.set(graph.id,promise);if(cache.size>12)cache.delete(cache.keys().next().value);
-  }
-  return cache.get(graph.id);
+ async function load(graph,unitId,progress=false){
+  const response=await fetch((progress?'/api/work-content-extractions?':'/api/work-mentions?')+new URLSearchParams({graph:graph.id,unit:unitId}));
+  const data=await response.json();if(!response.ok)throw Error(data.error||'Work contents unavailable');return data;
  }
  function quote(ref,label='Source wording'){
   const d=el('details',null,'wc-quote');d.append(el('summary',label),el('blockquote',ref.text));return d;
@@ -29,7 +24,7 @@
  function render(box,data,unitId,openUnit){
   box.replaceChildren();const row=data.rows.find(r=>r.unit_id===unitId),head=el('div',null,'wc-heading');
   head.append(el('h3','Work in this contribution'));box.append(head);
-  if(!row){box.append(el('p','Work contents have not been annotated for this unit.','wc-note'));return;}
+  if(!row||row.status==='unobserved'){box.append(el('p','Work contents have not been annotated for this unit.','wc-note'));return;}
   if(openUnit){const b=el('button','Unit at record '+(row.event_index+1)+' ↗','wc-open-unit');b.onclick=()=>openUnit(unitId);head.append(b);}
   if(row.status!=='selected'){
    box.append(el('p',row.status==='withheld'?'The selected reading was withheld after source review. It is not used for map relationships.':row.status==='no_suitable_candidate'?'The proposed reading was rejected. Local work relationships remain unresolved.':'No local reading was resolved for this contribution.','wc-note'));
@@ -65,9 +60,105 @@
   box.append(provenance);
  }
  function append(host,graph,unitId,openUnit){
-  if(!graph.semantic_context?.work_mentions)return;
+  const node=graph.nodes.find(n=>n.id===unitId),p=node?.properties;
+  if(!graph.semantic_context?.work_mentions&&!(p?.kind==='semantic'&&p?.status==='selected'&&['agent','user'].includes(p?.actor)))return;
   const box=el('section',null,'work-contents');box.setAttribute('aria-label','Local work contents');box.append(el('p','Loading work contents…','wc-note'));host.append(box);
-  load(graph).then(data=>{if(box.isConnected)render(box,data,unitId,openUnit);}).catch(error=>{if(box.isConnected)box.replaceChildren(el('p',error.message,'wc-note'));});
+  let data=null,choice=null,stamp=null,busy=false,timer=null;
+  const statuses={running:'Saved progress',complete:'Complete',budget_reached:'Budget limit reached',needs_review:'Review needed',retry_required:'Retry needed'};
+  const time=value=>new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  function paint(){
+   if(!box.isConnected||!data)return;
+   const opened=new Set([...box.querySelectorAll('details[open][data-key]')].map(n=>n.dataset.key));
+   const entries=(data.extractions||[]).filter(r=>r.unit_id===unitId);
+   if(choice===null){const wanted=new URLSearchParams(location.search).get('work_extraction');choice=entries.some(e=>e.id===wanted)?wanted:entries[0]?.id||'legacy';}
+   if(choice==='legacy'&&entries.length&&!data.rows?.some(r=>r.unit_id===unitId&&r.status==='selected'))choice=entries[0].id;
+   const entry=entries.find(e=>e.id===choice);
+   if(!entry){render(box,data,unitId,openUnit);}
+   else {
+    box.replaceChildren();const head=el('div',null,'wc-heading');head.append(el('h3','Work in this contribution'),el('span',statuses[entry.status]||entry.status,'wc-status'));box.append(head);
+    const v=entry.view,c=v.counts;
+    box.append(el('p',`${c.contents} work items · ${c.inspected}/${c.features} attributes inspected · saved ${time(entry.updated_at)}`,'wc-note'));
+    if(entry.status==='budget_reached')box.append(el('p','Resume the same extraction directory with a higher lifetime budget. Saved decisions are reused.','wc-note'));
+    if(!c.contents)box.append(el('p',entry.stage==='contents'?'No content proposal has been saved yet.':'The generator returned no work contents. This does not establish that the unit contains no work.','wc-note'));
+    const cards=el('div',null,'wc-cards'),contentCards=new Map(),labels=new Map(v.contents.map((item,i)=>[item.id,String.fromCharCode(65+i)]));
+    for(const content of v.contents){
+     const card=el('article',null,'wc-card wc-'+content.mode),meta=el('div',null,'wc-card-meta');
+     card.tabIndex=-1;contentCards.set(content.id,card);
+     meta.append(el('b',String.fromCharCode(65+v.contents.indexOf(content)),'wc-letter'),el('span',modes[content.mode]),el('span',content.kind));
+     card.append(meta,el('p',content.expression.text.length>260?content.expression.text.slice(0,260)+'…':content.expression.text));
+     const source=quote(content.expression);source.dataset.key=content.id+':source';card.append(source);
+     const features=el('div',null,'wc-attachments');
+     for(const f of content.features){
+      const item=el('details',null,'wc-attachment'+(f.status==='unresolved'?' wc-uncertain':'')),summary=el('summary');
+      item.dataset.key=content.id+':'+f.feature_id;
+      summary.append(el('b',f.type.charAt(0).toUpperCase()+f.type.slice(1)),el('span',f.expression.text),el('small',f.status==='applies'?'Attached':'Unresolved'));
+      item.append(summary,el('blockquote',f.expression.text));features.append(item);
+     }
+     if(content.features.length)card.append(features);
+     cards.append(card);
+    }
+    box.append(cards);
+    if(v.relations){
+     const r=v.relations,c=r.counts,relationships=el('div',null,'wc-local-relations');
+     relationships.append(el('h4','Local relationships'));
+     if(!c)relationships.append(el('p','Relationship inspection has not started.','wc-note'));
+     else{
+      const checked=c.supported+c.unsupported+c.unresolved;
+      relationships.append(el('p',`${c.supported} selected · ${c.unresolved} unresolved · ${checked}/${checked+c.pending} checks inspected`,'wc-note'));
+      const words={purpose:'serves the aim',before:'comes before',condition:'is a condition for',response_to:'responds to'};
+      for(const link of r.links.filter(row=>['supported','unresolved'].includes(row.status))){
+       const item=el('details',null,'wc-link'+(link.status==='unresolved'?' wc-uncertain':''));item.dataset.key='relation:'+link.id;
+       item.append(el('summary',`${labels.get(link.source)} → ${labels.get(link.target)} · ${words[link.type]}${link.status==='unresolved'?' · unresolved':''}`));
+       const ends=el('div',null,'wc-relation-ends');
+       for(const [id,role]of [[link.source,'From'],[link.target,'To']]){
+        const content=v.contents.find(row=>row.id===id),button=el('button',`${role} ${labels.get(id)} · ${content.expression.text}`,'wc-open-unit');button.type='button';
+        button.onclick=()=>{contentCards.forEach(card=>card.classList.remove('wc-focused'));const card=contentCards.get(id);card.classList.add('wc-focused');card.scrollIntoView({block:'nearest'});card.focus({preventScroll:true});};ends.append(button);
+       }
+       item.append(ends,el('blockquote',r.source.text));relationships.append(item);
+      }
+      if(!c.supported&&!c.unresolved)relationships.append(el('p',c.pending?'No links selected so far. Uninspected pairs remain pending.':'No links selected among these work items and the four inspected relationship types.','wc-note'));
+     }
+     box.insertBefore(relationships,cards);
+    }
+    if(c.pending)box.append(el('p',`${c.pending} attributes still await attachment decisions.`,'wc-note'));
+    const coverage=el('details',null,'wc-provenance');coverage.dataset.key='coverage';coverage.append(el('summary','Extraction details'),
+     el('p','Contents and their modes are generated interpretations. Attachments are model selections. Neither establishes execution or success.'));
+    for(const f of v.features){const row=el('p');row.append(el('strong',f.type+' · '),document.createTextNode(f.expression.text+' · '+(f.status==='pending'?'Not inspected':f.status==='outside_inventory'?'No selected owner':f.status==='selected'?'Inspected':'Partly unresolved')));coverage.append(row);}
+    const units=el('a','Read saved records with Python');units.href='/integration-guide#data-access';coverage.append(units);box.append(coverage);
+   }
+   const tools=el('div',null,'wc-tools'),refresh=el('button','Refresh','wc-open-unit');refresh.type='button';refresh.onclick=()=>poll(true);
+   if(entries.length){
+    const select=el('select');select.setAttribute('aria-label','Work extraction');
+    entries.forEach((e,i)=>{const option=el('option',`${i===0?'Latest · ':''}${time(e.updated_at)} · ${statuses[e.status]||e.status}`);option.value=e.id;select.append(option);});
+    if(data.rows?.some(r=>r.unit_id===unitId&&r.status==='selected')){const option=el('option','Saved map reading');option.value='legacy';select.append(option);}
+    select.value=choice;select.onchange=()=>{choice=select.value;paint();};tools.append(select);
+   }
+   tools.append(refresh);box.append(tools);
+   {
+    const usage=el('details',null,'wc-provenance');usage.dataset.key='start';
+    usage.append(el('summary',entries.length?'Run or resume with Python':'Extract with Python'),el('p','Configure the models, then run against the database serving this map. Replace study.sqlite with its path. Results appear here as they are saved.'));
+    const setup=el('a','Model setup →');setup.href='/connections#model-section';usage.append(setup);
+    const code=el('code',`from rilldex import Workspace\n\nworkspace = Workspace("study.sqlite")\nresult = workspace.extract_work_contents(\n    ${JSON.stringify(graph.id)},\n    ${JSON.stringify(unitId)},\n    "./content-pilot",\n    candidate_calls=4, decision_calls=12, input_bytes=100000,\n    relations=True,\n)`),pre=el('pre');pre.append(code);usage.append(pre,
+     el('p','Use a separate directory for each unit. Resume the same directory to reuse saved responses; budgets are lifetime totals.'));
+    box.append(usage);
+   }
+   for(const node of box.querySelectorAll('details[data-key]'))node.open=opened.has(node.dataset.key);
+  }
+  async function poll(force=false){
+   if(!box.isConnected)return;
+   if(busy)return;
+   if(!force&&document.hidden){timer=setTimeout(poll,5000);return;}
+   busy=true;clearTimeout(timer);
+   try{
+    const next=await load(graph,unitId,!!data);if(!box.isConnected)return;
+    if(!data)data=next;else data.extractions=next.extractions;
+    const nextStamp=JSON.stringify((data.extractions||[]).map(e=>[e.id,e.revision]));
+    if(stamp!==nextStamp){stamp=nextStamp;paint();}
+    box.querySelector('.wc-load-error')?.remove();
+   }catch(error){if(box.isConnected){box.querySelector('.wc-load-error')?.remove();box.append(el('p',error.message,'wc-note wc-load-error'));}}
+   finally{busy=false;if(box.isConnected)timer=setTimeout(poll,5000);}
+  }
+  poll(true);
  }
  function appendReferences(host,graph,refs,openUnit){
   const units=graph.semantic_context?.work_mentions?.packet?.units||[];

@@ -119,6 +119,22 @@ _RECIPES = [
         'observer_requirement': 'explicit_observer', 'default': False,
     },
     {
+        'id': 'revisit-inputs', 'name': 'Changed inputs on work revisits',
+        'question': 'Which repeated attempts changed their recorded inputs?',
+        'use': 'Open the earlier attempt, changed fields, intervening operations and later feedback from a behavior curve.',
+        'kind': 'analysis', 'measure': 'revisit_input_change_fraction', 'group': 'Behavior',
+        'evidence_requirement': 'Saved same-work identities and comparable native inputs or full recorded action text.',
+        'observer_requirement': 'explicit_observer', 'default': False,
+    },
+    {
+        'id': 'revisit-matching-feedback', 'name': 'Repeated inputs and feedback',
+        'question': 'Which same-work pairs repeat both inputs and captured feedback?',
+        'use': 'Inspect matching records alongside intervening work. Missing feedback stays outside the rate.',
+        'kind': 'analysis', 'measure': 'revisit_exact_repeat_fraction', 'group': 'Behavior',
+        'evidence_requirement': 'Saved same-work identities with ordered, source-bound, nonempty feedback for both attempts.',
+        'observer_requirement': 'explicit_observer', 'default': False,
+    },
+    {
         'id': 'feedback-reference', 'name': 'Explicit feedback reference',
         'question': 'How often is visible tool feedback explicitly referenced in the next three agent text events?',
         'use': 'Track saved feedback references while exposing unknown inspection windows and coverage.',
@@ -141,6 +157,14 @@ _RECIPES = [
         'kind': 'analysis', 'measure': 'procedure_change_fraction', 'group': 'Behavior',
         'evidence_requirement': 'Saved recurrence links and a supported exact-pair procedure comparison; a procedure change does not establish success.',
         'observer_requirement': 'explicit_observer', 'default': False,
+    },
+    {
+        'id':'error-report-repeat','name':'Errors on repeated work',
+        'question':'Do execution errors persist on the next attempt at the same work?',
+        'use':'Open each pair to compare the approach, stated reason and both executor responses.',
+        'kind':'analysis','measure':'error_report_repeat_fraction','group':'Behavior',
+        'evidence_requirement':'Saved same-work links and source-bound executor-report inspections. Missing inspections stay unknown; no reported error does not establish recovery.',
+        'observer_requirement':'explicit_observer','default':False,
     },
 ]
 
@@ -169,7 +193,8 @@ def catalog(query=None):
     if query is None or not str(query).strip():
         return rows
     terms = str(query).casefold().split()
-    return [row for row in rows if all(term in ' '.join(str(v) for v in row.values()).casefold() for term in terms)]
+    fields = ('id','name','question','use','evidence_requirement','group','metric','measure')
+    return [row for row in rows if all(term in ' '.join(str(row.get(k,'')) for k in fields).casefold() for term in terms)]
 
 
 def default_definitions(observer=None):

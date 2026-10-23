@@ -1,7 +1,7 @@
 /* Shared return destinations and section navigation. No rollout data is changed. */
 (function(root){
  'use strict';
- const names={'/':'Overview','/dashboard':'Overview','/rollouts':'Overview','/runs':'Rollouts','/semantic-map':'Behavior map','/source':'Source record','/monitors':'Monitors','/investigate':'Investigation','/connections':'Data & workflows','/integration-guide':'Integration guide','/measurement-review':'Measurement review','/relations':'Graph query'};
+ const names={'/':'Overview','/dashboard':'Overview','/rollouts':'Overview','/runs':'Rollouts','/semantic-map':'Behavior map','/source':'Source record','/monitors':'Monitors','/investigate':'Investigation','/connections':'Data & workflows','/integration-guide':'Integration guide','/measurement-review':'Measurement review','/relations':'Graph query','/detector-validation':'Detector validation'};
  function internal(value,base){
   if(!value||/[\\\r\n]/.test(value))return null;
   try{const u=new URL(value,base),b=new URL(base);return u.origin===b.origin&&!u.username&&!u.password&&names[u.pathname]?u.pathname+u.search+u.hash:null;}catch{return null;}
@@ -11,9 +11,9 @@
   for(const candidate of [explicit,arrival,referrer]){const path=internal(candidate,current);if(path&&path!==here)return path;}
   return new URL(current).pathname==='/semantic-map'||new URL(current).pathname==='/source'?'/runs':'/';
  }
- function title(path){return names[new URL(path,'http://workspace.local').pathname]||'workspace';}
+ function title(path){const u=new URL(path,'http://workspace.local');if(['/','/dashboard'].includes(u.pathname)&&u.searchParams.get('view')==='experiments')return 'Runs & projects';return names[u.pathname]||'workspace';}
  function captureView(hash,views=[],recipe=false){
-  const id=hash.replace(/^#/,''),routes={'setup-section':'setup','snapshot-section':'import','capture-bundle-receive':'import','directory-section':'watch','worker-section':'workers','code-section':'code','telemetry-section':'code','execution-section':'code','training-setup':'config','question-section':'readiness','data-access-section':'outputs','analysis-code':'outputs','workspace-transfer':'outputs'};
+  const id=hash.replace(/^#/,''),routes={'model-section':'models','setup-section':'setup','snapshot-section':'import','capture-bundle-receive':'import','directory-section':'watch','worker-section':'workers','code-section':'code','telemetry-section':'code','execution-section':'code','training-setup':'config','question-section':'readiness','data-access-section':'outputs','analysis-code':'outputs','workspace-transfer':'outputs'};
   return routes[id]||views[0]||(recipe?'readiness':'setup');
  }
  function install(){

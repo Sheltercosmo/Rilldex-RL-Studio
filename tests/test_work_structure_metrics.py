@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tracker import graph_store, work_outline, work_structure_metrics as metrics
 from tracker import analysis_metrics, investigation_plans, monitoring, monitor_evidence
@@ -15,7 +16,99 @@ from test_work_hierarchy import graph as plan, finish
 from test_work_outline import fixture as outline
 
 
+def captured_plan():
+    from rilldex import chat_document
+    run = normalize(chat_document([
+        {'role': 'assistant', 'content': 'Create the artifact, then check it.'},
+        {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'write', 'type': 'function',
+            'function': {'name': 'shell', 'arguments': {'cmd': 'echo artifact > output.txt'}}}]},
+        {'role': 'tool', 'tool_call_id': 'write', 'content': 'Exit code 0'},
+        {'role': 'assistant', 'content': 'The write command returned without an error.'},
+    ], metadata={'experiment': 'authored-plan-evidence', 'training_step': 1}))[0]
+    events = [e for e in run['events'] if e['text']]
+    binding = {'e' + str(i): e for i, e in enumerate(events)}
+    def refs(value):
+        if isinstance(value, list): return [refs(v) for v in value]
+        if not isinstance(value, dict): return value
+        result = {k: refs(v) for k, v in value.items()}
+        if result.get('event_id') in binding:
+            e = binding[result['event_id']]
+            result['event_id'] = e['id']
+            if 'text' in result:
+                result.update(start=0, end=len(e['text']), text=e['text'], source_pointer=e.get('source_pointer'))
+        return result
+    template = plan(); graph = graph_store.build(run)
+    graph.update(observer='authored-plan', observer_label='Authored plan control')
+    for node in template['nodes']:
+        if node['kind'] == 'event': continue
+        node = refs(deepcopy(node)); e = events[node['event_index']]
+        node['event_index'] = e['index']
+        node['trajectory_id'] = e['trajectory_id']
+        if node['kind'] == 'unit': node['properties']['actor'] = e['actor']
+        graph['nodes'].append(node)
+    for edge in template['edges']:
+        edge = refs(deepcopy(edge))
+        if edge['target'].startswith('event:'):
+            edge['target'] = 'event:' + binding[edge['target'][6:]]['id']
+        graph['edges'].append(edge)
+    return run, finish(graph)
+
+
 class WorkStructureMetricTests(unittest.TestCase):
+    def test_monitor_receipt_keeps_relationships_and_remains_readable_after_upgrade(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / 'db.sqlite')
+            run, graph = captured_plan(); store.add([run])
+            with store.connect() as c: graph_store.save(c, graph)
+            monitor = monitoring.create(store, dict(name='Plan attempts', kind='analysis', observer='authored-plan',
+                analysis={'measure': 'plan_attempt_dispatches'}))
+            synced = monitoring.sync(store, [monitor['id']])
+            self.assertEqual(synced['errors'], 0)
+            value = monitoring.values(store, monitor['id'], [run['id']])[run['id']]
+            receipt = monitor_evidence.read(store, value['id'])
+            self.assertEqual(value['value'], 1)
+            self.assertEqual(receipt['explanation']['analysis_cases'][0]['edge_ids'], ['attempt'])
+            self.assertEqual(receipt['graph']['id'], graph['id'])
+            with patch.dict(investigation_plans.OPS, {'work_structure': 'work-structure-measures/999|work-hierarchy/999'}), patch.object(
+                    investigation_plans, 'execute', side_effect=AssertionError('Do not recalculate saved receipts')):
+                self.assertEqual(monitor_evidence.read(store, value['id']), receipt)
+            self.assertEqual(monitoring.sync(store, [monitor['id']])['inserted'], 0)
+
+    def test_plan_measurements_retain_original_relationship_witnesses(self):
+        out = metrics.project(plan())
+        for key in ('plan_steps_attempted', 'plan_attempt_dispatches'):
+            case = out['cases'][key][0]
+            self.assertEqual(case['edge_ids'], ['attempt'])
+            self.assertTrue({'action', 'plan', 'plan:a'} <= set(case['node_ids']))
+        self.assertEqual(next(r for r in out['rows'] if r['id'] == 'plan:a')['edge_ids'], ['attempt'])
+
+    def test_split_action_annotations_do_not_create_extra_dispatches(self):
+        from test_work_hierarchy import split_action
+        graph = split_action(plan())
+        out = metrics.project(graph)
+        self.assertEqual(metrics.measure(out, 'plan_attempt_dispatches')['value'], 1)
+        self.assertEqual(out['profiles']['plan_steps']['distinct_effort'], 1)
+        case = out['cases']['plan_attempt_dispatches'][0]
+        self.assertEqual(case['edge_ids'], ['attempt', 'attempt-fragment'])
+        self.assertTrue({'action', 'action-fragment', 'event:e1'} <= set(case['node_ids']))
+
+    def test_public_plan_counts_have_complete_original_edge_witnesses(self):
+        graph = json.loads(Path('research/work-path-usefulness-2026-10-15/source.json').read_text(encoding='utf-8'))['graph']
+        before = deepcopy(graph)
+        expected = {e['id'] for e in graph['edges'] if e['type'] == 'attempts_plan_step'}
+        self.assertEqual(len(expected), 6)
+        out = metrics.project(graph)
+        self.assertEqual(metrics.measure(out, 'plan_attempt_dispatches')['value'], 6)
+        for key in ('plan_steps_attempted', 'plan_attempt_dispatches'):
+            cases = out['cases'][key]
+            self.assertTrue(all(c['edge_ids'] for c in cases))
+            self.assertEqual({eid for c in cases for eid in c['edge_ids']}, expected)
+            for case in cases:
+                for edge in graph['edges']:
+                    if edge['id'] in case['edge_ids']:
+                        self.assertTrue({edge['source'], edge['target']} <= set(case['node_ids']))
+        self.assertEqual(graph, before)
+
     def test_plan_attempts_are_not_checks_and_shared_dispatch_counts_once(self):
         graph = plan()
         base = metrics.project(graph)

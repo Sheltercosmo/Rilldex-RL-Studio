@@ -13,20 +13,36 @@ function fixture(){
  const data={graph_id:'g',run_id:'r',source_hash:'h',visits,paths:[{trajectory_id:'main',actor:'agent',visit_ids:visits.map(v=>v.id)}],episodes:[{id:'ep',category:'returned',previous_unit_id:'a',current_unit_id:'c'}],links:[{id:'return',episode_id:'ep',type:'same_work_return',category:'returned',source:'vc',target:'va'}]};
  return {data,graph};
 }
+function inputs(data,feedback='unchanged'){
+ const episode=data.episodes[0];return {schema:'repeated-work-comparisons/1',graph_id:data.graph_id,run_id:data.run_id,source_hash:data.source_hash,
+  rows:[{id:'pair-receipt',episode,previous_node_id:episode.previous_unit_id,current_node_id:episode.current_unit_id,inputs_changed:false,
+   dispatch:{status:'unchanged',basis:'recorded_text',changes:[]},feedback:{status:feedback},input_reasons:[]}]};
+}
 test('complete repeated-work sequence keeps intervening actions and exact edge witnesses',()=>{
- const {data,graph}=fixture(),before=JSON.stringify({data,graph}),r=project(data,graph),t=r.targets[0];
+ const {data,graph}=fixture(),before=JSON.stringify({data,graph}),r=project(data,graph,null,null,inputs(data)),t=r.targets[0];
  assert.equal(r.available,true);assert.deepEqual(t.steps.map(x=>x.id),['a','c']);assert.deepEqual(t.pairs[0].between.map(x=>x.id),['b']);
  assert.deepEqual(t.steps[0].responses[0].edges,['f1e','f1-alias']);assert.deepEqual(t.steps[0].responses[0].references[0].edges,['assessment']);
  assert.deepEqual(t.pairs[0].error_edges,['error']);assert.equal(t.count.after_error,1);assert.equal(t.count.references,1);assert.equal(t.count.exact_repeats,1);
  assert.equal(JSON.stringify({data,graph}),before);
 });
-test('a response preview match is insufficient for exact text equality',()=>{
+test('previews do not replace saved comparisons',()=>{
  const {data,graph}=fixture();graph.nodes.find(n=>n.id==='f1').properties.source.text='ERROR: x\nmetadata one';graph.nodes.find(n=>n.id==='f2').properties.source.text='ERROR: x\nmetadata two';
- const t=project(data,graph).targets[0];assert.equal(t.steps[0].responses[0].preview.text,t.steps[1].responses[0].preview.text);assert.equal(t.pairs[0].feedback,'changed');assert.equal(t.count.exact_repeats,0);
+ const t=project(data,graph).targets[0];assert.equal(t.steps[0].responses[0].preview.text,t.steps[1].responses[0].preview.text);assert.equal(t.pairs[0].feedback,'unavailable');assert.equal(t.count.exact_repeats,0);
 });
 test('error text alone never creates a return-after-error classification',()=>{
  const {data,graph}=fixture();graph.edges=graph.edges.filter(e=>e.id!=='error');for(const n of graph.nodes.filter(n=>n.properties.kind==='feedback'))n.properties.source.text='ERROR: boom';
  assert.equal(project(data,graph).targets[0].count.after_error,0);
+});
+
+test('repeated error filter uses saved pair inspections, independently of the changed procedure',()=>{
+ const {data,graph}=fixture(),e=data.episodes[0],observations={graph_id:'g',run_id:'r',source_hash:'h',records:[{
+  episode_id:e.id,previous_unit_id:e.previous_unit_id,current_unit_id:e.current_unit_id,procedure:'reconfigured_procedure',error_followup:{category:'reported_again'}
+ }]};
+ graph.edges=graph.edges.filter(e=>e.id!=='error');
+ let target=project(data,graph,null,observations).targets[0];
+ assert.equal(target.count.after_error,0);assert.equal(target.count.procedure_changed,1);assert.equal(matches(target,'errors_again'),true);assert.equal(target.followups.reported_again,1);
+ observations.source_hash='another-source';target=project(data,graph,null,observations).targets[0];
+ assert.equal(matches(target,'errors_again'),false);assert.equal(target.followups.unknown,1);
 });
 test('missing feedback and missing references remain coverage gaps, not negative findings',()=>{
  const {data,graph}=fixture();graph.edges=graph.edges.filter(e=>!['f2e','assessment'].includes(e.id));const t=project(data,graph).targets[0];
@@ -69,7 +85,7 @@ test('late references retain actual record position rather than becoming explana
  const {data,graph}=fixture();graph.nodes.find(n=>n.id==='think').event_index=20;const t=project(data,graph).targets[0];assert.equal(t.steps[0].responses[0].references[0].record,21);assert.equal(t.steps[1].record,5);
 });
 test('filters select exact saved findings without changing target counts',()=>{
- const {data,graph}=fixture();const t=project(data,graph).targets[0];assert.equal(matches(t,'all'),true);assert.equal(matches(t,'after_error'),true);assert.equal(matches(t,'exact_repeat'),true);assert.equal(matches(t,'missing_feedback'),false);
+ const {data,graph}=fixture();const t=project(data,graph,null,null,inputs(data)).targets[0];assert.equal(matches(t,'all'),true);assert.equal(matches(t,'after_error'),true);assert.equal(matches(t,'exact_repeat'),true);assert.equal(matches(t,'missing_feedback'),false);
 });
 test('following work stays in the same route and is not labeled completion',()=>{
  const {data,graph}=fixture();data.paths[0].visit_ids.push('vd');data.visits.push({id:'vd',group_id:'later',target:'Check file',positions:[4],order_known:true,occurrences:[{unit_id:'d'}]});graph.nodes.push({id:'d',kind:'unit',trajectory_id:'main',event_index:7,properties:{kind:'action',source:{text:'ls'}}});
@@ -80,7 +96,7 @@ function procedures(data,procedure='reconfigured_procedure'){
  const e=data.episodes[0];return {graph_id:data.graph_id,run_id:data.run_id,source_hash:data.source_hash,records:[{episode_id:e.id,previous_unit_id:e.previous_unit_id,current_unit_id:e.current_unit_id,episode:{...e},procedure,procedure_reason:'Saved exact-pair procedure review.'}]};
 }
 test('review preserves exact saved procedure evidence separately from identical dispatch and feedback',()=>{
- const {data,graph}=fixture(),observations=procedures(data),before=JSON.stringify(observations),t=project(data,graph,null,observations).targets[0];
+ const {data,graph}=fixture(),observations=procedures(data),before=JSON.stringify(observations),t=project(data,graph,null,observations,inputs(data)).targets[0];
  assert.equal(t.pairs[0].comparison.key,'reconfigured_procedure');assert.equal(t.pairs[0].dispatch,'unchanged');assert.equal(t.count.exact_repeats,1);
  assert.deepEqual([t.count.procedure_compared,t.count.procedure_changed,t.count.procedure_unresolved],[1,1,0]);assert.equal(JSON.stringify(observations),before);
 });
@@ -108,9 +124,9 @@ function draw(model,options={}){
 test('rendered review puts procedure coverage, intervening purpose and exact source links next to each return',()=>{
  const {data,graph}=fixture();data.visits[1].occurrences[0].target='Update the input artifact';
  const observations=procedures(data,'same_procedure');observations.records[0].episode.method={review:{author:'Named development review',note:'The same invocation follows a stored-input edit; this is separate context.'}};
- const model=project(data,graph,null,observations),opened=[],pairs=[];
+ const model=project(data,graph,null,observations,inputs(data)),opened=[],pairs=[];
  const host=draw(model,{selected:model.targets[0].id,onUnit:id=>opened.push(id),onPair:id=>pairs.push(id)}),text=renderedText(host);
- assert.match(text,/1\/1 procedure comparisons established · 0 changed/);assert.match(text,/Same dispatched procedure/);assert.match(text,/Same dispatch text/);
+ assert.match(text,/1\/1 procedure comparisons established · 0 changed/);assert.match(text,/Same dispatched procedure/);assert.match(text,/Recorded inputs unchanged/);
  assert.match(text,/same invocation follows a stored-input edit/);assert.match(text,/Source review · Named development review/);
  assert.match(text,/recorded sequence, not a causal explanation/);
  const bridge=descendants(host).find(n=>n.className==='wr-bridge');assert.equal(descendants(bridge).some(n=>n.tag==='details'),false);
@@ -123,10 +139,24 @@ test('rendered unknown comparison gives its reason and never presents missing re
 });
 
 test('work-navigation passes saved procedure observations to the review at the actual UI boundary',()=>{
- const fs=require('node:fs'),vm=require('node:vm'),{data,graph}=fixture(),observations=procedures(data),stop=new Error('projection captured');
+ const fs=require('node:fs'),vm=require('node:vm'),{data,graph}=fixture(),observations=procedures(data),comparisons=inputs(data),stop=new Error('projection captured');
  data.available=true;data.counts={recorded_actions:3,visits:3,returned:1};let received;
  const context={document:{createElement:tag=>new Element(tag)},window:{WorkTimeline:require('../tracker/web/work-timeline.js'),WorkReview:{project(...args){received=args;throw stop;}}}};
  vm.runInNewContext(fs.readFileSync(require.resolve('../tracker/web/work-navigation.js'),'utf8'),context);
- assert.throws(()=>context.window.WorkNavigationView.render(new Element('div'),data,()=>{},()=>{},null,()=>{},null,()=>{},()=>{},{graph,procedures:observations}),error=>error===stop);
- assert.deepEqual(received,[data,graph,null,observations]);
+ assert.throws(()=>context.window.WorkNavigationView.render(new Element('div'),data,()=>{},()=>{},null,()=>{},null,()=>{},()=>{},{graph,procedures:observations,inputComparisons:comparisons}),error=>error===stop);
+ assert.deepEqual(received,[data,graph,null,observations,comparisons]);
+});
+
+test('missing, duplicate, stale and wrong-pair comparisons remain unavailable',()=>{
+ for(const change of [c=>null,c=>({...c,graph_id:'old'}),c=>({...c,rows:[...c.rows,...c.rows]}),c=>({...c,rows:[{...c.rows[0],previous_node_id:'other'}]})]){
+  const {data,graph}=fixture(),t=project(data,graph,null,null,change(inputs(data))).targets[0];
+  assert.equal(t.count.dispatch_compared,0);assert.equal(t.count.exact_repeats,0);assert.equal(t.pairs[0].input_comparison,null);
+ }
+});
+test('pair review shows changed and unavailable feedback explicitly',()=>{
+ for(const [status,label]of [['changed','Recorded feedback changed'],['unavailable','Feedback comparison unavailable']]){
+  const {data,graph}=fixture(),model=project(data,graph,null,null,inputs(data,status));
+  const text=renderedText(draw(model,{selected:model.targets[0].id}));
+  assert.ok(text.includes(label));assert.ok(!text.includes('Exact feedback text also repeats'));
+ }
 });

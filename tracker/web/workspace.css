@@ -26,6 +26,7 @@ body.workspace{margin:0;padding-left:var(--sidebar);color:var(--ink);background:
 .workspace .nav-brand{display:flex;align-items:center;justify-content:space-between;padding:0 12px 27px;flex:none}
 .workspace .workspace-nav .logo{display:flex;align-items:center;gap:10px;padding:0;color:var(--ink);font-size:26px;font-weight:650;letter-spacing:-1px;line-height:1;white-space:nowrap}
 .workspace .logo-mark{display:block;width:32px;height:32px;flex:none;object-fit:contain}
+.workspace .logo-wordmark{display:block;width:153px;height:36px;flex:none;object-fit:contain}
 .workspace .workspace-nav .logo:hover{background:none;text-decoration:none}
 .workspace .nav-workspace{margin:0 0 27px;padding:12px;border:1px solid var(--line);border-radius:9px;font-size:12px;font-weight:600;background:#fafbfc;flex:none}
 .workspace .nav-workspace span{display:block;margin-top:3px;color:var(--muted);font-size:11px;font-weight:400}
@@ -69,7 +70,7 @@ body.workspace{margin:0;padding-left:var(--sidebar);color:var(--ink);background:
 .workspace .scope-bar label,.workspace .scope-bar label:first-child{flex:1 1 180px;min-width:0;max-width:none;display:flex;flex-direction:column;align-items:stretch;gap:7px}.workspace .scope-bar label>span{white-space:nowrap}
 .workspace .scope-bar select{width:100%;min-width:0;max-width:100%;padding:9px 32px 9px 12px;font-size:13px}
 .workspace .dashboard-scope{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,.8fr) 38px;max-width:900px;gap:14px;margin:18px 0 20px}
-.workspace .dashboard-scope:has(#axis-label[hidden]){grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 38px;max-width:730px}
+
 .workspace .dashboard-scope>button{width:38px;height:38px;padding:0;font-size:21px;line-height:1;color:var(--muted)}
 .workspace .summary-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;padding:0;margin:0 0 12px;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;overflow:hidden}
 .workspace .summary-strip>div{display:flex;flex-direction:row;align-items:baseline;gap:8px;padding:8px 14px 18px 0;border:0}.workspace .summary-strip>div:last-child{border:0}
@@ -173,7 +174,6 @@ body.workspace .metric-card .card-foot button:last-child{justify-self:end}
 @media(max-width:1550px){.workspace .research-layout{grid-template-columns:minmax(0,1fr)}.workspace .research-rail{display:grid;grid-template-columns:1fr 1fr;gap:22px;border-top:1px solid var(--line);padding:22px 0 0}.workspace .research-rail>.rail-note{grid-column:1/-1}}
 @media(max-width:1100px){:root{--sidebar:196px}.workspace main{padding:26px}.workspace header.workspace-bar{padding-inline:26px}.workspace .workspace-search{gap:8px}.workspace .workspace-search>kbd{display:none}.workspace .overview-heading,.workspace .iv-heading{flex-wrap:wrap}.workspace #updated{text-align:left;padding:0}.workspace .summary-strip>div{padding:8px 12px 15px 0;flex-direction:column;gap:4px}.workspace .bar-actions{gap:10px}}
 @media(max-width:900px){.workspace .workspace-search>span{display:none}.workspace .workspace-search::before{content:'Search'}.workspace .service-status{display:none}.workspace .dashboard-scope{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 38px}.workspace .dashboard-scope>label:first-child{grid-column:1/-1}.workspace .monitor-grid{grid-template-columns:minmax(0,1fr)}.workspace .iv-heading>div:first-child{flex-basis:100%}}
-@media(max-width:900px){.workspace .dashboard-scope:has(#axis-label[hidden]){grid-template-columns:minmax(0,1fr) 38px}}
 @media(max-width:760px){
  :root{--sidebar:0px}body.workspace{padding-left:0}.workspace .workspace-nav{position:relative;inset:auto;width:auto;padding:16px 20px;display:block;border-right:0;border-bottom:1px solid var(--line)}.workspace .nav-brand{padding:0;min-height:30px}.workspace .workspace-nav .logo{font-size:25px}.workspace .nav-toggle{display:block;border-color:var(--line);background:white;color:var(--ink);padding:6px 12px;font-size:12px}.workspace .nav-content{display:none;padding-top:20px;max-height:65vh}.workspace .workspace-nav.nav-open .nav-content{display:block}.workspace .nav-workspace,.workspace .workspace-nav .nav-foot{display:none}.workspace .nav-links{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace .workspace-nav .nav-secondary{display:block;margin:16px 0 0}
  .workspace header.workspace-bar{position:relative;height:auto;min-height:53px;padding:11px 20px;flex-wrap:wrap;gap:10px}.workspace .breadcrumb{display:none}.workspace .bar-actions{gap:10px}.workspace .workspace-search{padding:5px}.workspace main{padding:25px 20px 36px}.workspace h1{font-size:26px}.workspace h2{font-size:16px}.workspace .page-head,.workspace .iv-heading{flex-wrap:wrap}.workspace .overview-heading{gap:10px;margin-bottom:18px}.workspace #updated{display:block;font-size:11px}
@@ -195,7 +195,7 @@ body.workspace .metric-card .card-foot button:last-child{justify-self:end}
 .workspace :is(.bar-actions,.section-heading,.dialog-head,.case-controls,.pager,.form-actions){flex-wrap:wrap}
 .workspace :is(.page-head,.overview-heading,.iv-heading)>*{min-width:0}
 .workspace .section-heading{gap:10px;align-items:center}.workspace .section-heading h2{margin:0}
-.workspace .dashboard-scope,.workspace .dashboard-scope:has(#axis-label[hidden]){display:flex;max-width:none;align-items:end;gap:12px}
+.workspace .dashboard-scope{display:flex;max-width:none;align-items:end;gap:12px}
 .workspace .dashboard-scope label{flex:1 1 170px;max-width:360px}
 .workspace .dashboard-scope label:first-child{flex-basis:270px;max-width:520px}
 .workspace .dashboard-scope>button{width:auto;min-width:76px;height:38px;font-size:12px;padding:8px 13px}

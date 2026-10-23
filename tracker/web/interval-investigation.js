@@ -54,16 +54,73 @@ const IntervalInvestigation=(()=>{
   if(p.opportunities===0)return 'No eligible opportunities';
   return 'Recorded observation · no numeric value';
  }
- async function cases(panel,cohort,side){const {body}=modal(panel.monitor.name+' · '+(side==='current'?'selected':'reference')+' cases');
-  let page=0;const rows=cohort.points[side];function draw(){body.replaceChildren();body.append(el('p',`${Math.min(page*30+1,rows.length)}–${Math.min((page+1)*30,rows.length)} of ${rows.length} rollout receipts`));
-  body.append(el('p','Exact receipts from the frozen comparison. Missing measurements stay missing even if new results have arrived.','field-note'));
-  for(const p of rows.slice(page*30,(page+1)*30)){const row=el('details');row.append(el('summary',`Step ${p.step} · ${p.task_id||'Task unspecified'} · ${receiptLabel(p,panel.unit,panel.monitor)}`));
-   if(!p.value_id){row.append(el('p','No receipt at capture.'));body.append(row);continue;}
-   row.append(link('Open pinned rollout map','/semantic-map?'+new URLSearchParams({run:p.run_id,value:p.value_id,observer:panel.monitor.observer,return_to:location.pathname+location.search})));
-   const load=button('Inspect saved evidence',async()=>{load.disabled=true;try{const d=await api('/api/monitoring/values/'+encodeURIComponent(p.value_id));const explanation=d.explanation||{},custom=CustomMonitorEvidence.render(explanation);if(custom)row.append(custom);for(const [index,c] of evidenceCases(explanation).entries()){const block=el('details');block.open=index===0;block.append(el('summary',c.label||c.status||'Evidence case'),el('p','Result: '+(c.status||'Recorded relationship').replaceAll('_',' ')));const record=c.record;if(record?.check_history){block.append(EvaluationEvidence.delivery(record,d.run.events));}else if(record?.failure_action_id){const events=new Map(d.run.events.map(e=>[e.id,e]));const stages=[['Failed attempt',[record.failure_action_id,record.failure_result_event_id]],...(record.attempts||[]).map((a,i)=>['Follow-up '+(i+1)+' · '+a.result,[...(a.changes||[]).flatMap(change=>[change.action_id,change.result_event_id]),a.action_id,a.result_event_id]])];for(const [title,ids]of stages){const stage=el('section',null,'ii-witness');stage.append(el('strong',title));for(const id of [...new Set(ids.filter(Boolean))]){const event=events.get(id);stage.append(el('small',id+' · '+(event?.kind||'record')),el('pre',event?.text||JSON.stringify(event?.arguments||{},null,2)));}block.append(stage);}}else{const nodes=new Map((d.graph?.nodes||[]).map(n=>[n.id,n]));for(const id of c.node_ids||[]){const n=nodes.get(id);const text=n?.properties?.text||n?.label;if(text)block.append(el('p',text));}}block.append(details('Full case record',c));row.append(block);}row.append(details('Exact evidence and limits',explanation));}catch(e){row.append(el('p',e.message));load.disabled=false;}});row.append(load);body.append(row);
+ function receiptCases(host,receipt,panel,side,restoreKey,selection){
+  const M=MeasurementCaseLinks,explanation=receipt.explanation||{},custom=CustomMonitorEvidence.render(explanation);
+  if(custom)host.append(custom);
+  const entries=M.entries(explanation),list=el('div'),search=el('input'),status=el('select'),toolbar=el('div',null,'ii-case-tools');
+  search.type='search';search.placeholder='Find a case…';search.setAttribute('aria-label','Find a measured case');status.setAttribute('aria-label','Measured case status');
+  status.append(Object.assign(el('option','All recorded statuses'),{value:''}));
+  for(const name of [...new Set(entries.map(e=>e.status))].sort())status.append(Object.assign(el('option',name.replaceAll('_',' ')),{value:name}));
+  let page=Math.max(0,Math.floor(entries.findIndex(e=>e.key===restoreKey)/20));
+  function draw(){
+   list.replaceChildren();const term=search.value.trim().toLocaleLowerCase(),rows=entries.filter(e=>(!status.value||e.status===status.value)&&(!term||(e.label+' '+e.status).toLocaleLowerCase().includes(term)));
+   list.append(el('p',rows.length+' measured cases'+(rows.length>20?' · showing '+(page*20+1)+'–'+Math.min((page+1)*20,rows.length):''),'field-note'));
+   for(const [index,entry]of rows.slice(page*20,(page+1)*20).entries()){
+    const c=entry.item,block=el('details',null,'ii-measured-case');if(entry.key)block.dataset.caseKey=entry.key;
+    block.append(el('summary',entry.label+' · '+entry.status.replaceAll('_',' ')));let loaded=false;
+    function expand(){if(!block.open||loaded)return;loaded=true;
+     const back=M.returnUrl(location.href,{monitor:panel.monitor.id,side,value:receipt.measurement.id,caseKey:entry.key,...selection}),href=M.mapUrl(receipt,entry,back);
+     if(href)block.append(link('Open this case on the map',href));
+     else block.append(el('p','A unique map case is not available in this saved receipt.','field-note'));
+     const record=c.record;
+     if(record?.check_history)block.append(EvaluationEvidence.delivery(record,receipt.run.events));
+     else if(record?.failure_action_id){
+      const events=new Map(receipt.run.events.map(e=>[e.id,e])),stages=[['Failed attempt',[record.failure_action_id,record.failure_result_event_id]],...(record.attempts||[]).map((a,i)=>['Follow-up '+(i+1)+' · '+a.result,[...(a.changes||[]).flatMap(change=>[change.action_id,change.result_event_id]),a.action_id,a.result_event_id]])];
+      for(const [title,ids]of stages){const stage=el('section',null,'ii-witness');stage.append(el('strong',title));for(const id of [...new Set(ids.filter(Boolean))]){const event=events.get(id);stage.append(el('small',id+' · '+(event?.kind||'record')),el('pre',event?.text||JSON.stringify(event?.arguments||{},null,2)));}block.append(stage);}
+     }else{
+      const nodes=new Map((receipt.graph?.nodes||[]).map(n=>[n.id,n]));for(const id of M.nodes(entry)){const n=nodes.get(id)||nodes.get('event:'+id),text=n?.properties?.source?.text||n?.properties?.text||n?.label;if(text)block.append(el('p',text));}
+     }
+     block.append(details('Full case record',c));
+    }
+    block.addEventListener('toggle',expand);block.open=restoreKey?entry.key===restoreKey:index===0;expand();list.append(block);
+   }
+   if(rows.length>20){const nav=el('div',null,'ii-actions'),prev=button('Previous cases',()=>{page--;draw();}),next=button('Next cases',()=>{page++;draw();});prev.disabled=page===0;next.disabled=(page+1)*20>=rows.length;nav.append(prev,next);list.append(nav);}
+   if(restoreKey&&!M.find(explanation,restoreKey))list.prepend(el('p','The requested case is not present in this saved measurement.','ii-warning'));
   }
-  const paging=el('div',null,'ii-actions'),prev=button('Previous',()=>{page--;draw();}),next=button('Next',()=>{page++;draw();});prev.disabled=page===0;next.disabled=(page+1)*30>=rows.length;paging.append(prev,next);body.append(paging);
+  if(entries.length){toolbar.append(search,status);host.append(toolbar,list);search.oninput=status.onchange=()=>{page=0;restoreKey=null;draw();};draw();}
+  else if(restoreKey)host.append(el('p','The requested case is not present in this saved measurement.','ii-warning'));
+  host.append(details('Exact evidence and limits',explanation));
+ }
+ async function cases(panel,cohort,side,restore={}){
+  const prior=document.activeElement,{d,body}=modal(panel.monitor.name+' · '+(side==='current'?'selected':'reference')+' cases');d.dataset.receiptBrowser='true';
+  const selection=cohort.context?{scope:'task',task:cohort.context}:{scope:restore.scope||'all'};
+  d.addEventListener('close',()=>{const u=new URL(location.href);for(const k of ['evidence_monitor','evidence_side','evidence_value','evidence_case','evidence_scope','evidence_task'])u.searchParams.delete(k);history.replaceState(history.state,'',u);prior?.focus();});
+  const rows=cohort.points[side];let page=Math.max(0,Math.floor(rows.findIndex(p=>p.value_id===restore.value)/30));
+  function draw(){
+   body.replaceChildren();body.append(el('p',`${Math.min(page*30+1,rows.length)}–${Math.min((page+1)*30,rows.length)} of ${rows.length} rollout receipts`));
+   if(selection.scope==='task')body.append(el('p','Task: '+selection.task.task_id+' · '+selection.task.environment,'field-note'));
+   else if(selection.scope==='matched')body.append(el('p','Shared task contexts with measurements on both sides.','field-note'));
+   body.append(el('p','Exact receipts from the frozen comparison. Missing measurements stay missing even if new results have arrived.','field-note'));
+   for(const p of rows.slice(page*30,(page+1)*30)){
+    const row=el('details',null,'ii-receipt');if(p.value_id)row.dataset.valueId=p.value_id;
+    row.append(el('summary',`${p.step!=null?'Step '+p.step+' · ':''}${p.task_id||'Task unspecified'} · ${receiptLabel(p,panel.unit,panel.monitor)}`));
+    if(!p.value_id){row.append(el('p','No receipt at capture.'));body.append(row);continue;}
+    const back=MeasurementCaseLinks.returnUrl(location.href,{monitor:panel.monitor.id,side,value:p.value_id,...selection});
+    row.append(link('Open pinned rollout map','/semantic-map?'+new URLSearchParams({run:p.run_id,value:p.value_id,observer:p.map_observer||panel.monitor.observer,...(p.graph_id?{graph:p.graph_id}:{}),return_to:back})));
+    const load=button('Inspect saved evidence',async()=>{load.disabled=true;try{const receipt=await api('/api/monitoring/values/'+encodeURIComponent(p.value_id));if(!d.isConnected)return;receiptCases(row,receipt,panel,side,restore.value===p.value_id?restore.caseKey:null,selection);}catch(e){row.append(el('p',e.message));load.disabled=false;}});
+    row.append(load);body.append(row);if(restore.value===p.value_id){row.open=true;load.click();}
+   }
+   const paging=el('div',null,'ii-actions'),prev=button('Previous',()=>{page--;draw();}),next=button('Next',()=>{page++;draw();});prev.disabled=page===0;next.disabled=(page+1)*30>=rows.length;paging.append(prev,next);body.append(paging);
   }draw();
+ }
+ function restoreCases(doc){
+  const q=new URLSearchParams(location.search),mid=q.get('evidence_monitor'),side=q.get('evidence_side'),value=q.get('evidence_value');
+  if(!mid||!['baseline','current'].includes(side)||!value)return;
+  const panel=(doc.snapshot.behavior?.panels||doc.snapshot.panels||[]).find(p=>p.monitor.id===mid);if(!panel)return;
+  const scope=q.get('evidence_scope')||'all';let task;
+  try{task=JSON.parse(q.get('evidence_task')||'null');}catch{return;}
+  const found=MeasurementCaseLinks.cohorts(panel,{scope,task}).filter(c=>c.points[side]?.some(p=>p.value_id===value));
+  if(found.length===1)cases(panel,found[0],side,{value,caseKey:q.get('evidence_case'),scope});
  }
  function section(host,title){const s=el('section',null,'iv-panel ii-panel');s.id='ii-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-');s.append(el('h2',title));host.append(s);return s;}
  function nativeTelemetry(host,data){
@@ -90,12 +147,13 @@ const IntervalInvestigation=(()=>{
   const s=doc.snapshot;host.replaceChildren();const pinned=el('div',null,'ii-pinned');pinned.append(el('strong',doc.title),el('span',`Captured ${new Date(s.captured_at).toLocaleString()} · immutable`),button('Compare with latest arrivals',()=>open({...doc.controls,title:doc.title,hypothesis:doc.hypothesis,parent_id:doc.id})));host.append(pinned);
   const scope=section(host,'One interval · shared evidence');scope.append(el('p',`${s.scope.experiment} · ${s.scope.environment||'all environments'} · reference ${s.scope.baseline.join('–')} → selected ${s.scope.current.join('–')}`),el('p','Source intervals stay separate from native learner steps. Related records are joined by exact identity.','field-note'),details('Coordinate definitions and alignment',s.clock_boundary));
   if(s.excluded.missing_coordinates)scope.append(el('p',`${s.excluded.missing_coordinates} sources excluded: no recorded training coordinate.`,'ii-warning'));
-  const jump=el('nav',null,'ii-jumps');jump.setAttribute('aria-label','Interval evidence');for(const [label,id]of [['Population','ii-outcome-context-task-composition'],['Learning signals','ii-recorded-learning-signals'],['Trainer metrics','ii-linked-trainer-metrics'],['Behavior','ii-behavior-outcome-measures'],['Run history','ii-run-history-candidate-explanations'],['Follow-up','ii-hypothesis-follow-up']])jump.append(link(label,'#'+id));scope.append(jump);
+  const jump=el('nav',null,'ii-jumps');jump.setAttribute('aria-label','Interval evidence');for(const [label,id]of [['Population','ii-outcome-context-task-composition'],['Rollout cases','ii-compare-rollout-cases'],['Learning signals','ii-recorded-learning-signals'],['Trainer metrics','ii-linked-trainer-metrics'],['Behavior','ii-behavior-outcome-measures'],['Run history','ii-run-history-candidate-explanations'],['Follow-up','ii-hypothesis-follow-up']])jump.append(link(label,'#'+id));scope.append(jump);
   if(s.excluded.unselected_monitors)scope.append(el('p',`${s.excluded.unselected_monitors} registered monitors are outside this capture. Change the measure selection when creating a new comparison.`,'field-note'));
   const composition=section(host,'Outcome context & task composition');
   const mix=new Map();for(const r of s.source_rows){const side=s.population.baseline.includes(r.id)?'baseline':'current';const key=JSON.stringify([r.adapter,...['environment','environment_version','split','task_id','task_revision','training_clock','training_step_basis','sampling','reward_definition','source_selection','training_inclusion'].map(k=>r.metadata[k])]);if(!mix.has(key))mix.set(key,{label:[r.metadata.environment||'Environment unspecified',r.metadata.split||'split unspecified',r.metadata.task_id||'Task unspecified',r.metadata.training_clock||'clock unspecified',r.metadata.training_step_basis||'basis unspecified',...['sampling','reward_definition','task_revision'].filter(k=>r.metadata[k]).map(k=>k.replaceAll('_',' ')+': '+JSON.stringify(r.metadata[k]))].join(' · '),baseline:[],current:[]});mix.get(key)[side].push(r);}
   const outcome=rows=>{const known=rows.filter(r=>typeof r.outcome.verified_success==='boolean');return `${known.filter(r=>r.outcome.verified_success).length}/${known.length} reported successes · ${rows.length-known.length} unknown · ${rows.filter(r=>r.state==='in_progress').length} in progress`;};
   composition.append(table(['Recorded task / context','Reference','Selected'],[...mix.values()].map(r=>[r.label,outcome(r.baseline),outcome(r.current)])),el('p','Reported success is not necessarily an independent evaluator. Task matching does not control unrecorded difficulty or budget changes.','field-note'));
+  const cases=section(host,'Compare rollout cases');CaseComparisonsView.render(cases,doc,()=>open({...doc.controls,title:doc.title,hypothesis:doc.hypothesis,parent_id:doc.id}));
   const grid=el('div',null,'ii-grid');host.append(grid);const pending=section(grid,'Pending generation & capture');
   if(!s.declared_populations.available)pending.append(el('p','Generation membership unavailable. Observed traces cannot establish how many rollouts are still outstanding.','ii-warning'));
   if(s.declared_populations.available){const d=s.declared_populations;pending.append(el('p',`${d.distinct_declared_rollouts} distinct rollouts declared · ${d.distinct_delivered_rollouts} delivered · ${d.distinct_declared_rollouts-d.distinct_delivered_rollouts} not delivered`));
@@ -207,6 +265,6 @@ const IntervalInvestigation=(()=>{
    }
   }catch(e){if(seq===bundleSequence)host.textContent=e.message;}
  }
- return {open,render,bundles,range,evidenceCases,receiptLabel};
+ return {open,render,bundles,range,evidenceCases,receiptLabel,cases,restoreCases};
 })();
 if(typeof module!=='undefined')module.exports=IntervalInvestigation;

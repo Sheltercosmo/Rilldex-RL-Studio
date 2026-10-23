@@ -45,12 +45,25 @@ class LocalServer(ThreadingHTTPServer):
         self.server_name, self.server_port = self.server_address[:2]
 
 
-def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=False):
+def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=False,
+          workspace_directory=None, stop_event=None, on_ready=None):
     if container:
         host = '0.0.0.0'
     elif host not in {"127.0.0.1", "localhost", "::1"}:
         raise InputError("This version is a local research application; bind to loopback only")
     snapshot_lock = threading.Lock()
+    from .model_pilot import ModelPilotService
+    model_pilot = ModelPilotService(store)
+    import uuid
+    workspace_instance = uuid.uuid4().hex
+    workspace_manager = None
+    workspace_error = None
+    if workspace_directory is None:
+        from .workspace_directory import Directory
+        try:
+            workspace_directory = Directory()
+        except (OSError,sqlite3.Error) as error:
+            workspace_error = str(error)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -127,6 +140,51 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                     with store.connect() as c:
                         c.execute('SELECT 1').fetchone()
                     return self.response(200, {'ready': True, 'service': 'rilldex'})
+                if path == '/api/feature-readiness':
+                    from .first_session import readiness
+                    return self.response(200,readiness(store,experiment=params.get('experiment',[None])[0],environment=params.get('environment',[None])[0],run_ids=params.get('run')))
+                if path == '/api/experiments':
+                    from .experiment_catalog import catalog
+                    return self.response(200,catalog(store,q=params.get('q',[''])[0],environment=params.get('environment',[None])[0],
+                        limit=int(params.get('limit',['30'])[0]),offset=int(params.get('offset',['0'])[0]),
+                        project=params.get('project',[None])[0],state=params.get('state',['active'])[0],search_in=params.get('search_in',['labels'])[0]))
+                if path == '/api/run-records':
+                    from .run_records import records
+                    return self.response(200,records(store,experiment=params.get('experiment',[None])[0],
+                        kind=params.get('kind',[None])[0],q=params.get('q',[''])[0],after=int(params.get('after',['0'])[0]),
+                        limit=int(params.get('limit',['100'])[0]),producer=params.get('producer',[None])[0],
+                        session=params.get('session',[None])[0],tail=params.get('tail',['0'])[0]=='1',
+                        observed_from=params.get('observed_from',[None])[0],observed_to=params.get('observed_to',[None])[0],
+                        as_of=int(params['as_of'][0]) if 'as_of' in params else None))
+                if path == '/api/hardware-history':
+                    from .hardware_history import query
+                    return self.response(200,query(store,experiment=params.get('experiment',[None])[0],
+                        producer=params.get('producer',[None])[0],session=params.get('session',[None])[0],
+                        observed_from=params.get('observed_from',[None])[0],observed_to=params.get('observed_to',[None])[0],
+                        as_of=int(params['as_of'][0]) if 'as_of' in params else None,
+                        points=int(params.get('points',['160'])[0]),offset=int(params.get('offset',['0'])[0]),
+                        limit=int(params.get('limit',['6'])[0])))
+                if path == '/api/run-file':
+                    from .run_records import file_content
+                    from urllib.parse import quote
+                    name,data=file_content(store,experiment=params.get('experiment',[''])[0],sequence=int(params.get('sequence',['0'])[0]))
+                    return self.response(200,data,'application/octet-stream',download_name=quote(name,safe='._-'))
+                if path == '/api/workspace-identity':
+                    import hashlib
+                    key=hashlib.sha256(str(store.path.resolve()).encode()).hexdigest()
+                    label=workspace_manager.directory.get(key)['name'] if workspace_manager else store.path.name
+                    return self.response(200,dict(name=store.path.name,label=label,identity=key,instance=workspace_instance))
+                if path == '/api/workspaces':
+                    if workspace_manager is None:
+                        return self.response(503,{'error':'Workspace picker unavailable: '+str(workspace_error)})
+                    return self.response(200,workspace_manager.catalog())
+                if path == '/api/experiment-details':
+                    from .experiment_details import details
+                    return self.response(200,details(store,experiment=params.get('experiment',[None])[0],
+                        environment=params.get('environment',[None])[0],section=params.get('section',['settings'])[0],
+                        q=params.get('q',[''])[0],limit=int(params.get('limit',['20'])[0]),offset=int(params.get('offset',['0'])[0])))
+                if path == '/api/models':
+                    return self.response(200,model_pilot.status())
                 if path == '/api/workspace/snapshot':
                     if not snapshot_lock.acquire(blocking=False):
                         return self.response(409,{'error':'A workspace snapshot is already being prepared; retry when its download finishes'})
@@ -191,6 +249,41 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if path == '/api/trainer-telemetry/evidence':
                     from .telemetry_evidence import evidence
                     return self.response(200,evidence(store,**{k:params.get(k,[''])[0] for k in ('producer','experiment','record_id')}))
+                if path == '/api/trainer-telemetry/context':
+                    from .run_records import trainer_context
+                    return self.response(200,trainer_context(store,**{k:params.get(k,[''])[0] for k in ('producer','experiment','session')},
+                        as_of=int(params['as_of'][0]) if 'as_of' in params else None))
+                if path in {'/api/trainer-telemetry/query','/api/trainer-telemetry/catalog','/api/trainer-telemetry/points','/api/trainer-telemetry/export','/api/trainer-telemetry/sessions'}:
+                    from . import telemetry_queries as tq
+                    common={k:params[k][0] for k in ('experiment','environment','clock') if k in params}
+                    frozen={'as_of':int(params['as_of'][0])} if 'as_of' in params else {}
+                    interval={k:json.loads(params[k][0]) for k in ('start','end') if k in params}
+                    if path.endswith('/sessions'):
+                        return self.response(200,tq.sessions(store,**common,**frozen,search=params.get('search',[''])[0],
+                            limit=int(params.get('limit',['50'])[0]),offset=int(params.get('offset',['0'])[0])))
+                    common.update({k:params[k][0] for k in ('producer','session','session_mode') if k in params})
+                    if path.endswith('/catalog'):
+                        return self.response(200,tq.catalog(store,**common,**frozen,search=params.get('search',[''])[0],
+                            group=params.get('group',[None])[0],limit=int(params.get('limit',['100'])[0]),offset=int(params.get('offset',['0'])[0])))
+                    if path.endswith('/points'):
+                        return self.response(200,tq.points(store,series_id=params.get('series',[''])[0],**frozen,**interval,
+                            after=json.loads(params['after'][0]) if 'after' in params else None,limit=int(params.get('limit',['100'])[0])))
+                    if path.endswith('/export'):
+                        cutoff,packets=tq.export_records(store,**common,**frozen,**interval)
+                        self.send_response(200)
+                        self.send_header('Content-Type','application/x-ndjson; charset=utf-8')
+                        self.send_header('Content-Disposition','attachment; filename="rilldex-telemetry.jsonl"')
+                        self.send_header('X-Rilldex-As-Of',str(cutoff))
+                        self.send_header('X-Content-Type-Options','nosniff')
+                        self.send_header('Cache-Control','no-store')
+                        self.send_header('Connection','close');self.end_headers();self.close_connection=True
+                        try:
+                            for packet in packets:self.wfile.write((dumps(packet)+'\n').encode('utf-8'))
+                        except (BrokenPipeError,ConnectionResetError):pass
+                        return
+                    return self.response(200,tq.query(store,**common,**frozen,**interval,
+                        max_points=int(params.get('max_points',['240'])[0]),half_life=int(params.get('half_life',['0'])[0]),
+                        series_ids=params.get('series',[])))
                 if path == '/api/training-execution':
                     from . import execution_timeline
                     if 'saved' in params:return self.response(200,execution_timeline.load(store,params['saved'][0]))
@@ -201,7 +294,7 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if path == '/api/trainer-telemetry':
                     from .trainer_telemetry import snapshot
                     return self.response(200,snapshot(store,experiment=params.get('experiment',[None])[0],environment=params.get('environment',[None])[0],limit=int(params.get('limit',['1000'])[0])))
-                if path in {'/trainer-telemetry.js','/trainer-telemetry.css','/training-execution.js','/training-execution.css'}:
+                if path in {'/trainer-telemetry.js','/trainer-telemetry.css','/training-execution.js','/training-execution.css','/configuration-comparison.js','/configuration-comparison.css'}:
                     return self.response(200,(WEB/path.lstrip('/')).read_bytes(),'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
                 if path == '/api/training-health':
                     from .training_health import snapshot
@@ -210,8 +303,14 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                     from .continuation_studies import snapshot
                     return self.response(200,snapshot(store,**{k:params[k][0] for k in ('experiment','environment') if k in params},
                         limit=int(params.get('limit',['20'])[0]),offset=int(params.get('offset',['0'])[0])))
-                if path in {'/interval-investigation.js','/interval-investigation.css','/continuation-studies.js','/continuation-studies.css','/investigation-followups.js','/investigation-followups.css'}:
+                if path in {'/interval-investigation.js','/interval-investigation.css','/continuation-studies.js','/continuation-studies.css','/investigation-followups.js','/investigation-followups.css','/investigation-trials.js'}:
                     return self.response(200,(WEB/path.lstrip('/')).read_bytes(),'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
+                if path == '/api/investigation-trials/options':
+                    from .investigation_trials import options
+                    return self.response(200,options(store,params.get('investigation',[''])[0],params.get('run',[None])[0]))
+                if path == '/api/investigation-trials/manifest':
+                    from .investigation_trials import manifest
+                    return self.response(200,manifest(store,params.get('investigation',[''])[0],params.get('check',[''])[0]))
                 if path == '/api/retained-rl-signal':
                     from .retained_rl_signals import inspect_source
                     return self.response(200,inspect_source(store,params.get('run',[''])[0]))
@@ -243,6 +342,16 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if path == '/api/investigations':
                     from .failure_investigations import saved
                     return self.response(200,{'investigations':saved(store)})
+                if path == '/api/case-comparisons':
+                    from .case_comparisons import listing
+                    return self.response(200,listing(store,params.get('investigation',[''])[0],
+                        status=params.get('status',['all'])[0],offset=int(params.get('offset',['0'])[0]),limit=int(params.get('limit',['20'])[0])))
+                if path == '/api/case-comparisons/scopes':
+                    from .case_studies import catalog
+                    return self.response(200,catalog(store))
+                if path == '/api/case-comparisons/pair':
+                    from .case_comparisons import pair
+                    return self.response(200,pair(store,params.get('investigation',[''])[0],params.get('reference',[''])[0],params.get('selected',[''])[0],observer=params.get('observer',[None])[0]))
                 if path.startswith('/api/work-state/'):
                     from .investigation_plans import read_output
                     return self.response(200,read_output(store,path.rsplit('/',1)[-1]))
@@ -263,6 +372,9 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if path.startswith('/api/investigation-plans/'):
                     from .investigation_plans import read_plan
                     return self.response(200,read_plan(store,path.rsplit('/',1)[-1]))
+                if path.startswith('/api/investigations/') and path.endswith('/measures'):
+                    from . import case_behavior, failure_investigations
+                    return self.response(200,case_behavior.options(store,failure_investigations.read(store,path.split('/')[-2])))
                 if path.startswith('/api/investigations/') and path.endswith('/revisions'):
                     from .investigation_followups import revisions
                     return self.response(200,revisions(store,path.split('/')[-2]))
@@ -273,10 +385,21 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                         limit=int(params.get('limit',['20'])[0]),offset=int(params.get('offset',['0'])[0])))
                 if path.startswith('/api/investigations/') and path.endswith('/bundle'):
                     from .investigation_followups import bundle
-                    return self.response(200,bundle(store,path.split('/')[-2]))
+                    return self.response(200,bundle(store,path.split('/')[-2]),download_name='rilldex-investigation.json' if params.get('download')==['1'] else None)
+                if path.startswith('/api/investigations/') and path.endswith('/report'):
+                    from .findings_report import render
+                    html=render(store,path.split('/')[-2],origin=params.get('origin',[''])[0])
+                    return self.response(200,html.encode('utf-8'),'text/html; charset=utf-8',
+                                         download_name='rilldex-findings.html' if params.get('download')==['1'] else None)
                 if path.startswith('/api/investigations/'):
                     from .failure_investigations import read
                     return self.response(200,read(store,path.rsplit('/',1)[-1]))
+                if path == '/api/behavior-comparisons':
+                    from .behavior_distributions import saved_comparisons
+                    return self.response(200,{'comparisons':saved_comparisons(store,**{k:params[k][0] for k in ('experiment','environment') if k in params})})
+                if path.startswith('/api/behavior-comparisons/'):
+                    from .behavior_distributions import read_comparison
+                    return self.response(200,read_comparison(store,path.rsplit('/',1)[-1]),download_name='behavior-comparison.json' if params.get('download')==['1'] else None)
                 if path == '/api/behavior-distributions':
                     from .behavior_distributions import snapshot
                     return self.response(200,snapshot(store,**{k:params[k][0] for k in ('lens','grouping','observer','cohort_id','weighting','population_mode','a_start','a_end','b_start','b_end','experiment','environment','recurrence_order') if k in params}),download_name='behavior-distribution.json' if params.get('download')==['1'] else None)
@@ -316,6 +439,17 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if path == '/api/measurement-reviews':
                     from .measurement_reviews import listing
                     return self.response(200,listing(store,params.get('monitor',[''])[0]))
+                if path.startswith('/api/detector-validation'):
+                    from . import detector_validation as validation
+                    if path=='/api/detector-validation':return self.response(200,validation.listing(store))
+                    if path=='/api/detector-validation/compare':
+                        return self.response(200,validation.compare(store,params.get('left',[''])[0],params.get('right',[''])[0]))
+                    parts=path.strip('/').split('/')
+                    if len(parts)==4 and parts[2] in {'sets','results'}:
+                        result=(validation.case_view(store,parts[3],params['case'][0]) if 'case' in params and parts[2]=='sets'
+                                else validation.load(store,parts[3],parts[2]=='results'))
+                        return self.response(200,result,download_name='detector-validation.json' if params.get('download')==['1'] else None)
+                    raise InputError('Unknown validation route')
                 if path.startswith('/api/measurement-reviews/'):
                     from .measurement_reviews import public, case_view
                     sid=path.rsplit('/',1)[-1]
@@ -328,7 +462,7 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                     return self.response(200,store.source_status(path.rsplit('/',1)[-1]))
                 if path.startswith('/api/monitoring/rollout/'):
                     from .monitoring import rollout
-                    return self.response(200,rollout(store,path.rsplit('/',1)[-1],params.get('observer',[None])[0]))
+                    return self.response(200,rollout(store,path.rsplit('/',1)[-1],params.get('observer',[None])[0],params.get('graph',[None])[0]))
                 if path == '/api/workspace-status':
                     from .graph_store import status
                     return self.response(200,status(store))
@@ -370,8 +504,15 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if path == '/api/work-mentions':
                     from .work_mentions import project
                     from .graph_store import read
-                    return self.response(200,project(read(store,params.get('graph',[''])[0]),params.get('unit',[None])[0]),
+                    from .work_content_results import for_graph
+                    graph=read(store,params.get('graph',[''])[0]);unit=params.get('unit',[None])[0]
+                    result=project(graph,unit)
+                    result['extractions']=for_graph(store,graph,unit)
+                    return self.response(200,result,
                         download_name='local-work-contents.json' if params.get('download')==['1'] else None)
+                if path == '/api/work-content-extractions':
+                    from .work_content_results import read
+                    return self.response(200,dict(extractions=read(store,params.get('graph',[''])[0],params.get('unit',[''])[0])))
                 if path == '/api/unit-reviews':
                     from .unit_reviews import template
                     return self.response(200,template(store,params.get('graph',[''])[0],params.get('unit',[''])[0],params.get('window',[None])[0]))
@@ -514,6 +655,13 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                                  "/dashboard":"monitoring.html","/monitors":"monitoring.html","/runs":"monitoring.html","/monitoring.js":"monitoring.js","/monitoring.css":"monitoring.css",
                                  "/rollout-map.js":"rollout-map.js","/rollout-map.css":"rollout-map.css","/map-layout.js":"map-layout.js",
                                  "/work-navigation.js":"work-navigation.js","/work-navigation.css":"work-navigation.css","/work-review.js":"work-review.js",
+                                 "/inspection-paths.js":"inspection-paths.js","/inspection-view.js":"inspection-view.js","/inspection-paths.css":"inspection-paths.css",
+                                 "/case-behavior.js":"case-behavior.js","/case-behavior.css":"case-behavior.css","/case-comparisons.js":"case-comparisons.js","/case-comparisons.css":"case-comparisons.css",
+                                 "/measurement-case-links.js":"measurement-case-links.js",
+                                 "/experiment-browser.js":"experiment-browser.js","/experiment-browser.css":"experiment-browser.css",
+                                 "/experiment-details.js":"experiment-details.js","/experiment-details.css":"experiment-details.css",
+                                 "/run-capture.js":"run-capture.js",
+                                 "/hardware-history.js":"hardware-history.js",
                                  "/unit-reading.js":"unit-reading.js","/source-evidence.js":"source-evidence.js","/request-evidence.js":"request-evidence.js","/rollout-story.js":"rollout-story.js","/rollout-story.css":"rollout-story.css",
                                  "/plan-hierarchy.js":"plan-hierarchy.js","/plan-hierarchy.css":"plan-hierarchy.css","/plan-case-context.js":"plan-case-context.js",
                                  "/nested-work-tree.js":"nested-work-tree.js","/nested-work-tree.css":"nested-work-tree.css",
@@ -539,20 +687,23 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 allowed_files['/custom-monitor-setup.js']='custom-monitor-setup.js'
                 allowed_files['/reward-checks.js']='reward-checks.js'
                 allowed_files['/workspace-alerts.js']='workspace-alerts.js'
+                allowed_files.update({'/workspace-picker.js':'workspace-picker.js','/workspace-picker.css':'workspace-picker.css'})
                 allowed_files['/reward-scan-progress.js']='reward-scan-progress.js'
                 allowed_files.update({'/custom-monitor-evidence.js':'custom-monitor-evidence.js','/custom-monitor-evidence.css':'custom-monitor-evidence.css'})
                 allowed_files['/POPULATION_READINESS.md']='population-readiness.md'
                 allowed_files.update({'/geist-sans.woff2':'geist-sans.woff2','/geist-mono.woff2':'geist-mono.woff2','/geist-LICENSE.txt':'geist-LICENSE.txt'})
-                allowed_files.update({'/code-syntax.js':'code-syntax.js','/prism-LICENSE.txt':'prism-LICENSE.txt','/choice-labels.js':'choice-labels.js','/workspace-navigation.js':'workspace-navigation.js'})
+                allowed_files.update({'/code-syntax.js':'code-syntax.js','/prism-LICENSE.txt':'prism-LICENSE.txt','/choice-labels.js':'choice-labels.js','/workspace-navigation.js':'workspace-navigation.js','/workspace-layout.js':'workspace-layout.js','/workspace-layout.css':'workspace-layout.css'})
                 allowed_files.update({'/connections':'connections.html','/connections.js':'connections.js','/connections.css':'connections.css','/source-preview.js':'source-preview.js'})
                 allowed_files.update({'/deployment-setup.js':'deployment-setup.js'})
                 allowed_files.update({'/source-discovery.js':'source-discovery.js'})
+                allowed_files.update({'/first-session.js':'first-session.js','/first-session.css':'first-session.css','/model-setup.js':'model-setup.js','/model-setup.md':'model-setup.md'})
                 allowed_files.update({'/integration-guide':'integration-guide.html','/deployment-guide.js':'deployment-guide.js'})
                 allowed_files.update({'/research-guide.md':'research-guide.md','/research-example.py':'research-example.py'})
                 allowed_files.update({'/execution-guide.md':'execution-guide.md'})
                 allowed_files.update({'/workflow-guide.md':'workflow-guide.md'})
                 allowed_files.update({'/rilldex-mark.svg':'rilldex-mark.svg','/rilldex-logo.svg':'rilldex-logo.svg','/favicon.ico':'rilldex-mark.svg'})
                 allowed_files.update({'/measurement-review':'measurement-review.html','/measurement-review.js':'measurement-review.js','/measurement-review.css':'measurement-review.css'})
+                allowed_files.update({'/detector-validation':'detector-validation.html','/detector-validation.js':'detector-validation.js','/detector-validation.css':'detector-validation.css'})
                 if path not in allowed_files:
                     return self.response(404, {"error": "Not found"})
                 file = WEB / allowed_files[path]
@@ -584,12 +735,38 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 body = json.loads(self.rfile.read(length))
                 if not isinstance(body, dict):
                     raise InputError("Request body must be an object")
+                if self.path.startswith('/api/workspaces/') and workspace_manager is None:
+                    return self.response(503,{'error':'Workspace picker unavailable: '+str(workspace_error)})
+                if self.path == '/api/workspaces/open':
+                    if type(body.get('create',False)) is not bool:
+                        raise InputError('create must be a boolean')
+                    try:
+                        return self.response(200,workspace_manager.open(key=body.get('id'),path=body.get('path'),name=body.get('name'),
+                            create=body.get('create',False),current_view=body.get('current_view','/')))
+                    except (OSError,sqlite3.Error) as error:
+                        raise InputError('Could not open workspace: '+str(error)) from None
+                if self.path == '/api/workspaces/view':
+                    workspace_manager.directory.save_view(workspace_manager.key,body.get('view'))
+                    return self.response(200,{'saved':True})
+                if self.path == '/api/workspaces/forget':
+                    return self.response(200,workspace_manager.forget(body.get('id')))
+                if self.path == '/api/example':
+                    from .first_session import example
+                    result=example(store);monitor_service.wake()
+                    return self.response(200,result)
+                if self.path == '/api/models/pilot':
+                    return self.response(202,model_pilot.start(body))
+                if self.path == '/api/map-inspection/checks':
+                    from .map_inspection import prepare_checks
+                    return self.response(200,prepare_checks(store,body))
                 if self.path in {'/api/import-file/check','/api/import-file'}:
                     from .import_batch import read_request,preflight
                     runs=read_request(body)
                     if self.path.endswith('/check'):return self.response(200,preflight(runs))
                     result=store.add(runs);monitor_service.wake()
-                    return self.response(200,{'runs':result,'total_rollouts':len(result)})
+                    from .first_session import readiness
+                    return self.response(200,{'runs':result,'total_rollouts':len(result),
+                        'readiness':readiness(store,run_ids=[r['id'] for r in result])})
                 if self.path == '/api/integrations/check':
                     from .integrations import check
                     return self.response(200,check(body))
@@ -599,6 +776,10 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if self.path == '/api/measurement-reviews/labels':
                     from .measurement_reviews import receive
                     return self.response(200,receive(store,body))
+                if self.path in {'/api/detector-validation/sets','/api/detector-validation/capture','/api/detector-validation/results'}:
+                    from . import detector_validation as validation
+                    operation={'sets':validation.create,'capture':validation.capture,'results':validation.publish}[self.path.rsplit('/',1)[-1]]
+                    return self.response(200,operation(store,body))
                 if self.path in {'/api/connections','/api/connections/preview'}:
                     from .connections import create,preview
                     return self.response(200,(preview if self.path.endswith('/preview') else create)(store,body))
@@ -638,6 +819,9 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if self.path == '/api/investigations':
                     from .failure_investigations import save
                     return self.response(200,save(store,body))
+                if self.path == '/api/behavior-comparisons':
+                    from .behavior_distributions import save_comparison
+                    return self.response(201,save_comparison(store,body))
                 if self.path == '/api/evaluations':
                     from .evaluation_receipts import receive
                     result=receive(store,body);monitor_service.wake()
@@ -649,6 +833,15 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if self.path in {'/api/investigations/interval','/api/investigations/interval/preview'}:
                     from .investigation_workspace import save, capture
                     return self.response(200,(capture if self.path.endswith('/preview') else save)(store,body))
+                if self.path == '/api/investigations/cases':
+                    from .case_studies import save
+                    return self.response(201,save(store,body))
+                if self.path == '/api/investigations/trainer-cases':
+                    from .trainer_case_studies import save
+                    return self.response(201,save(store,body))
+                if self.path == '/api/investigations/trial-cases':
+                    from .trial_rollouts import comparison
+                    return self.response(201,comparison(store,body))
                 if self.path == '/api/experiment-history':
                     from .investigation_workspace import annotate
                     return self.response(201,annotate(store,body))
@@ -771,6 +964,34 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 if self.path == '/api/trainer-telemetry':
                     from .trainer_telemetry import receive
                     return self.response(200,receive(store,body))
+                if self.path == '/api/run-records':
+                    from .run_records import receive
+                    return self.response(200,receive(store,body))
+                if self.path == '/api/experiments/settings':
+                    from .configuration_comparison import compare
+                    if not isinstance(body,dict) or 'experiments' not in body or set(body)-{'experiments','sources','environment','q','differences_only','limit','offset'}:
+                        raise InputError('Invalid settings comparison fields')
+                    return self.response(200,compare(store,**body))
+                if self.path == '/api/experiments/selection':
+                    from .experiment_management import selection
+                    if not isinstance(body,dict) or 'experiments' not in body or set(body)-{'experiments','environment'}:
+                        raise InputError('Invalid experiment selection fields')
+                    return self.response(200,selection(store,**body))
+                if self.path == '/api/experiments/organize':
+                    from .experiment_management import organize_many
+                    if not isinstance(body,dict) or 'experiments' not in body or set(body)-{'experiments','project','add_tags','remove_tags','pinned','archived'}:
+                        raise InputError('Invalid bulk organization fields')
+                    return self.response(200,organize_many(store,**body))
+                if self.path == '/api/experiment-labels':
+                    from .run_records import organize
+                    if not isinstance(body,dict) or 'experiment' not in body or set(body)-{'experiment','title','project','tags','notes','pinned','archived'}:
+                        raise InputError('Invalid organization fields')
+                    return self.response(200,organize(store,**body))
+                if self.path == '/api/experiment-selections':
+                    from .run_records import save_selection
+                    if not isinstance(body,dict) or not {'name','experiments'}<=set(body) or set(body)-{'name','experiments','environment'}:
+                        raise InputError('Invalid selection fields')
+                    return self.response(200,save_selection(store,**body))
                 if self.path == '/api/execution-records':
                     from .execution_records import receive
                     return self.response(200,receive(store,body))
@@ -841,6 +1062,17 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 self.response(400, {"error": str(e)})
 
     server = LocalServer((host, port), Handler)
+    if port == 0 and workspace_directory is not None:
+        reserved = workspace_directory.ports()
+        # An automatic new workspace must not take another study's saved intake port.
+        for _ in range(32):
+            if server.server_address[1] not in reserved:
+                break
+            server.server_close()
+            server = LocalServer((host, 0), Handler)
+        else:
+            server.server_close()
+            raise InputError('Could not allocate a distinct workspace port; choose one with --port')
     port = server.server_address[1]
     from .monitoring import Service as MonitoringService
     monitor_service=intake_service=None
@@ -855,6 +1087,13 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
         reference_worker = Worker(store, references=True, complete_run=True)
         occurrence_worker = Worker(store, occurrences=True, complete_run=True)
         frame_worker = Worker(store, frames=True, max_actions=20)
+        from .workspace_directory import WorkspaceManager
+        if workspace_directory is not None:
+            try:
+                workspace_manager = WorkspaceManager(store, f'http://127.0.0.1:{port}', workspace_instance,
+                                                     directory=workspace_directory, enabled=not container)
+            except (OSError,sqlite3.Error) as error:
+                workspace_error = str(error)
     except Exception:
         if intake_service:intake_service.close()
         if monitor_service:monitor_service.close()
@@ -874,10 +1113,12 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
         raise
     url = f'http://127.0.0.1:{port}' if container else f'http://{host}:{port}'
     print(f"Rilldex: {url}", flush=True)
+    if on_ready:
+        on_ready(url)
     if open_browser:
         import webbrowser
         try:
-            webbrowser.open(url + '/connections')
+            webbrowser.open(url + '/')
         except (webbrowser.Error, OSError):
             print('Browser launch unavailable; open the printed URL from your workstation.', flush=True)
     previous_term = None
@@ -886,11 +1127,24 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
         def terminate(signum, frame):
             threading.Thread(target=server.shutdown, daemon=True).start()
         signal.signal(signal.SIGTERM, terminate)
+    finished = threading.Event()
+    if stop_event is not None:
+        def stop_managed_workspace():
+            while not finished.wait(.1):
+                if stop_event.is_set():
+                    server.shutdown()
+                    return
+        threading.Thread(target=stop_managed_workspace, daemon=True).start()
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
+        finished.set()
         if previous_term is not None:
             signal.signal(signal.SIGTERM, previous_term)
-        intake_service.close()
-        monitor_service.close()
-        server.server_close(); worker.close(); activity_worker.close(); entity_worker.close(); reference_worker.close(); occurrence_worker.close(); frame_worker.close()
+        try:
+            if workspace_manager:
+                workspace_manager.close()
+        finally:
+            intake_service.close()
+            monitor_service.close()
+            server.server_close(); worker.close(); activity_worker.close(); entity_worker.close(); reference_worker.close(); occurrence_worker.close(); frame_worker.close()

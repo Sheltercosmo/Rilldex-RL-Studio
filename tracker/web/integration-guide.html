@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rilldex · Integration guide</title><link rel="stylesheet" href="/connections.css"><link rel="stylesheet" href="/workspace.css"><link rel="icon" type="image/svg+xml" href="/rilldex-mark.svg"><meta name="theme-color" content="#19212f"><meta name="description" content="Rilldex — RL Behavior Inspector. Monitor training, explore behavior maps and inspect rollout evidence."></head>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rilldex · Integration guide</title><link rel="stylesheet" href="/connections.css"><link rel="stylesheet" href="/workspace.css"><link rel="icon" type="image/svg+xml" href="/rilldex-mark.svg"><meta name="theme-color" content="#19212f"><meta name="description" content="Rilldex — RL Behavior Inspector. Monitor training, explore behavior maps and inspect rollout evidence."><link rel="stylesheet" href="/workspace-layout.css"></head>
 <body class="workspace" data-app="connections"><header class="workspace-bar"><div><a class="breadcrumb" href="/connections">Connections /</a><strong>Integration guide</strong></div><div class="bar-actions"><a href="/connections">Back to connections</a></div></header><main>
 <div class="page-head"><div><h1>Capture once, inspect across frameworks</h1><p>Choose the richest record your rollout code actually exposes. The tracker SDK does not import a trainer or run an inference model.</p></div></div>
 <section id="deployment"><h2>Run where your training data lives</h2><p>One saved connection reads existing rollouts, then follows new output. You can attach halfway through training without changing or restarting the trainer.</p><nav class="capture-tabs" aria-label="Deployment setup"><a href="#deployment-local">Local OS</a><a href="#deployment-docker">Docker</a><a href="#deployment-remote">Remote GPU host</a><a href="#deployment-cloud">S3 / GCS</a><a href="#deployment-notebook">Colab / notebook</a><a href="#deployment-restart">Stop &amp; restart</a></nav>
@@ -339,4 +339,33 @@ page = data.changes("revisions", cursor=None)
 # Process idempotently; save page["next_cursor"] after success.</pre>
 <p>Follow sources, revision receipts, graph headers, measurements, monitor results and trainer facts through separate cursors. Analysis can arrive after source capture. The browser event stream is a refresh signal; it is not a durable receipt feed. Use workspace archives when you need to restore the whole application, rather than export analysis tables.</p>
 <p>CLI: <code>analysis catalog</code>, <code>analysis table</code>, <code>analysis sql --file query.sql</code>, <code>analysis export</code>, <code>analysis changes</code>. Repository reference: <code>docs/DATA_ACCESS.md</code>. No Kafka / OTLP receiver or public authenticated service is implemented.</p>
-</section></main><script src="/choice-labels.js"></script><script src="/workspace-navigation.js"></script><script src="/workspace.js"></script><script src="/deployment-guide.js"></script></body></html>
+</section>
+<section id="weave-import"><h2>Import Weave traces</h2><p>Export full call records from Weave as JSON or JSONL, including children. In Data &amp; workflows → Import files, choose the export and select Check evidence, then Import snapshots. Calls are grouped by project and trace ID; reimporting the same snapshot reuses it.</p>
+<pre class="code">rilldex --db study.sqlite import calls.jsonl --format weave
+rilldex --db study.sqlite serve</pre>
+<p>The source map shows nested calls, recorded outputs and links back to Weave. W&amp;B run and logging-step context is retained when supplied. Copied input histories are kept separate from generated output.</p>
+<p>OpenAI chat completions and Anthropic message outputs are decoded for recorded LLM calls. Other payloads and object references remain source records. This route imports saved exports; it does not continuously synchronize a Weave account. Calls from filtered exports may be missing; scorer outputs and arbitrary numeric scores are not automatically treated as agent behavior or reward.</p></section>
+<section id="investigation-trials"><h2>Run a trial from a rollout finding</h2>
+<p>Save an investigation, open Checks &amp; findings, then Prepare trial. Choose a rollout prefix, settings, variants and seeds. Export the design; the unchanged reference arm is included.</p>
+<pre class="code">from rilldex import TrialStudy
+from my_runner import run_trial
+
+TrialStudy.load("trial.json").run(run_trial, output="trial-results.json")</pre>
+<p>Your Python callback receives the prefix, configuration, added context, seed, checkpoint reference and limits. It owns restoration and budget enforcement. Return the observed metrics and actual applied settings:</p>
+<pre class="code">return {
+    "status": "completed",  # error / blocked / incomplete also supported
+    "metrics": {"success": measured_success},
+    "applied": {
+        "configuration": actual_config,
+        "context_append": actual_context,
+        "seed": actual_seed,
+        "checkpoint_reference": loaded_checkpoint,
+        "restored_state": restored_components,
+        "reset_state": restarted_components,  # [] unless intentionally reset
+    },
+    "experiment": captured_run_name,  # optional
+    "rollout_ids": captured_rollout_ids,  # exact ingestion result IDs
+}</pre>
+<p>Import results on the check to compare paired seeds and open returned runs. Replay uses only the selected prefix; rescoring uses the complete captured rollout. For checkpoint branches, choose Restore or Start fresh for each state component and report what your runner applied. Text replay does not restore an environment.</p>
+<p>Results save after each callback. Reuse the output file to skip finished jobs; use <code>retry_failed=True</code> for other statuses. Use <code>job["id"]</code> as the idempotency key for external jobs. An interrupted callback may run again. One process owns each output file. See <code>docs/INVESTIGATION_TRIALS.md</code> for the adapter contract.</p><p>Return <code>rollout_ids</code> to open exact maps and Compare returned behavior. Paired mode requires both completed jobs and every declared trace. All returned evidence retains partial results. Refresh rollout evidence after late traces arrive; saved comparisons stay pinned. Shared traces are excluded from behavior changes. Record <code>trial_job_id</code> and <code>seed</code> in rollout metadata to check the link.</p></section>
+</main><script src="/choice-labels.js"></script><script src="/workspace-navigation.js"></script><script src="/workspace-layout.js"></script><script src="/workspace.js"></script><script src="/deployment-guide.js"></script></body></html>

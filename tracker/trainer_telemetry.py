@@ -67,10 +67,49 @@ VERL['kl_loss'] = dict(VERL['actor/kl_loss'])
 TRL['grad_norm'] = metric('Gradient norm', 'gradients', 'native norm', 'trainer-reported norm', 'Gradient norm emitted by the trainer. Norm type, distributed reduction and clipping boundary follow the recorded trainer version; not a policy divergence measure.')
 VERL['actor/grad_norm'] = metric('Actor gradient norm', 'gradients', 'native norm', 'actor-reported norm', 'Actor gradient norm as emitted by the native optimizer path; norm type, distributed reduction and clipping boundary depend on the recorded trainer implementation.')
 VERL['critic/grad_norm'] = {**VERL['actor/grad_norm'], 'label':'Critic gradient norm', 'definition':'Critic gradient norm as emitted by the native optimizer path; separate from actor gradients.'}
-PROFILES = {'trl-grpo': TRL, 'trl-ppo': {**TRL, **PPO}, 'verl': VERL, 'custom': {}}
+# ms-swift's reductions are not interchangeable with TRL's token reductions.
+# Source and replay evidence: research/public-trainer-2026-10-21/README.md.
+SWIFT = {key: dict(TRL[key]) for key in (
+    'loss', 'kl', 'grad_norm', 'num_tokens', 'completions/mean_length',
+    'train_tokens_per_second', 'train_samples_per_second', 'train_steps_per_second')}
+SWIFT.update({
+    'reward': metric('Reward', 'reward', 'reward', 'mean group reward; log-interval mean', 'Mean weighted reward across generation groups, averaged over the logging interval. Reward weights and functions belong to the training configuration; not a solve rate. The recorded split identifies training or evaluation.'),
+    'reward_std': metric('Reward standard deviation', 'reward', 'reward', 'configured group or batch standard deviation; log-interval mean', 'Mean within-group standard deviation for group/none reward scaling, or batch standard deviation for batch scaling. The scale_rewards setting is required to distinguish them.'),
+    'frac_reward_zero_std': metric('Groups with no reward variation', 'reward', 'fraction', 'group fraction; log-interval mean', 'Fraction of generation groups whose reward standard deviation is close to zero under torch.isclose. Includes all-equal successful and all-equal unsuccessful groups; not a filtering or failure rate.'),
+    'learning_rate': metric('Learning rate', 'other', 'learning rate', 'trainer logger value', 'Learning rate emitted by the trainer at the recorded update.'),
+    'completions/clipped_ratio': metric('Completion truncation', 'tokens', 'fraction', 'completion fraction; log-interval mean', 'Fraction of generated completions marked truncated. Dynamic sampling uses the final occurrence of each request ID. Not policy clipping or discarded training tokens.'),
+    'cispo_clip_ratio': metric('CISPO clipping fraction', 'clipping', 'fraction', 'masked trainer reduction; log-interval mean', 'Fraction above the configured CISPO upper importance-weight bound. The reduction follows the recorded sampling level and active completion mask.'),
+})
+for suffix, label in (('mean', 'Mean'), ('min', 'Minimum'), ('max', 'Maximum')):
+    SWIFT['entropy/' + suffix] = metric(label + ' completion entropy', 'entropy', 'nats', 'per-completion token mean; ' + suffix + '; log-interval mean',
+        label + ' of per-completion mean token entropies across gathered completions, then averaged over the logging interval. Min/max are not extrema over all individual tokens.')
+for suffix, label in (('min', 'Minimum'), ('max', 'Maximum')):
+    SWIFT['completions/' + suffix + '_length'] = metric(label + ' completion length', 'tokens', 'tokens / completion', 'completion ' + suffix + '; log-interval mean',
+        label + ' gathered completion length per generation batch, averaged over the logging interval; not a run-wide extreme.')
+for key, label in (('region_mean', 'Policy clipping region'), ('low_mean', 'Lower policy clipping'), ('high_mean', 'Upper policy clipping'), ('low_min', 'Minimum lower policy clipping'), ('high_max', 'Maximum upper policy clipping')):
+    SWIFT['clip_ratio/' + key] = metric(label, 'clipping', 'fraction', 'masked trainer reduction; rank ' + key.split('_')[-1] + '; log-interval mean',
+        'Advantage-sign-aware clipping under the configured policy bounds. Token-level sampling uses the completion mask; sequence-level sampling uses a sequence mean. Rank statistic is averaged over the logging interval. Not completion truncation.')
+from .sb3_metrics import definitions as sb3_definitions
+GRPO_REWARD = {'reward': metric('Reward','reward','reward','native generation mean; log-interval mean',
+    'Native mean of summed reward-function scores weighted by reward_weights, averaged over the logging interval. Scorable population and missing-value handling follow the captured TRL version. Not advantage, task success or independent evaluation; the recorded split identifies training or evaluation.')}
+PROFILES = {'trl-grpo': {**TRL,**GRPO_REWARD}, 'trl-ppo': {**TRL, **PPO}, 'ms-swift-grpo': SWIFT, 'verl': VERL, 'stable-baselines3': sb3_definitions(metric), 'custom': {}}
+TRANSFORMERS_PROFILES = frozenset(('trl-grpo', 'trl-ppo', 'ms-swift-grpo'))
+
+
+def _swift_reward_definition(key):
+    if not key.startswith('rewards/') or '/' not in key[8:]:
+        return None
+    name, statistic = key[8:].rsplit('/', 1)
+    if not name or statistic not in ('mean', 'std'):
+        return None
+    label = 'mean' if statistic == 'mean' else 'standard deviation'
+    return metric(name + ' · ' + label, 'reward', 'component reward', 'per-function ' + label + '; log-interval mean',
+        'Unweighted reward-function ' + label + ' over non-NaN completion rewards, averaged over the logging interval. Function scores may use different scales; not the weighted total reward or a solve rate.')
 
 
 def initialize(c):
+    from .telemetry_queries import initialize as initialize_queries
+    initialize_queries(c)
     c.executescript('''CREATE TABLE IF NOT EXISTS trainer_telemetry (
       producer TEXT NOT NULL, experiment TEXT NOT NULL, record_id TEXT NOT NULL,
       session TEXT NOT NULL, step INTEGER NOT NULL, document TEXT NOT NULL,
@@ -144,7 +183,7 @@ def packet(logs, *, producer, experiment, framework, framework_version, objectiv
     Unknown numeric keys survive as native/unmapped values. Overrides require
     complete definitions; they form distinct series if their meaning changes.
     """
-    if framework not in PROFILES: raise InputError('Use trl-grpo, trl-ppo, verl or custom with explicit definitions')
+    if framework not in PROFILES: raise InputError('Use trl-grpo, trl-ppo, ms-swift-grpo, verl or custom with explicit definitions')
     if not isinstance(logs, dict): raise InputError('logs must be a dictionary')
     catalog = {**PROFILES[framework], **(definitions or {})}
     values = {}
@@ -157,10 +196,12 @@ def packet(logs, *, producer, experiment, framework, framework_version, objectiv
             raw=int(raw) if isinstance(raw,Integral) else float(raw)
         if key in {'step','epoch','global_step','_step','_timestamp','_runtime'}: continue
         native = key
-        if framework.startswith('trl-'):
+        if framework in TRANSFORMERS_PROFILES:
             if split == 'evaluation' and key.startswith('eval_'): native = key[5:]
             elif split == 'train' and key.startswith('train/'): native = key[6:]
         definition = catalog.get(native)
+        if definition is None and framework == 'ms-swift-grpo':
+            definition = _swift_reward_definition(native)
         if definition is None and (type(raw) not in (float,int) or isinstance(raw,bool)): continue
         definition = definition or metric(key, 'other', 'native', 'unmapped', 'Unmapped native scalar. Supply an explicit definition to classify it.')
         if raw is None: value, status = None, 'missing'
@@ -171,7 +212,7 @@ def packet(logs, *, producer, experiment, framework, framework_version, objectiv
     if not values: return None
     record = dict(session=session,step=step,clock=clock,split=split,framework=framework,
                   framework_version=framework_version,objective=objective,population=population,
-                  environment=environment,metrics=values,mapping=MAPPING)
+                  environment=environment,metrics=values,mapping='ms-swift-grpo-metrics/1' if framework == 'ms-swift-grpo' else MAPPING)
     if training_uses is not None:
         # Own the supplied references; callers may reuse and mutate their batch.
         from copy import deepcopy
@@ -235,8 +276,12 @@ def snapshot(store, *, experiment=None, environment=None, limit=1000):
                                    record_ids=[r['id'] for r in matches]))
             series.append(dict(id='telemetry-'+digest([context_key,key,definition]),context=json.loads(context_key),
                                native_key=key,**spec,points=points,recorded=sum(p['status']=='recorded' for p in points),coordinates=len(points)))
+    contexts=[json.loads(key) for key in streams]
+    expected=GROUPS
+    if contexts and all(c['framework']=='stable-baselines3' for c in contexts):
+        expected=('reward','loss','throughput') + (('entropy','kl','clipping') if any(c['objective']=='ppo' for c in contexts) else ())
     return dict(schema=VERSION,series=series,truncated=truncated,omitted_series=omitted_series,record_limit=limit,records=len(rows[:limit]),
-                missing_groups=[g for g in GROUPS if not any(s['group']==g and s['recorded'] for s in series)],
+                missing_groups=[g for g in expected if not any(s['group']==g and s['recorded'] for s in series)],
                 boundary='Native logged coordinates; no rollout joins, cross-writer averaging, inferred values or universal health thresholds.')
 
 

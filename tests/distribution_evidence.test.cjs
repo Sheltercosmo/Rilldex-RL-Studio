@@ -1,6 +1,37 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const E=require('../tracker/web/distribution-evidence.js');
+
+test('report segments filter exact pairs, preserve unresolved, and export complete selection',()=>{
+ const d=fixture(),same=d.cases.filter(c=>c.category==='same'&&c.run_id==='r5');
+ for(const [i,c]of same.entries())c.error_followup={category:i<14?'reported_again':i<20?'no_reported_error':'followup_unknown'};
+ d.approach_followup={schema:'approach-followup-distribution/1',weighting:'rollout'};
+ const v=E.select(d,{category:'same',window:'later',report:'reported_again',page:1});
+ assert.equal(v.matching_cases,14);assert.equal(v.rows.length,2);assert.equal(v.expected_cases,27);
+ const out=E.exportSelection(d,v);assert.equal(out.cases.length,14);assert.equal(out.filters.report,'reported_again');
+ assert.deepEqual(out.approach_followup,d.approach_followup);
+ assert.equal(E.select(d,{category:'same',window:'later',report:'followup_unknown'}).matching_cases,6);
+ assert.equal(E.select(d,{category:'same',window:'later',report:'unknown'}).matching_cases,1);
+ assert.equal(E.select(d,{category:'same',window:'earlier',report:'reported_again'}).matching_cases,0);
+ same[0].graph_id='wrong';assert.equal(E.select(d,{category:'same',window:'later',report:'reported_again'}).matching_cases,13);
+ d.lens='work';assert.equal(E.select(d,{category:'same',window:'later',report:'reported_again'}).matching_cases,26);
+});
+test('approach case search includes selected reason and bound later feedback without changing shares',()=>{
+ const d=fixture(),c=d.cases.find(c=>c.run_id==='r5'&&c.category==='same');
+ c.stated_reason={status:'selected',node_id:'reason',text:'Use user installation to avoid permission errors'};
+ c.error_followup={category:'reported_again',label:'Error reported again'};
+ c.response_context={previous:{status:'available',records:[{event_id:'f1',text:'Permission denied'}]},current:{status:'available',records:[{event_id:'f2',text:'Packages installed'}]}};
+ const before=JSON.stringify(d);
+ for(const query of ['avoid permission','packages installed','error reported again']){
+  const v=E.select(d,{category:'same',window:'later',query});assert.equal(v.matching_cases,1);assert.equal(v.expected_cases,27);
+  const exported=E.exportSelection(d,v);assert.equal(exported.cases[0].stated_reason.node_id,'reason');
+ }
+ const preview=E.preview(c);assert.equal(preview.reason.node_id,'reason');assert.equal(preview.laterResponses[0].event_id,'f2');
+ assert.equal(JSON.stringify(d),before);
+ c.response_context.current.status='unavailable';c.stated_reason.status='unavailable';
+ assert.equal(E.preview(c).reason,null);assert.deepEqual(E.preview(c).laterResponses,[]);
+ assert.equal(E.select(d,{category:'same',window:'later',query:'packages installed'}).matching_cases,0);
+});
 function fixture(){
  const d={snapshot_id:'distribution-frozen',lens:'procedure',observer:'reviewed',cohort_id:'cohort-1',weighting:'rollout',
   categories:[{id:'same'},{id:'unknown'}],baseline:{start:0,end:2},current:{start:5,end:7},comparable:true,

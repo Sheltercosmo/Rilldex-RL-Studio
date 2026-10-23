@@ -10,7 +10,7 @@ import threading
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from .schema import InputError, digest, dumps
-from . import graph_store, graph_queries, analysis_metrics
+from . import graph_store, graph_queries, analysis_metrics, map_selection
 from .rollout_metrics import DEFINITIONS, VERSION as METRIC_VERSION, metric_aggregation
 
 VERSION='population-monitor/1'
@@ -279,9 +279,11 @@ def scoped(runs,experiment=None,environment=None):
 
 
 def values(store,monitor_id,run_ids):
+    if not run_ids:return {}
     with store.connect() as c:
         return {r['run_id']:{'id':r['id'],**json.loads(r['document'])} for r in c.execute('''SELECT v.id,v.run_id,v.document FROM monitor_latest l
-            JOIN monitor_values v ON v.id=l.value_id WHERE l.monitor_id=?''',(monitor_id,)) if r['run_id'] in run_ids}
+            JOIN monitor_values v ON v.id=l.value_id WHERE l.monitor_id=?
+            AND v.run_id IN (SELECT value FROM json_each(?))''',(monitor_id,json.dumps(sorted(run_ids))))}
 
 
 def current_values(store,monitor,runs,catalog=None):
@@ -423,13 +425,17 @@ def snapshot(store,experiment=None,environment=None):
 
 
 def _snapshot(store,experiment=None,environment=None):
+    from .first_session import readiness
     from . import execution_records, generation_cohorts, active_captures
     all_runs=population(store);runs=scoped(all_runs,experiment,environment);ids={r['id'] for r in runs};monitors=[]
     catalog=graph_store.catalog(store)
     from .reward_detectors import catalog as reward_catalog
     diagnostic_observers={row['id']:row for row in reward_catalog(store)['observers']}
     diagnostic_definitions={key:row['checks'] for key,row in diagnostic_observers.items()}
-    graph_counts=Counter(g['run_id'] for g in catalog['graphs'] if g['observer']!='source' and g['coverage'].get('semantic_relations')!='unavailable' and g['coverage'].get('observation_kind')!='feedback-assessment')
+    graph_counts=Counter(g['run_id'] for g in catalog['graphs'] if map_selection.semantic(g))
+    run_graphs=defaultdict(list)
+    for g in catalog['graphs']:run_graphs[g['run_id']].append(g)
+    default_maps={rid:map_selection.reference(map_selection.default(graphs)) for rid,graphs in run_graphs.items()}
     for d in definitions(store):
         row={**d,'description':description(d,diagnostic_definitions)}
         row['observer_label']=next((g['observer_label'] for g in catalog['graphs'] if g['observer']==d['observer']),
@@ -456,20 +462,23 @@ def _snapshot(store,experiment=None,environment=None):
             FROM continuation_studies
             UNION SELECT DISTINCT experiment,json_extract(document,'$.environment') environment
             FROM trainer_telemetry
+            UNION SELECT DISTINCT experiment,NULL environment FROM run_records
             UNION SELECT DISTINCT experiment,json_extract(document,'$.context.environment') environment
             FROM execution_records
             UNION SELECT DISTINCT experiment,json_extract(document,'$.context.environment') environment
             FROM generation_cohorts
             UNION SELECT DISTINCT experiment,json_extract(m.value,'$.context.environment') environment
             FROM generation_cohorts,json_each(document,'$.members') m''').fetchall()
+        run_labels={r['experiment']:r['title'] for r in c.execute('SELECT experiment,title FROM experiment_labels')}
     for row in facets:
         experiments.setdefault(row['experiment'],0)
         if row['environment']:environments.add(row['environment'])
-    return {'schema':VERSION,'captured_at':now(),'workspace':{'database':str(store.path.resolve()),'rollouts':len(all_runs),'semantic_rollouts':sum(bool(graph_counts[r['id']]) for r in all_runs)},'monitors':monitors,'runs':[{**r,'semantic_graphs':graph_counts[r['id']],'metadata':{k:r['metadata'].get(k) for k in ('task_id','experiment','environment','training_step','source_line','model','policy_version','checkpoint')}} for r in runs],
+    return {'schema':VERSION,'captured_at':now(),'workspace':{'database':str(store.path.resolve()),'rollouts':len(all_runs),'semantic_rollouts':sum(bool(graph_counts[r['id']]) for r in all_runs)},'monitors':monitors,'runs':[{**r,'semantic_graphs':graph_counts[r['id']],'default_map':default_maps.get(r['id']),'metadata':{k:r['metadata'].get(k) for k in ('task_id','experiment','environment','training_step','source_line','model','policy_version','checkpoint')}} for r in runs],
+        'first_session':readiness(store,experiment=experiment,environment=environment,graphs=catalog['graphs']),
         'execution_context':execution_records.overview(store,experiment,environment),
         'declared_populations':generation_cohorts.project(store,experiment=experiment,environment=environment),
         'active_captures':active_captures.snapshot(store,experiment=experiment,environment=environment),
-        'experiments':[{'id':k,'count':v} for k,v in sorted(experiments.items())],
+        'experiments':[{'id':k,'label':run_labels.get(k,k),'count':v} for k,v in sorted(experiments.items())],
         'environments':sorted(environments),
         'last_sync':json.loads(state[0]) if state else None,'population':len(runs),'training_rollouts':sum(type(r['metadata'].get('training_step')) is int and bool(r['metadata'].get('experiment')) for r in runs)}
 
@@ -517,7 +526,7 @@ def options(store):
             'analysis_inputs':{'schema':contract_version,'operations':{k:dict(v['observer_input'],accepted=list(v['observer_input']['accepted'])) for k,v in registered().items()}},
             'graph_observers':[{'id':k,'label':v} for k,v in sorted(semantic.items())], 'presets':graph_queries.PRESETS,
             'activities':activities,'relations':relations,
-            'measurement_review':{'version':review_version,'aggregation':'opportunity_ratio','custom_aggregation':'incidence','default_size':20},
+            'measurement_review':{'version':review_version,'aggregation':'opportunity_ratio','custom_aggregation':'incidence','diagnostic_indicators':True,'default_size':20},
             'question_setup':{'schema':'monitor-question-setup/1','population_fields':['experiment','environment','split']}}
 
 
@@ -575,14 +584,22 @@ def preflight(store,body):
             'notice':'Evidence presence only: no projections, selections or model jobs ran. This page is ordered by rollout ID, not sampled for prevalence. Missing relationships do not establish absence; no readiness or accuracy certification is implied.'}
 
 
-def rollout(store,run_id,observer=None):
+def rollout(store,run_id,observer=None,graph_id=None):
     with store.connect() as c:
         row=c.execute('SELECT document FROM runs WHERE id=?',(run_id,)).fetchone()
     if row is None:raise KeyError(run_id)
     run=json.loads(row[0]);graphs=graph_store.catalog(store,run_id=run_id)['graphs']
-    chosen=next((g for g in graphs if g['observer']==observer),None)
-    if chosen is None:chosen=next((g for g in graphs if g['observer']=='software-plan-evidence'),None) or next((g for g in graphs if g['coverage'].get('semantic_relations')!='unavailable'),None) or next((g for g in graphs if g['observer']=='source'),None) or next(iter(graphs),None)
-    return {'run':run,'graphs':graphs,'graph':graph_store.read(store,chosen['id']) if chosen else None,
+    if graph_id:
+        graph=graph_store.read(store,graph_id)
+        if graph['run_id']!=run_id or observer is not None and graph['observer']!=observer:
+            raise InputError('This saved graph belongs to a different rollout or observer')
+        graphs=[graph];selection='pinned'
+    else:
+        chosen=next((g for g in graphs if g['observer']==observer),None) if observer is not None else map_selection.default(graphs)
+        graph=graph_store.read(store,chosen['id']) if chosen else None
+        selection='requested' if observer is not None and graph else 'unavailable' if not graph else 'default'
+    return {'run':run,'graphs':graphs,'graph':graph,
+            'selection':{'status':selection,'requested_observer':observer},
             'capabilities':{'work_subject_review':'work-subject-bindings/2','relationship_review':'relationship-review/1','unit_review':'unit-review/1'}}
 
 

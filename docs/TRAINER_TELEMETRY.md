@@ -1,5 +1,11 @@
 # Trainer metrics
 
+To find runs first, use **Overview → All experiments**. Search, select up to three,
+and choose **Compare runs**. [Experiment list](EXPERIMENTS.md).
+
+**Run details** opens saved settings, trainer sessions and run history. Select a
+curve point to inspect execution settings explicitly linked to that log.
+
 Open **Overview → Training → Training signals**. Summary shows a compact preview; the Training view contains the full comparison controls. Select a run, then **Compare run** to overlay up to three runs on the same recorded-step axis. Matching recorded definitions and population labels share a chart; this does not establish matched task composition. Use **Add metric** for additional signals.
 
 Drag an interval or enter step bounds to align every chart and hold the displayed data. **Inspect updates** opens the recorded logs and linked rollouts. **Resume updates** returns to live refresh; **Export comparison** preserves the displayed data and settings. Links open the execution timeline, behavior measures and capture setup with the run selected.
@@ -169,7 +175,7 @@ comparison; previous saved investigations stay unchanged.
 
 ## Existing logs and staged batches
 
-Import a TRL `trainer_state.json` or JSONL objects with `step` and native keys. A JSONL object can also contain `{"step": 1, "metrics": {...}}`.
+Import a TRL or ms-swift `trainer_state.json`, or JSONL objects with `step` and native keys. A JSONL object can also contain `{"step": 1, "metrics": {...}}`.
 
 ```sh
 rilldex --db study.sqlite telemetry import trainer_state.json --framework trl-grpo --framework-version 1.15.0 --objective dapo-config-v1 --session training-start-1 --experiment run-a --producer run-a/learner
@@ -177,6 +183,8 @@ rilldex --db study.sqlite telemetry show --experiment run-a
 ```
 
 Repeat the same import after another batch is written; unchanged log records are idempotent. An incomplete final JSONL line is left for the next import. Malformed completed lines raise an error. For continuous delivery use the SDK/outbox above. `--definitions metrics.json` adds or overrides native definitions; a changed definition becomes a separate series.
+
+For ms-swift GRPO, use `--framework ms-swift-grpo` and your installed version. The profile identifies reward components, zero-variation groups, completion entropy, clipping, length and gradient norms; `eval_` metrics remain separate. It also works with the Transformers callback. Definitions retain the trainer's reductions. [Public log replay and coverage](../research/public-trainer-2026-10-21/README.md).
 
 Offline workers can use the existing `rilldex capture export` / `capture import` bundle route. Local analysis without a server can pass `tracker.store.Store("study.sqlite")` as the telemetry target, together with an explicit `producer=`.
 
@@ -195,13 +203,29 @@ loss = ws.sql("""
 """, limit=10000)
 ```
 
-`GET /api/trainer-telemetry?experiment=run-a` returns the chart series. `POST /api/trainer-telemetry` accepts the versioned packet produced by `tracker.trainer_telemetry.packet()`. SQL and standard analysis exports expose the complete retained logs; the dashboard reads the latest 1,000 logs and up to 64 distinct series, displaying any truncation.
+**Training → Training signals** starts with the newest session, selected from the full history before chart limits. **Session** and **Browse sessions** select a worker/restart; comparisons have independent selectors. Select an interval to freeze its inputs; **Resume updates** includes later arrivals. **Browse metrics** searches all metrics in that scope. **Inspect updates** pages through original coordinates; **Export comparison** downloads matching native JSONL or the plotted view.
+
+Plots retain actual first, last and extreme points per bucket. Counts, ranges and EMA use all coordinates; missing or conflicting values break lines. The first query builds a local index; later queries index only new logs.
+
+**Compare linked rollouts** on a chart saves two native update intervals and their referenced rollout maps. It shows missing/partial links and separates reused rollouts from outcome changes. **Back to training chart** restores the range and capture cutoff; **Recheck linked evidence** includes newly delivered links and maps without changing the selected logs. Requires `training_uses` references; equal step numbers never create links.
+
+Python: `ws.compare_trainer_rollouts(reference=a, selected=b)`, where each selection contains `series_id`, `as_of`, `start` and `end` from `ws.trainer_signals()`. The returned investigation opens in the UI and supports the same report export.
+
+**Behavior & outcomes** compares saved monitor values for those rollouts. Switch to **Same tasks · equal weight** to compare shared task contexts; expand a measure for task coverage and exact receipts. **Change measures** saves a new comparison with your selection, including code-defined monitors. Python accepts `monitor_ids=[...]` in both `compare_rollouts()` and `compare_trainer_rollouts()`; no inference runs during capture.
+
+```sh
+rilldex --db study.sqlite telemetry query --experiment run-a --from-step 100 --to-step 200 --half-life 10
+rilldex --db study.sqlite telemetry query --experiment run-a --session-mode latest
+rilldex --db study.sqlite telemetry export interval.jsonl --experiment run-a --from-step 100 --to-step 200 --as-of 1234
+```
+
+Use `as_of` to reproduce a capture. CLI query/export default to all sessions; add `--producer`, `--session` or `--session-mode latest` to scope them. HTTP `/api/trainer-telemetry/query`, `/catalog` and `/export` accept the same fields. `/sessions` searches and pages through the full inventory. `/points` takes a `series` ID and returns `next_after`. Python: `ws.trainer_sessions(search="worker-0")` and `ws.trainer_signals(producer="worker-0", session="restart-2")`. The older `/api/trainer-telemetry` snapshot remains bounded for compatibility.
 
 ## Definitions and coverage
 
 | Profile | Native families | Distinctions preserved |
 | --- | --- | --- |
-| TRL GRPO | Loss, token entropy, reference KL, clipping region/bounds, cumulative tokens, completion length, trainer-reported rates | Objective clipping versus completion truncation; cumulative count versus rate |
+| TRL GRPO | Weighted reward, loss, token entropy, reference KL, clipping region/bounds, cumulative tokens, completion length, trainer-reported rates | Reward versus task success; objective clipping versus completion truncation; cumulative count versus rate |
 | TRL PPO | Policy/value loss, sampled sequence entropy, policy entropy, reference/update KL, policy/value clipping, episode rate | Sequence sum versus token mean; reference KL versus update KL; actor versus critic |
 | verl | Actor/critic loss, actor entropy, reference KL loss/update KL, policy clipping, batch token count, response length, step duration, throughput | Objective-specific reductions; tokens per second **per GPU** versus total throughput |
 | Custom | Explicit key definitions, any declared clock/population | Server, worker, learner, objective and restart boundaries |

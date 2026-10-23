@@ -64,3 +64,51 @@ test('a recorded absence of an immediate work target is not unresolved identity'
  const point=project(d).paths[0].points.find(p=>p.position===3);
  assert.equal(point.not_applicable,true);assert.equal(point.unresolved,false);assert.equal(point.pairs.length,0);
 });
+
+function reportsFixture(){
+ const data=fixture();Object.assign(data,{run_id:'run',source_hash:'source'});
+ data.episodes[0].category=data.links[0].category='returned';
+ const observations={graph_id:data.graph_id,run_id:data.run_id,source_hash:data.source_hash,records:data.episodes.map((e,i)=>({
+  episode_id:e.id,previous_unit_id:e.previous_unit_id,current_unit_id:e.current_unit_id,
+  procedure:i?'reconfigured_procedure':'same_procedure',error_followup:{category:i?'no_reported_error':'reported_again'}
+ }))};
+ return {data,observations};
+}
+test('response badges and coverage preserve independent procedure and diagnostic observations',()=>{
+ const {data,observations}=reportsFixture(),before=JSON.stringify({data,observations});
+ const p=project(data,{procedureObservations:observations}),pairs=p.paths[0].pairs;
+ assert.deepEqual(pairs.map(p=>[p.comparison.key,p.followup.key]),[['same_procedure','reported_again'],['reconfigured_procedure','no_reported_error']]);
+ assert.deepEqual(p.followups,{reported_again:1,no_reported_error:1,followup_unknown:0,no_prior_error:0,unknown:0,total:2,after_error:2});
+ assert.deepEqual(p.paths[0].rows[0].followups,p.followups);
+ assert.equal(JSON.stringify({data,observations}),before);
+ // No procedure comparison is required to display inspected executor feedback.
+ observations.records.forEach(r=>r.procedure='unresolved');
+ assert.deepEqual(project(data,{procedureObservations:observations}).followups,p.followups);
+});
+test('uninspected reports and known absence never turn into successful recovery',()=>{
+ const {data,observations}=reportsFixture();
+ observations.records[0].error_followup.category='followup_unknown';observations.records[1].error_followup.category='no_prior_error';
+ const p=project(data,{procedureObservations:observations});
+ assert.equal(p.followups.after_error,1);assert.equal(p.followups.followup_unknown,1);assert.equal(p.followups.no_prior_error,1);assert.equal(p.followups.no_reported_error,0);
+ const {followupText}=require('../tracker/web/work-timeline.js');
+ assert.match(followupText(p.followups).main,/1 later unresolved/);assert.doesNotMatch(followupText(p.followups).main,/success|recover/);
+ delete observations.records[0].error_followup;observations.records[1].error_followup.category='unsupported';
+ assert.equal(project(data,{procedureObservations:observations}).followups.unknown,2);
+});
+test('stale or ambiguous comparisons do not paint response badges from a different pair',()=>{
+ for(const mutate of [o=>o.graph_id='old',o=>o.source_hash='old',o=>o.run_id='old',o=>o.records.push({...o.records[0]})]){
+  const {data,observations}=reportsFixture();mutate(observations);
+  assert.equal(project(data,{procedureObservations:observations}).paths[0].pairs[0].followup.key,'unknown');
+ }
+ const {data,observations}=reportsFixture();observations.records[0].current_unit_id='wrong';
+ assert.equal(project(data,{procedureObservations:observations}).paths[0].pairs[0].followup.key,'unknown');
+});
+test('focus and duplicate witnesses preserve exact pair denominators; contributions carry no report overlay',()=>{
+ const {data,observations}=reportsFixture();data.links.push({...data.links[0],id:'second-witness'});
+ assert.equal(project(data,{procedureObservations:observations}).followups.total,2);
+ const focused=project(data,{procedureObservations:observations,visitIds:['c']});
+ assert.equal(focused.followups.total,1);assert.equal(focused.followups.reported_again,0);assert.equal(focused.followups.no_reported_error,1);
+ const contribution=project({...data,axis:'contributions'},{procedureObservations:observations});
+ assert.equal(contribution.followups,null);assert.ok(contribution.paths[0].pairs.every(p=>p.followup===null));
+ data.links=[];assert.equal(project(data,{procedureObservations:observations}).followups.total,0);
+});

@@ -194,10 +194,10 @@ body.workspace .active-captures{padding:16px 18px;margin:12px 0 20px;border:1px 
 body.workspace[data-app="monitor"] .overview-heading{margin:0 0 20px;align-items:flex-start}
 body.workspace[data-app="monitor"] .overview-heading h1{font-size:27px;line-height:1.25;margin:0 0 8px}
 body.workspace[data-app="monitor"] .overview-heading .page-description{margin:0;max-width:760px;font-size:13px;line-height:1.6}
-body.workspace[data-app="monitor"] .dashboard-scope{padding:14px 16px;margin:0 0 20px;background:#fff;border:1px solid var(--line,#dfe4ed);border-radius:12px;display:grid;grid-template-columns:minmax(160px,1.4fr) minmax(140px,1fr) auto;align-items:end;gap:14px}
-body.workspace[data-app="monitor"] .dashboard-scope>label{width:auto;max-width:none;min-width:0;margin:0;grid-column:auto}
-body.workspace[data-app="monitor"] .dashboard-scope select{width:100%;min-width:0}
-body.workspace[data-app="monitor"] .dashboard-scope>button{margin:0;min-height:36px}
+
+
+
+
 body.workspace[data-app="monitor"] .overview-tabs{display:flex;flex-wrap:wrap;gap:5px;padding:5px;background:#eceedf00;border:1px solid var(--line,#dfe4ed);border-radius:11px;margin:0 0 22px;width:fit-content;max-width:100%}
 body.workspace[data-app="monitor"] .overview-tabs a{border:0!important;padding:9px 16px;border-radius:7px;color:#586779;font-size:13px;font-weight:550;white-space:nowrap;line-height:1.35;text-decoration:none}
 body.workspace[data-app="monitor"] .overview-tabs a[aria-current="page"]{background:#fff;color:#304fcb;box-shadow:0 1px 3px #1b294414,0 0 0 1px #dce2f0}
@@ -212,14 +212,11 @@ body.workspace.overview-summary #overview-context{display:block;padding:0;margin
 .overview-section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 8px;flex-wrap:wrap}.overview-section-heading h2{font-size:16px;margin:0}.overview-section-heading a{font-size:12px}
 body.workspace.overview-summary #trainer-telemetry{padding:0;margin:0 0 30px;border:0;background:none}
 .overview-summary .telemetry-heading{margin:0 0 14px}.overview-summary .telemetry-heading h2{font-size:16px}.overview-summary .telemetry-heading p{font-size:12px;margin:6px 0 0}
-body.workspace.overview-summary .telemetry-preview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-.telemetry-preview-card{display:block;min-width:0;padding:18px;background:#fff;border:1px solid var(--line,#dfe4ed);border-radius:12px;text-decoration:none;color:var(--ink,#19283e)}
-.telemetry-preview-card h3{font-size:12px;color:#53637a;margin:0 0 10px;line-height:1.5}.telemetry-preview-card strong{font-size:25px;line-height:1.2;letter-spacing:-.5px}.telemetry-preview-card small{font-size:11px;color:#6b788c;display:block;line-height:1.5;margin-top:6px}.telemetry-preview-card svg{display:block;width:100%;height:70px;margin:14px 0 7px}.telemetry-preview-card:hover{border-color:#a9b8e6}.telemetry-preview-card:focus-visible{outline:2px solid #355cdb;outline-offset:3px}
 body.workspace.overview-summary #overview-view{display:block;margin:0 0 30px}.overview-summary #overview-view .section-heading{display:flex;margin:0 0 14px}.overview-summary #overview-view .section-heading h2{font-size:16px}
 body.workspace.overview-summary #monitor-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
 body.workspace.overview-summary .metric-card{display:flex;flex-direction:column;min-width:0}.overview-summary .metric-card .card-foot{margin-top:auto}
 body.workspace.overview-summary .metric-card .metric-cohort-chart{margin-top:0}
-.overview-summary #research-rail,.overview-summary .metric-meaning,.overview-summary .metric-card-details,.overview-summary .chart-cohort-definition,.overview-summary .population-chart-controls,.overview-summary .ii-brush-note{display:none!important}
+.overview-summary #research-rail{display:none!important}
 .overview-preview-note{margin:12px 0 0;font-size:12px;color:#66758b}.overview-preview-note a{margin-left:8px}
 body.workspace #overview-workflow{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:0 0 28px;padding:0;border:0;background:none}
 body.workspace .overview-workflow-card{min-width:0;background:#fff;border:1px solid var(--line,#dfe4ed);border-radius:12px;padding:20px;margin:0}.overview-workflow-card p{font-size:12px;line-height:1.6;color:#6a788d;margin:0 0 14px}
@@ -228,4 +225,4 @@ body.workspace .overview-workflow-card{min-width:0;background:#fff;border:1px so
 body.workspace.overview-focused #summary-strip{display:none}.overview-focused #overview-context{margin:0 0 20px}.overview-focused .measure-browser{padding:14px 16px;border:1px solid var(--line,#dfe4ed);border-radius:10px;background:#fff;margin:0 0 24px;align-items:center}
 body.workspace .measure-browser #axis-label{display:flex;gap:6px;min-width:125px;max-width:170px;flex-direction:column;margin:0}.measure-browser #axis-label span{font-size:11px}.measure-browser #axis-label select{width:100%;max-width:100%}
 @media(max-width:1100px){body.workspace.overview-summary .telemetry-preview-grid,body.workspace.overview-summary #monitor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-stat-grid{gap:10px}body.workspace #overview-workflow{grid-template-columns:1fr}}
-@media(max-width:700px){body.workspace[data-app="monitor"] .dashboard-scope{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:12px}.dashboard-scope #refresh{grid-column:1/-1;justify-self:end}body.workspace[data-app="monitor"] .overview-tabs{width:100%;display:flex;gap:4px;padding:5px}body.workspace[data-app="monitor"] .overview-tabs a{padding:8px 10px;font-size:12px}.overview-subnav{gap:15px}body.workspace .overview-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}body.workspace .overview-stat{padding:14px}.overview-stat>strong{font-size:24px}body.workspace.overview-summary .telemetry-preview-grid,body.workspace.overview-summary #monitor-grid{grid-template-columns:minmax(0,1fr)}.overview-workflow-card{padding:16px}.overview-rollout-link{gap:12px}.overview-summary #overview-view .section-heading>.muted{display:block}body.workspace .measure-browser #axis-label{flex:1;max-width:none}}
+@media(max-width:700px){body.workspace[data-app="monitor"] .overview-tabs{width:100%;display:flex;gap:4px;padding:5px}body.workspace[data-app="monitor"] .overview-tabs a{padding:8px 10px;font-size:12px}.overview-subnav{gap:15px}body.workspace .overview-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}body.workspace .overview-stat{padding:14px}.overview-stat>strong{font-size:24px}body.workspace.overview-summary .telemetry-preview-grid,body.workspace.overview-summary #monitor-grid{grid-template-columns:minmax(0,1fr)}.overview-workflow-card{padding:16px}.overview-rollout-link{gap:12px}.overview-summary #overview-view .section-heading>.muted{display:block}body.workspace .measure-browser #axis-label{flex:1;max-width:none}}

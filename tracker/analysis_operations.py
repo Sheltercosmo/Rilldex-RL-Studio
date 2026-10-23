@@ -4,6 +4,7 @@ from . import graph_store, behavior_sequences, work_state, work_episodes, repair
 from . import work_navigation, adaptation_patterns, history_evidence, feedback_opportunities, feedback_timing, work_order
 from . import recovery_windows, retry_outcomes, graph_queries, work_visits, work_subjects, work_return_references
 from . import declared_plans, work_consistency, work_structure_metrics, work_hierarchy
+from . import repeated_work
 from . import source_evidence, requested_evidence
 from .capabilities import CAPABILITY_VERSION
 from .analysis_contracts import CONTRACTS
@@ -142,6 +143,7 @@ add('work_visits', work_visits.VERSION + '|' + work_subjects.NAV_VERSION,
     parameters=Parameters(('run_id','source_hash','graph_id'),('recurrence_order','scope_consistency'),
         identifiers=('run_id','source_hash','graph_id'),validators=(('recurrence_order',work_order.validate),('scope_consistency',work_consistency.validate))))
 add('work_episodes', work_episodes.VERSION, lambda c: work_episodes.project(c.graph))
+add('repeated_work', repeated_work.RECIPE, lambda c: repeated_work.project(c.graph))
 add('repair_phases', repair_phases.VERSION, lambda c: repair_phases.project(c.run, c.graph['id']))
 add('work_navigation', work_navigation.VERSION, lambda c: work_navigation.project(c.graph,target_relations=c.params.get('target_relations'),recurrence_order=c.params.get('recurrence_order')),
     parameters=Parameters(('run_id','source_hash','graph_id'),('target_relations','recurrence_order'),

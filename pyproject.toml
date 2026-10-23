@@ -17,9 +17,11 @@ Documentation = "https://github.com/Sheltercosmo/Rilldex-RL-Studio#readme"
 Issues = "https://github.com/Sheltercosmo/Rilldex-RL-Studio/issues"
 
 [project.optional-dependencies]
+system = ["psutil>=5.9,<8"]
 contracts = ["jsonschema==4.26.0"]
 s3 = ["s3fs>=2024.6.0"]
 gcs = ["gcsfs>=2024.6.0"]
+nlp = ["spacy>=3.8,<4"]
 
 [project.scripts]
 rilldex = "tracker.cli:main"

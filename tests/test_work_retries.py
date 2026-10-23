@@ -14,6 +14,18 @@ def controls():
 
 
 class RetrySummaryTests(unittest.TestCase):
+    def test_split_later_attempt_keeps_all_witnesses_without_extra_retry(self):
+        rows, comparisons, links = controls()
+        rows.append(dict(action_id='b-fragment', dispatch_id='call-b', roles=['attempts_plan_step']))
+        next(r for r in rows if r['action_id'] == 'b')['dispatch_id'] = 'call-b'
+        links.append(dict(id='fragment-error', source='b-fragment', target='a', type='revisits_after_error_report'))
+        comparisons.append(dict(comparison=dict(current_node_id='b-fragment', previous_node_id='a', ordering='source_order'),
+            link_ids=['fragment-error']))
+        out = retry_summary(rows, comparisons, links)
+        self.assertEqual((out['attempts'], out['repeated_attempts'], out['after_reported_error']), (3, 2, 1))
+        self.assertEqual(len(out['cases']), 3)  # Three annotation witnesses, two later dispatches.
+        self.assertIn('fragment-error', {lid for c in out['cases'] for lid in c['link_ids']})
+
     def test_counts_unique_later_attempts_not_edges_checks_or_preparations(self):
         rows, comparisons, links = controls(); result=retry_summary(rows,comparisons,links)
         self.assertEqual((result['attempts'],result['repeated_attempts'],result['after_reported_error']),(3,2,1))

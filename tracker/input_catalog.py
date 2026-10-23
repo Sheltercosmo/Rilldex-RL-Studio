@@ -13,6 +13,7 @@ GROUPS = [
         ('atif', 'ATIF · structured agent trajectory'),
     ]),
     ('Framework exports', [
+        ('weave', 'Weave · saved calls export'),
         ('verl-generation', 'verl · generation export'),
         ('slime-debug', 'slime · debug record'),
         ('harbor', 'Harbor · trajectory'),
@@ -35,7 +36,7 @@ def catalog():
     for group, entries in GROUPS:
         for key, label in entries:
             formats.append({'id': key, 'label': label, 'group': group,
-                            'collection_modes': ['exports', 'snapshots'] +
+                            'collection_modes': ([] if key == 'weave' else ['exports', 'snapshots']) +
                             (['native'] if key in {'harbor', 'swe-agent'} else [])})
     # A new decoder cannot silently disappear from setup or import controls.
     known = {row['id'] for row in formats}

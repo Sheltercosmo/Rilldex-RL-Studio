@@ -48,6 +48,9 @@ class ExportWatcher(DirectoryWatcher):
         envelope = explicit_envelope(doc, producer=self.producer, format=self.format, metadata=self.metadata)
         if envelope is not None:
             return envelope
+        from .weave_import import matches as weave_matches
+        if self.format == 'weave' or self.format == 'auto' and weave_matches(doc):
+            raise InputError('Weave exports contain calls, not one rollout per line. Use Import files or rilldex import to group the full export by trace ID.')
         fmt = self.format
         if fmt == 'auto' and all(k in doc for k in ('input', 'output', 'step')):
             fmt = detect(doc)

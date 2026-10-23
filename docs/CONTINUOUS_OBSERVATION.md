@@ -2,14 +2,44 @@
 
 The collector receives rollouts; the monitor service refreshes saved measurements.
 The opt-in **semantic worker** connects those two stages by extracting and
-publishing base semantic units as completed rollouts arrive. An optional feedback
-pass connects those units to prior tool responses. Both run without the UI.
+publishing activities, plan links, work-target links, executor feedback and approach comparisons as
+completed rollouts arrive. An optional feedback-reference pass connects agent
+prose to prior tool responses. All run without the UI.
 
 This first worker is local and serialized. It accepts the common normalized
-source contract, rather than a Harbor/SWE-specific format. Beyond explicit feedback
-references, it does not yet schedule work-plan, other relationship or diagnostic
-extraction passes. It does not establish general semantic accuracy or production
+source contract, rather than a Harbor/SWE-specific format. It does not schedule
+every experimental relationship or reward detector. It does not establish general semantic accuracy or production
 throughput.
+
+## Continue from a pilot
+
+```sh
+python -m rilldex.models watch observations --db study.sqlite --experiment trial --from-pilot pilot --follow
+```
+
+The installed command reuses exact pilot decisions, pins its models and analysis
+stages, and handles saved and arriving rollouts. Set `--candidate-calls`,
+`--decision-calls` and `--input-bytes` for new work; defaults are zero for a new
+worker and retain saved limits on restart. These are additional worker lifetime
+ceilings, separate from the pilot's recorded usage. Reported-error, target-return
+and feedback-coverage monitors use the same observer and appear in Behavior measures.
+Work-target observation also adds **Changed inputs on work revisits** and
+**Repeated inputs and feedback**. Open a measured case to compare both attempts,
+intervening operations and captured feedback. These use saved evidence with no
+additional model calls; incomplete comparisons remain unknown.
+New workers also add **Changed approaches in repeated work**. Its saved pair
+comparisons distinguish unchanged procedures, changed inputs/settings and
+alternative procedures; opportunities and unknown comparisons accompany the rate.
+**Errors on repeated work** joins those attempts to saved executor inspections,
+keeping repeated errors, inspected absence and unresolved follow-up distinct.
+Existing pauses are preserved. Omit `--from-pilot` to use the current installed
+protocol. The UI generates this command under **Models → Observe an experiment continuously**.
+
+Use `watch-status` below for per-stage coverage and blocked jobs. After raising a
+limit, add `--retry-run RUN_ID` on restart. All requested stages must finish before
+a rollout is published under the observer; pending rollouts are not negative results.
+For a custom proposer, `watch-init --behavior-links` enables the same stages.
+Old workers retain their original protocol and publications.
 
 ## Start without model calls
 
@@ -52,8 +82,8 @@ has been validated for this increment.
 
 The `JEV_API_KEY` and the existing proxy configuration are read by the normal Jev
 client. The same candidate argument list is required on resume; raw arguments are
-not stored in the worker configuration. A command is not a bundled general-purpose
-proposer: configure your own implementation of the supplied JSON contract.
+not stored in the worker configuration. A custom command implements the supplied
+JSON contract; the installed `python -m rilldex.candidate` adapter is also available.
 
 Use `--workspace-options options.json` at initialization to pin existing options:
 
@@ -76,14 +106,12 @@ These select a versioned extraction protocol; they are not universally validated
 defaults. Source, options and extractor implementation are frozen. Changed
 protocols require a new worker identity; old observations remain inspectable.
 
-The bounded candidate runner changes this implementation fingerprint. Existing
-workers therefore refuse new execution under the changed implementation; they
-are not silently migrated, restarted or given new inference allowance. Their
-status, saved candidates and published observations remain available. Keep the
-previous package with its worker, or initialize a new worker directory and
-explicitly review cache reuse and budget before moving collection to it. The
-candidate/decision request formats themselves did not change. This conservative
-upgrade requirement is a remaining usability limitation.
+After a package update, run `rilldex --db study.sqlite semantic watch-refresh observations`,
+or add `--refresh-worker` to `python -m rilldex.models watch`. Refresh replays
+saved work offline and requires every published map to remain identical. It
+keeps the observer, protocols, measurements, blocked jobs and lifetime usage.
+If replay changes a map or the pinned protocol is unsupported, keep the original
+worker and create a new observer. `watch-status` reports whether refresh is needed.
 
 ## Add explicit feedback references
 
@@ -148,7 +176,7 @@ The same monitor and evidence cases are available in the dashboard. These reads
 do not rerun extraction. Adding this layer to a previously published base worker
 requires a new identity; it must not overwrite the old observer's meaning. Exact
 base decisions can be reused through `tracker.decision_cache`, with receipts.
-There is not yet an automatic worker-upgrade command. The retained
+Implementation refresh does not add analysis layers or change protocols. The retained
 [live trial](../research/2026-10-15-continuous-feedback-trial.md) demonstrates reuse
 without spending again on the base extraction.
 

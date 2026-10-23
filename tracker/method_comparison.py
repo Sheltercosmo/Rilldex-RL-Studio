@@ -17,6 +17,8 @@ from .recurrence_context import build as recurrence_context
 VERSION = 'work-method-comparison/1'
 STAGED_VERSION = 'work-method-comparison/2'
 DISPATCH_VERSION = 'work-method-comparison/3'
+NATIVE_VERSION = 'work-method-comparison/4'
+VERSIONS = {VERSION, STAGED_VERSION, DISPATCH_VERSION, NATIVE_VERSION}
 MAX_CHARS = 120000
 MAX_RATIONALES = 32
 CHOICES = {
@@ -73,7 +75,7 @@ def base_document(document):
 
 
 def pair_request(run, document, previous_id, current_id, version=VERSION, work_request=None):
-    if version not in {VERSION,STAGED_VERSION,DISPATCH_VERSION}:raise InputError('Unknown method-comparison version')
+    if version not in VERSIONS:raise InputError('Unknown method-comparison version')
     if document.get('source_hash')!=digest(run):raise InputError('Method comparison source differs')
     units={u['id']:u for u in document['units']}
     if len(units)!=len(document['units']):raise InputError('Duplicate method-comparison unit identity')
@@ -148,32 +150,58 @@ def pair_request(run, document, previous_id, current_id, version=VERSION, work_r
     result={'model':DEFAULT_MODEL,'state':state,'questions':{
         'comparison':{'type':'choice','instructions':RULE,'criteria':deepcopy(CHOICES)},
         'stated_basis':{'type':'choice','instructions':RATIONALE_RULE,'criteria':criteria}}}
-    if version in {STAGED_VERSION,DISPATCH_VERSION}:
+    if version in {STAGED_VERSION,DISPATCH_VERSION,NATIVE_VERSION}:
         if work_request:
             result['state']['work_instance_selection']={'choice':'same_work_instance','request':work_request}
             result['questions']['comparison']['criteria'].pop('different_work')
             result['questions']['comparison']['instructions']='Work-instance comparability was selected in the preceding decision. Now compare HOW the recorded operations seek that result: unchanged procedure, reconfiguration, an alternative mechanism, or unresolved procedure evidence. Do not infer method from an announced intention that the dispatch does not enact. '+CHOICES['reconfigured_procedure']+' '+CHOICES['alternative_procedure']
             result['questions']['stated_basis']['instructions']=STAGED_RATIONALE_RULE
-            if version==DISPATCH_VERSION:
+            if version in {DISPATCH_VERSION,NATIVE_VERSION}:
                 result['state']['rule']='Compare the dispatched procedure and its explicit configuration separately from intervening changes to stored artifacts, environment and work scope.'
                 result['questions']['comparison']['criteria']={k:v for k,v in DISPATCH_CHOICES.items() if k!='different_work'}
                 result['questions']['comparison']['instructions']='Work-instance comparability has been selected. Compare the observable mechanism and explicit instructions of these two dispatches. Use the comparison definitions exactly. The state of a file/environment referenced by an unchanged invocation belongs to intervening context, not dispatch reconfiguration. Added explicit settings are configuration changes, even if they restate defaults; no changed effective behavior is thereby established. Preserve announced versus executed differences.'
         else:
-            rule=DISPATCH_WORK_RULE if version==DISPATCH_VERSION else WORK_RULE
+            rule=DISPATCH_WORK_RULE if version in {DISPATCH_VERSION,NATIVE_VERSION} else WORK_RULE
             result['state']['rule']=rule
             result['questions']={'work_instance':{'type':'choice','instructions':rule,'criteria':deepcopy(WORK_CHOICES)}}
+    if version==NATIVE_VERSION:
+        from .action_comparison import recorded_fields
+        result['state']['stage']='method_comparison'
+        events={e['id']:e for e in run['events']}
+        native=[]
+        for unit in (before,after):
+            ref=unit['source'];event=events[ref['event_id']]
+            whole=ref['start']==0 and ref['end']==len(event.get('text',''))
+            native.append(dict(unit_id=unit['id'],event_id=event['id'],source_pointer=event.get('source_pointer'),
+                fields=recorded_fields(event) if whole else None,
+                scope='full captured dispatch' if whole else 'partial action span; native payload not attributed'))
+        result['state']['native_dispatches']=native
+        result['state']['rule']+=' Native tool and argument fields are the dispatched inputs when supplied. Rendered text may omit or reformat them. Distinguish a change of explicit arguments from a change of procedural mechanism.'
     return result
 
 
-def build(run,document,decide,version=VERSION):
-    if version not in {VERSION,STAGED_VERSION,DISPATCH_VERSION}:raise InputError('Unknown method-comparison version')
+def build(run,document,decide,version=VERSION,progress=None):
+    if version not in VERSIONS:raise InputError('Unknown method-comparison version')
     doc=base_document(document)
     if doc.get('source_hash')!=digest(run):raise InputError('Method comparison source differs')
     history=doc.get('work_history',{})
     result={'schema':version,'source_hash':digest(run),'base_map_hash':digest(doc),
             'available':bool(history.get('available')),'observations':[],
             'limits':'Procedure comparisons over selected recurrence pairs. Stated basis is an agent claim. No strategy, blind-retry, success, active-goal or training-improvement inference.'}
-    if not result['available']:return result
+    if not result['available']:
+        if version==NATIVE_VERSION:
+            result['counts']={'eligible_pairs':0,'selected_pairs':0,'comparisons':{},'not_inspected_pairs':0}
+        if progress:progress(dict(schema=version,source_hash=digest(run),base_map_hash=digest(doc),status='complete',coverage=dict(eligible_pairs=0,inspected_pairs=0,pending_pairs=0,unavailable_pairs=0)))
+        return result
+    total=len(history['recurrences'])
+    def report(status='running'):
+        if progress:
+            terminal=[r for r in result['observations'] if r.get('status')!='pending']
+            selected=sum(r.get('status')=='selected' for r in terminal)
+            progress(dict(schema=version,source_hash=digest(run),base_map_hash=digest(doc),status=status,
+                coverage=dict(eligible_pairs=total,inspected_pairs=selected,pending_pairs=total-len(terminal),
+                    unavailable_pairs=len(terminal)-selected),observations=deepcopy(result['observations'])))
+    report()
     seen=set()
     for recurrence in history['recurrences']:
         a,b=recurrence['previous_group_unit_id'],recurrence['unit_id']
@@ -188,27 +216,31 @@ def build(run,document,decide,version=VERSION):
         req=pair_request(run,doc,a,b,version)
         row={'previous_unit_id':a,'current_unit_id':b,'group_id':recurrence['group_id'],
              'cutoff':deepcopy(req['state']['cutoff']),'upstream_identity_disputed':group.get('disputed_identity',False),
-             'input_characters':len(dumps(req)),'rationale_candidate_ids':[u['unit_id'] for u in req['state']['rationale_candidates']]}
+             'status':'pending','input_characters':len(dumps(req)),'rationale_candidate_ids':[u['unit_id'] for u in req['state']['rationale_candidates']]}
         result['observations'].append(row)
-        if row['input_characters']>MAX_CHARS:row['status']='needs_context_selection';continue
-        if len(row['rationale_candidate_ids'])>MAX_RATIONALES:row['status']='needs_rationale_retrieval';continue
+        if row['input_characters']>MAX_CHARS:row['status']='needs_context_selection';report();continue
+        if len(row['rationale_candidate_ids'])>MAX_RATIONALES:row['status']='needs_rationale_retrieval';report();continue
+        report()
         answers,key=decide(req)
         if set(answers)!=set(req['questions']) or any(v['value'] not in req['questions'][k]['criteria'] for k,v in answers.items()):
             raise InputError('Invalid method comparison selection')
-        if version in {STAGED_VERSION,DISPATCH_VERSION}:
+        if version in {STAGED_VERSION,DISPATCH_VERSION,NATIVE_VERSION}:
             value=answers['work_instance']['value'];row.update(work_instance=value,work_request=key)
             if value!='same_work_instance':
                 row.update(status='selected',comparison='different_work' if value=='different_work' else 'unresolved',
                            stated_basis='not_inspected',request=key)
-                continue
+                report();continue
             req=pair_request(run,doc,a,b,version,key)
             row['procedure_input_characters']=len(dumps(req))
-            if row['procedure_input_characters']>MAX_CHARS:row['status']='needs_context_selection';continue
+            if row['procedure_input_characters']>MAX_CHARS:row['status']='needs_context_selection';report();continue
+            report()
             answers,key=decide(req)
             if set(answers)!=set(req['questions']) or any(v['value'] not in req['questions'][k]['criteria'] for k,v in answers.items()):
                 raise InputError('Invalid procedure comparison selection')
         row.update(status='selected',comparison=answers['comparison']['value'],
                    stated_basis=answers['stated_basis']['value'],request=key)
+        report()
+    report('complete')
     result['counts']={'eligible_pairs':len(result['observations']),
         'selected_pairs':sum(r['status']=='selected' for r in result['observations']),
         'comparisons':dict(Counter(r['comparison'] for r in result['observations'] if r['status']=='selected')),
@@ -227,9 +259,14 @@ def audit(run,document,result,directory):
     return {'argmax_replayed':True,'semantic_accuracy':'not independently measured',**result.get('counts',{})}
 
 
-def execute(run,document,engine,version=VERSION):
-    result=build(run,document,engine.decide,version);validation=audit(run,document,result,engine.directory)
+def execute(run,document,engine,version=VERSION,progress=None):
+    latest={}
+    def report(value):
+        latest.update(value)
+        if progress:progress({**value,'status':'validating' if value['status']=='complete' else value['status']})
+    result=build(run,document,engine.decide,version,report);validation=audit(run,document,result,engine.directory)
     write(Path(engine.directory)/'results'/f'{result["base_map_hash"]}.json',result)
+    if progress:progress({**latest,'status':'complete'})
     return result,validation
 
 
@@ -239,7 +276,7 @@ def load(run,document,directory):
     if not path.exists():
         return {'schema':STAGED_VERSION,'available':False,'reason':'No source-bound method comparison is saved for this observation.'}
     result=read(path);audit(run,document,result,directory)
-    view=deepcopy(result);view['definitions']=deepcopy(DISPATCH_CHOICES if result['schema']==DISPATCH_VERSION else CHOICES);view['review_notes']=[]
+    view=deepcopy(result);view['definitions']=deepcopy(DISPATCH_CHOICES if result['schema'] in {DISPATCH_VERSION,NATIVE_VERSION} else CHOICES);view['review_notes']=[]
     reviews=directory/'source-review.json'
     if reviews.exists():
         saved=read(reviews)

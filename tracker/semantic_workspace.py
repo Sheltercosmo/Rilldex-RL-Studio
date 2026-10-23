@@ -48,7 +48,7 @@ def exclusive(directory):
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def initialize(directory, run, *, include_user=True, context_policy=None,activity_routing=ACTIVITY_ROUTING,reading_protocol='contribution-readings/1',partition_standard=PARTITION_CANDIDATE_STANDARD,feedback_profile=None,requested_profile=None):
+def initialize(directory, run, *, include_user=True, context_policy=None,activity_routing=ACTIVITY_ROUTING,reading_protocol='contribution-readings/1',partition_standard=PARTITION_CANDIDATE_STANDARD,feedback_profile=None,requested_profile=None,action_target_version=None,plan_relation_version=None,execution_report_version=None,method_comparison_version=None):
     from .semantic_layers import profile,requested_profile as validate_requested
     profile(feedback_profile)
     validate_requested(requested_profile,include_user)
@@ -70,6 +70,23 @@ def initialize(directory, run, *, include_user=True, context_policy=None,activit
     if reading_protocol!=READING_VERSION:config['reading_protocol']=reading_protocol
     if feedback_profile is not None:config['feedback_profile']=feedback_profile
     if requested_profile is not None:config['requested_profile']=requested_profile
+    if action_target_version is not None:
+        from .action_targets import PAGED_VERSION
+        if action_target_version!=PAGED_VERSION:raise InputError('Unsupported workspace action correspondence version')
+        config['action_target_version']=action_target_version
+    if plan_relation_version is not None:
+        from .plan_relations import PAGED_VERSIONS
+        if plan_relation_version not in PAGED_VERSIONS:raise InputError('Unsupported workspace Plan correspondence version')
+        config['plan_relation_version']=plan_relation_version
+    if execution_report_version is not None:
+        from .execution_reports import VERSION as REPORT_VERSION
+        if execution_report_version!=REPORT_VERSION:raise InputError('Unsupported execution report version')
+        config['execution_report_version']=execution_report_version
+    if method_comparison_version is not None:
+        from .method_comparison import NATIVE_VERSION
+        if method_comparison_version!=NATIVE_VERSION or not action_target_version:
+            raise InputError('Approach comparison requires the current method protocol and work-target links')
+        config['method_comparison_version']=method_comparison_version
     with exclusive(directory) as root:
         config_path = root / 'workspace.json'
         if config_path.exists():
@@ -95,6 +112,18 @@ def load(directory):
     requested_profile(config.get('requested_profile'),config.get('include_user'))
     activity_choices(config.get('activity_routing',ACTIVITY_ROUTING))
     protocol(config.get('reading_protocol',READING_VERSION))
+    from .action_targets import PAGED_VERSION
+    if config.get('action_target_version') not in {None,PAGED_VERSION}:
+        raise InputError('Unsupported workspace action correspondence version')
+    from .plan_relations import PAGED_VERSIONS
+    if config.get('plan_relation_version') not in {None,*PAGED_VERSIONS}:
+        raise InputError('Unsupported workspace Plan correspondence version')
+    from .execution_reports import VERSION as REPORT_VERSION
+    if config.get('execution_report_version') not in {None,REPORT_VERSION}:
+        raise InputError('Unsupported execution report version')
+    from .method_comparison import NATIVE_VERSION
+    if config.get('method_comparison_version') not in {None,NATIVE_VERSION} or (config.get('method_comparison_version') and not config.get('action_target_version')):
+        raise InputError('Unsupported approach comparison configuration')
     if (config.get('schema') != VERSION or not config.get('run_id', '').isalnum()
             or config.get('activity_standard') != ACTIVITY_VERSION
             or config.get('partition_standard') not in {PARTITION_CANDIDATE_STANDARD, WORK_PHASE_STANDARD}
@@ -138,6 +167,17 @@ def prepare(directory):
         return status(root)
 
 
+def target_status(directory, result, version, filename='action-target-progress.json'):
+    if not version:return {'status':'not_requested'}
+    if not result or result.get('status')!='complete_local_extraction':return {'status':'awaiting_local_annotations'}
+    path=Path(directory)/filename
+    if path.exists():
+        saved=read(path)
+        if saved.get('extraction_hash')==digest(result) and saved.get('schema')==version:
+            return {'status':saved['status'],'coverage':saved['coverage'],'version':version}
+    return {'status':'pending','version':version}
+
+
 def status(directory):
     from .semantic_budget import summary
     root = Path(directory)
@@ -164,6 +204,11 @@ def status(directory):
     from .semantic_layers import feedback_status,requested_status
     feedback=feedback_status(root,result,config.get('feedback_profile'))
     requested=requested_status(root,result,config.get('requested_profile'),config['context_policy'])
+    targets=target_status(root,result,config.get('action_target_version'))
+    plans=target_status(root,result,config.get('plan_relation_version'),'plan-relation-progress.json')
+    from .execution_reports import status as report_status
+    reports=report_status(root,run,config.get('execution_report_version'))
+    methods=target_status(root,result,config.get('method_comparison_version'),'method-comparison-progress.json')
     # Queue presence is not validation or a selected annotation.
     return {'schema': 'semantic-workspace-status/1', 'run_id': run['id'],
             'source_hash': config['source_hash'],
@@ -171,9 +216,9 @@ def status(directory):
             'reading_protocol':config.get('reading_protocol','contribution-readings/1'),
             'eligible_windows': len(eligible),
             'status': (last_execution['status'] if last_execution and last_execution['status'] in {'budget_reached', 'interrupted'}
-                       else 'needs_layers' if feedback['status']=='pending' or requested['status']=='pending'
+                       else 'needs_layers' if feedback['status']=='pending' or requested['status']=='pending' or any(r['status'] in {'pending','running','validating','needs_evidence'} for r in (targets,plans,reports,methods))
                        else result.get('status', 'interrupted') if result else 'prepared'),
-            'layers':{'feedback':feedback,'requested_conditions':requested},
+            'layers':{'feedback':feedback,'requested_conditions':requested,'action_targets':targets,'plan_relations':plans,'execution_reports':reports,'method_comparison':methods},
             'coverage': {'eligible_windows': len(eligible),
                          'visited_windows': len(result['windows']) if result else 0,
                          'unvisited_windows': len(eligible) - len(result['windows']) if result else len(eligible),
@@ -251,6 +296,29 @@ def execute(directory, transport, *, command=None, producer=None, progress=None,
             check_configuration(result, config, root)
             audit_result(run, result, root)
             if result['status']=='complete_local_extraction':
+                if config.get('plan_relation_version'):
+                    from .plan_relations import execute as execute_plans
+                    plans,validation=execute_plans(run,result,engine,version=config['plan_relation_version'],
+                        progress=lambda value:write(root/'plan-relation-progress.json',value))
+                    receipt['plan_relations']={'status':plans['status'],'coverage':plans['coverage'],'validation':validation}
+                if config.get('action_target_version'):
+                    from .action_targets import execute as execute_targets
+                    targets,validation=execute_targets(run,result,engine,version=config['action_target_version'],
+                        progress=lambda value:write(root/'action-target-progress.json',value))
+                    receipt['action_targets']={'status':targets['status'],'coverage':targets['coverage'],'validation':validation}
+                if config.get('execution_report_version'):
+                    from .execution_reports import execute as execute_reports
+                    reports,validation=execute_reports(run,engine,
+                        progress=lambda value:write(root/'execution-report-progress.json',value))
+                    receipt['execution_reports']={'status':'complete','counts':reports['counts'],'validation':validation}
+                if config.get('method_comparison_version') and all(receipt.get(name,{}).get('status','complete')=='complete' for name in ('action_targets','plan_relations')):
+                    from .semantic_extraction import load_extraction
+                    from .method_comparison import execute as execute_methods
+                    document=load_extraction(run,root,action_target_version=config.get('action_target_version'),
+                        plan_relation_version=config.get('plan_relation_version'))['document']
+                    methods,validation=execute_methods(run,document,engine,version=config['method_comparison_version'],
+                        progress=lambda value:write(root/'method-comparison-progress.json',{**value,'extraction_hash':digest(result)}))
+                    receipt['method_comparison']={'status':'complete','counts':methods.get('counts',{}),'validation':validation}
                 from .semantic_layers import execute_feedback,execute_requested
                 layer=execute_feedback(run,result,engine,config.get('feedback_profile'))
                 if layer:receipt['feedback_layer']=layer
@@ -258,6 +326,8 @@ def execute(directory, transport, *, command=None, producer=None, progress=None,
                 if requested:receipt['requested_layer']=requested
             receipt['status'] = result['status']
             if receipt.get('requested_layer',{}).get('status')=='needs_work':receipt['status']='needs_layers'
+            if receipt.get('action_targets',{}).get('status')=='needs_evidence':receipt['status']='needs_layers'
+            if receipt.get('plan_relations',{}).get('status')=='needs_evidence':receipt['status']='needs_layers'
         except BudgetReached as exc:
             receipt['status'] = 'budget_reached'
             receipt['budget_stop'] = exc.reason
@@ -269,6 +339,7 @@ def execute(directory, transport, *, command=None, producer=None, progress=None,
         finally:
             receipt.update(provider_responses_this_execution=calls,
                            exact_reused_decisions=len(engine.reused_decisions),
+                           cached_decisions_this_execution=len(engine.cached_decisions),
                            validated_decisions_this_execution=engine.calls,
                            candidate_calls_this_execution=getattr(candidates, 'generation_calls', 0)+getattr(work_candidates,'generation_calls',0),
                            budget_used=budget.used,
@@ -311,5 +382,24 @@ def audit(directory):
         if config.get('requested_profile') and selected.exists():
             from .semantic_layers import audit_requested
             report['requested_layer']=audit_requested(run,read(selected),root,config['requested_profile'],config['context_policy'])
+        if config.get('action_target_version') and selected.exists():
+            from .action_targets import audit as audit_targets,path_for
+            result=read(selected);path=path_for(root,result,config['action_target_version'])
+            if path.exists():report['action_targets']=audit_targets(run,result,read(path),root)
+        if config.get('plan_relation_version') and selected.exists():
+            from .plan_relations import audit as audit_plans,path_for
+            result=read(selected);path=path_for(root,result,config['plan_relation_version'])
+            if path.exists():report['plan_relations']=audit_plans(run,result,read(path),root)
+        if config.get('execution_report_version'):
+            from .execution_reports import audit as audit_reports,path_for
+            path=path_for(root,run)
+            if path.exists():report['execution_reports']=audit_reports(run,read(path),root)
+        if config.get('method_comparison_version') and selected.exists():
+            from .semantic_extraction import load_extraction
+            from .method_comparison import base_document,audit as audit_methods
+            document=load_extraction(run,root,action_target_version=config.get('action_target_version'),
+                plan_relation_version=config.get('plan_relation_version'))['document']
+            path=root/'results'/f'{digest(base_document(document))}.json'
+            if path.exists():report['method_comparison']=audit_methods(run,document,read(path),root)
         write(root / 'audit.json', report)
         return report

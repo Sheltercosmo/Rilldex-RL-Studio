@@ -56,7 +56,7 @@ def create(store, request):
         require('monitor-'+digest(definition) == mid, 'Monitor identity differs')
         condition = condition_reviews.supported(definition)
         require(condition or definition['kind'] == 'analysis' and definition['analysis_definition']['aggregation'] == 'opportunity_ratio',
-            'Review sampling requires an analysis rate with explicit opportunity cases or a binary code monitor')
+            'Review sampling requires an analysis rate with opportunity cases, binary code monitor or diagnostic indicator')
         if not condition:
             rows = c.execute('''SELECT v.id,v.run_id,v.document FROM monitor_latest l JOIN monitor_values v ON v.id=l.value_id
                 WHERE l.monitor_id=? ORDER BY v.run_id''', (mid,)).fetchall()
@@ -330,8 +330,9 @@ def public(store, sid):
 
 
 def question(sample):
-    key='custom' if sample.get('review_kind') == 'rollout_condition' else 'analysis_definition'
-    return sample['monitor'][key]['description']
+    if sample.get('review_kind')=='rollout_condition':
+        return sample.get('condition_question') or condition_reviews.question(sample['monitor'])
+    return sample['monitor']['analysis_definition']['description']
 
 
 def listing(store, monitor_id):

@@ -1,5 +1,7 @@
 # Execution errors and evaluator evidence
 
+To compare rollout outcomes from saved evaluator reports, open **Compare rollout cases → Outcome source** on each side. Python accepts `evaluation={"producer": "your-worker", "label": "Task check", "purpose": "independent_check"}` inside each `Workspace.compare_rollouts()` selection. Missing or multiple matching reports remain unresolved; the saved comparison retains the selected reports.
+
 Rilldex keeps three different questions separate:
 
 1. Did the tool explicitly report an execution error?
@@ -126,7 +128,7 @@ remotely. The following fields are required for `evaluation-receipt/1`:
 |---|---|
 | `schema` | `evaluation-receipt/1` |
 | `label`, `producer` | Readable check name and producing worker/version |
-| `performed_at` | Producer-reported ISO timestamp with timezone; arrival time is stored separately |
+| `performed_at` | Producer-reported ISO timestamp with timezone, or `null` when unavailable; arrival time is stored separately |
 | `run_id`, `source_hash` | Exact existing rollout and its canonical source digest |
 | `purpose` | `reward`, `independent_check`, or `repair_check` |
 | `inputs` | Keys `task`, `criterion`, `artifact`, `evaluator`, `environment`, `output_boundary`; each is `{label, sha256}` or `null` |

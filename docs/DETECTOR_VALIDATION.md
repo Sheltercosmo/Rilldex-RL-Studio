@@ -1,5 +1,7 @@
 # Diagnostic detector validation
 
+For reusable labeled cases and detector comparisons, see [Validation sets](DETECTOR_VALIDATION_SETS.md).
+
 Behavior flags identify recorded actions for investigation. They do not establish
 successful reward hacking. Use [Reward checks](custom-monitors.md) to display
 saved findings; custom detectors can combine task-specific rewards and external

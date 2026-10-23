@@ -2,7 +2,7 @@
 // A clipped shell keeps the scrollbar between the header and footer, away from rounded corners.
 window.WorkspaceDialog={prepare(dialog){
  if(dialog.classList.contains('dialog-frame'))return;
- const layout=dialog.querySelector(':scope > form')||dialog,head=layout.querySelector(':scope > .dialog-head');
+ const layout=dialog.querySelector(':scope > .dialog-head')?dialog:dialog.querySelector(':scope > form')||dialog,head=layout.querySelector(':scope > .dialog-head');
  if(!head)return;
  const foot=layout.querySelector(':scope > .dialog-foot'),body=document.createElement('div');body.className='dialog-body';
  for(const child of [...layout.childNodes])if(child!==head&&child!==foot)body.append(child);
@@ -41,7 +41,7 @@ for(const dialog of document.querySelectorAll('#monitor-dialog,#cases-dialog'))w
  const nav=document.createElement('nav');nav.className='workspace-nav';nav.setAttribute('aria-label','Research workspace');
  const brandRow=document.createElement('div');brandRow.className='nav-brand';
  const brand=document.createElement('a');brand.className='logo';brand.href='/';brand.setAttribute('aria-label','Rilldex overview');
- const mark=document.createElement('img');mark.className='logo-mark';mark.src='/rilldex-mark.svg';mark.alt='';mark.width=32;mark.height=32;brand.append(mark,document.createTextNode('Rilldex'));brandRow.append(brand);
+ const mark=document.createElement('img');mark.className='logo-wordmark';mark.src='/rilldex-logo.svg';mark.alt='Rilldex';mark.width=153;mark.height=36;brand.append(mark);brandRow.append(brand);
  const toggle=document.createElement('button');toggle.className='nav-toggle';toggle.textContent='Menu';toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls','workspace-navigation');brandRow.append(toggle);nav.append(brandRow);
  const content=document.createElement('div');content.className='nav-content';content.id='workspace-navigation';
  const caption=document.createElement('span');caption.className='nav-caption';caption.textContent='WORKSPACE';content.append(caption);
@@ -60,6 +60,7 @@ for(const dialog of document.querySelectorAll('#monitor-dialog,#cases-dialog'))w
  toggle.onclick=()=>{const open=nav.classList.toggle('nav-open');toggle.setAttribute('aria-expanded',String(open));toggle.textContent=open?'Close menu':'Menu';};
  nav.addEventListener('keydown',event=>{if(event.key==='Escape'){nav.classList.remove('nav-open');toggle.setAttribute('aria-expanded','false');toggle.textContent='Menu';toggle.focus();}});
  const foot=document.createElement('div');foot.className='nav-foot';foot.textContent='Connecting to workspace…';nav.append(foot);document.body.prepend(nav);
+ const picker=document.createElement('script');picker.src='/workspace-picker.js';picker.onload=()=>window.WorkspacePicker.install(workspaceLabel);document.head.append(picker);
  const main=document.querySelector('main');if(main){main.id=main.id||'workspace-main';const skip=document.createElement('a');skip.className='skip-link';skip.href='#'+main.id;skip.textContent='Skip to content';document.body.prepend(skip);}
  // Navigation is a local launcher, with no extra server or model requests.
  const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -73,7 +74,7 @@ for(const dialog of document.querySelectorAll('#monitor-dialog,#cases-dialog'))w
  let selectedLaunch=0;
  function highlight(){[...results.querySelectorAll('a')].forEach((a,i)=>a.classList.toggle('launcher-selected',i===selectedLaunch));}
  function launchRank(row,term){const title=row[0].toLowerCase();return !term?0:title===term?0:title.startsWith(term)?1:title.includes(term)?2:3;}
- function launchResults(){const term=search.value.trim().toLowerCase();results.replaceChildren();const rows=[...actions,...recent().map(r=>[r.title,'Recently inspected rollout',r.url])].filter(r=>(r[0]+' '+r[1]).toLowerCase().includes(term)).sort((a,b)=>launchRank(a,term)-launchRank(b,term));selectedLaunch=0;
+ function launchResults(){const term=search.value.trim().toLowerCase();results.replaceChildren();const rows=[...(window.WorkspaceLayout?.pins()||[]),...actions,...recent().map(r=>[r.title,'Recently inspected rollout',r.url])].filter(r=>(r[0]+' '+r[1]).toLowerCase().includes(term)).sort((a,b)=>launchRank(a,term)-launchRank(b,term));selectedLaunch=0;
   for(const [label,hint,url]of rows){const a=node('a');a.href=url;const text=node('div');text.append(node('strong',label),node('small',hint));a.append(text,node('span','↗'));results.append(a);}if(!rows.length)results.append(node('p','No matching pages or recent rollouts.','launcher-empty'));highlight();}
  const launchButton=node('button',undefined,'workspace-search');launchButton.type='button';launchButton.setAttribute('aria-label','Search workspace');launchButton.append(node('span','Search workspace'),node('kbd','Ctrl K'));
  launchButton.onclick=()=>{search.value='';launchResults();launcher.showModal();search.focus();};search.oninput=launchResults;
@@ -82,7 +83,7 @@ for(const dialog of document.querySelectorAll('#monitor-dialog,#cases-dialog'))w
  const alerts=document.createElement('script');alerts.src='/workspace-alerts.js';document.head.append(alerts);
  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();launcher.open?launcher.close():launchButton.click();}if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.target.closest('input,textarea,select,[contenteditable=true]')){const field=document.querySelector('#monitor-search:not([hidden]),#run-search,#map-search');if(field?.getClientRects().length){e.preventDefault();field.focus();}}});
  window.addEventListener('jev:recent-rollout',event=>{const r=event.detail;if(!r.url?.startsWith('/semantic-map?'))return;try{localStorage.setItem('jev-recent-rollouts',JSON.stringify([{title:r.title,url:r.url},...recent().filter(v=>v.url!==r.url)].slice(0,8)));}catch{}});
- window.addEventListener('jev:scope',event=>{const scope=event.detail;for(const a of links.querySelectorAll('a')){const url=new URL(a.href);if(!['/','/monitors','/runs'].includes(url.pathname))continue;for(const key of ['experiment','environment'])scope[key]?url.searchParams.set(key,scope[key]):url.searchParams.delete(key);a.href=url.pathname+url.search;}});
+ window.addEventListener('jev:scope',event=>{if(window.TrainingContext)return;const scope=event.detail;for(const a of links.querySelectorAll('a')){const url=new URL(a.href);if(!['/','/monitors','/runs'].includes(url.pathname))continue;for(const key of ['experiment','environment'])scope[key]?url.searchParams.set(key,scope[key]):url.searchParams.delete(key);a.href=url.pathname+url.search;}});
  let fingerprint=null;
  const stream=new EventSource('/api/live/events');
  stream.addEventListener('state',event=>{

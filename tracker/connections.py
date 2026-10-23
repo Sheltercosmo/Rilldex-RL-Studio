@@ -22,7 +22,17 @@ def initialize(c):
         enabled INTEGER NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)''')
 
 
+def default_producer(body):
+    if isinstance(body,dict) and body.get('producer') in (None,'') and isinstance(body.get('root'),str):
+        from pathlib import Path
+        root=body['root'].strip()
+        identity=root.rstrip('/') if '://' in root else str(Path(root).expanduser().resolve())
+        return {**body,'producer':'directory-'+digest([identity,body.get('mode','native')])[:16]}
+    return body
+
+
 def validate(store, body):
+    body=default_producer(body)
     if not isinstance(body, dict) or set(body)-{'root','producer','format','metadata','interval','max_files','task_root','mode','pattern','max_records','snapshot_state'}:
         raise InputError('Supply root, producer, format, metadata and optional collection limits')
     interval = body.get('interval', 2)
@@ -82,6 +92,7 @@ def validate(store, body):
 
 
 def preview(store, body):
+    body=default_producer(body)
     if isinstance(body, dict) and '://' in str(body.get('root', '')):
         import tempfile
         from .cloud_watch import CloudWatcher, source
@@ -272,6 +283,8 @@ class Service:
             from .training_lineage import revision as training_revision
             training = training_revision(c)
             telemetry = c.execute('SELECT count(*),max(received_at) FROM trainer_telemetry').fetchone()
+            capture = digest([tuple(c.execute("SELECT count(*),max(sequence) FROM run_records WHERE kind IN ('manifest','lifecycle')").fetchone()),
+                              tuple(c.execute('SELECT count(*),max(updated_at) FROM experiment_labels').fetchone())])
             training = digest([training,list(telemetry)])
             execution = digest(tuple(c.execute('SELECT count(*),max(rowid) FROM execution_records').fetchone()))
             cohort = digest(tuple(c.execute('SELECT count(*),max(rowid) FROM generation_cohorts').fetchone()))
@@ -284,7 +297,7 @@ class Service:
         for row in rows:
             row.update(self.runtime(row['id']))
             row['received'] = received.get(row['producer'], dict(received_revisions=0, received_rollouts=0, last_receipt_at=None))
-        return {'source_revision':digest(source),'training_revision':training,'execution_revision':execution,'cohort_revision':cohort,'semantic_revision':semantic,'connections':rows,'recent_rollouts':latest,'producers':producers,
+        return {'source_revision':digest(source),'training_revision':training,'execution_revision':execution,'cohort_revision':cohort,'capture_revision':capture,'semantic_revision':semantic,'connections':rows,'recent_rollouts':latest,'producers':producers,
                 'analysis':self.monitor.status(),'checked_at':now(),
                 'transport':'server-sent events','inference':'No automatic model calls; semantic coverage is shown separately.'}
 

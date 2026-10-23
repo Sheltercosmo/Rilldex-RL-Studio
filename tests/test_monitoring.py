@@ -188,12 +188,33 @@ class MonitoringTests(unittest.TestCase):
         self.assertEqual(self.result(monitor)['coverage']['available'],2)
         service.close();self.assertFalse(service.status()['running'])
 
-    def test_map_fallback_is_honest_and_includes_all_nodes(self):
+    def test_requested_observer_is_not_silently_replaced(self):
         run=self.run_fixture();source=m.rollout(self.store,run['id'])
         self.assertEqual(source['graph']['observer'],'source')
-        graph=self.graph(run);observed=m.rollout(self.store,run['id'],'nonexistent')
+        graph=self.graph(run);missing=m.rollout(self.store,run['id'],'nonexistent')
+        self.assertIsNone(missing['graph'])
+        self.assertEqual(missing['selection']['status'],'unavailable')
+        self.assertIn(graph['id'],{g['id'] for g in missing['graphs']})
+        observed=m.rollout(self.store,run['id'])
         self.assertEqual(observed['graph']['id'],graph['id'])
         self.assertEqual(observed['graph']['nodes'],gs.read(self.store,graph['id'])['nodes'])
+        self.assertEqual(m.rollout(self.store,run['id'],'source')['graph']['observer'],'source')
+
+    def test_default_uses_latest_saved_semantic_not_named_example_and_pins_survive(self):
+        run=self.run_fixture()
+        old=self.graph(run,observer='software-plan-evidence')
+        latest=self.graph(run,observer='current-review')
+        self.assertEqual(m.rollout(self.store,run['id'])['graph']['id'],latest['id'])
+        entry=m.snapshot(self.store)['runs'][0]['default_map']
+        self.assertEqual(entry['id'],latest['id'])
+        changed=self.graph(run,observer='current-review',extra=True)
+        pinned=m.rollout(self.store,run['id'],'current-review',latest['id'])
+        self.assertEqual(pinned['graph']['id'],latest['id'])
+        self.assertEqual(pinned['selection']['status'],'pinned')
+        self.assertEqual(m.rollout(self.store,run['id'])['graph']['id'],changed['id'])
+        with self.assertRaises(InputError):m.rollout(self.store,run['id'],'source',old['id'])
+        other=self.run_fixture(step=7)
+        with self.assertRaises(InputError):m.rollout(self.store,other['id'],graph_id=old['id'])
 
     def test_explicit_historical_map_survives_new_source_revision(self):
         document=harbor();prefix=copy.deepcopy(document);prefix['steps']=prefix['steps'][:2]

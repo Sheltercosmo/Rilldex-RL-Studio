@@ -2,6 +2,9 @@
 
 
 def describe(run):
+    if run['adapter'] == 'weave':
+        return {'id':'weave_trace', 'label':'Weave trace snapshot',
+                'detail':'Calls grouped by project and trace ID. Native nesting and generated outputs are preserved; input history is context. Export completeness and training consumption are not established.'}
     if run['adapter'] == 'environment-episode':
         return {'id':'environment_episode', 'label':'Environment episode',
                 'detail':'Ordered recorded transitions for one environment episode. Reset and ending evidence determine completeness; model text is captured only when supplied. Termination and reward do not establish success.'}

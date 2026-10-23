@@ -2,7 +2,7 @@
 from copy import deepcopy
 import unittest
 from tracker.work_hierarchy import attach_outline_evidence, build, retry_summary
-from test_work_hierarchy import graph, finish
+from test_work_hierarchy import graph, finish, split_action
 import test_work_retries as retry_tests
 
 
@@ -16,6 +16,26 @@ def project(g=None, cutoff=None, outline=None):
 
 
 class OutlineExecutionTests(unittest.TestCase):
+    def test_split_dispatch_is_counted_once_across_outline_and_decision_windows(self):
+        from tracker import decision_followthrough as df
+        g = split_action(graph())
+        nodes, hierarchy = project(g)
+        for nid in ('approach', 'pdf', 'root'):
+            execution = nodes[nid]['execution_summary']
+            self.assertEqual(execution['counts']['actions'], 1)
+            self.assertEqual(execution['counts']['attempts'], 1)
+            self.assertEqual(nodes[nid]['retry_summary']['attempts'], 1)
+            self.assertEqual(len(execution['rows']), 2)
+        item = nodes['approach']
+        item.update(label='Build artifact', decisions=[dict(id='choose', type='pursue', event_index=0,
+            evidence=dict(event_id='e0', start=0, end=8, text='source 0'))])
+        outline = dict(cutoff_event_index=3, items=[item])
+        df.attach(g, outline)
+        window = df.windows(outline)[0]
+        self.assertEqual(window['counts']['attempts'], 1)
+        self.assertEqual(window['counts']['with_assessment'], 1)
+        self.assertEqual(len(window['rows']), 2)
+
     def test_direct_vs_inherited_evidence_never_changes_reports_or_decisions(self):
         nodes, hierarchy = project()
         for id, scope in [('approach', 'direct'), ('pdf', 'descendants'), ('root', 'descendants')]:

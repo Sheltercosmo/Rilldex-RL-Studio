@@ -35,6 +35,9 @@ class SnapshotWatcher(DirectoryWatcher):
         envelope = explicit_envelope(document, producer=self.producer, format=self.format, metadata=self.metadata)
         if envelope is not None:
             return envelope
+        from .weave_import import is_call
+        if is_call(document):
+            raise InputError('A Weave call is not a rollout snapshot. Import the calls export with Import files or rilldex import.')
         relative = path.relative_to(self.root).as_posix()
         fmt = self.format
         if fmt == 'auto' and all(k in document for k in ('input', 'output', 'step')):

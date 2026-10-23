@@ -1,0 +1,14 @@
+.case-behavior-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.case-behavior-head button{font-size:12px}.case-behavior-controls{margin:16px 0 8px}.case-behavior-controls select{max-width:100%;font-size:12px}
+.case-measure-labels,.case-measure-row{display:grid;grid-template-columns:minmax(150px,1.4fr) repeat(2,minmax(130px,1fr)) minmax(80px,.6fr);gap:12px}
+.case-measure-labels{font-size:11px;color:#64748b;padding:10px 0;border-bottom:1px solid #dce3ed}
+.case-measure-row{padding:16px 0;border-bottom:1px solid #e5e9f1;align-items:start;min-width:0}
+.case-measure-row>div{min-width:0}.case-measure-name strong{font-size:13px;line-height:1.5}.case-measure-row small{display:block;font-size:11px;line-height:1.6;color:#64748b;margin-top:4px;overflow-wrap:anywhere}
+.case-measure-row .case-measure-version{color:#94642c}
+.case-measure-value button{font-family:inherit;font-size:16px;font-weight:600;line-height:1.4;color:#385bd4;border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;text-align:left;cursor:pointer}
+.case-measure-value button:disabled{color:#68768a;cursor:default}.case-measure-delta strong{font-size:14px;font-variant-numeric:tabular-nums}
+.case-measure-detail{grid-column:1/-1;font-size:12px}.case-measure-detail>summary{width:fit-content}.case-measure-detail pre{max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.6 ui-monospace,Consolas,monospace}
+.workspace .case-dialog .case-measure-choice{display:flex;flex-direction:row;align-items:center;gap:10px;margin:0 0 12px;max-width:none}.workspace .case-measure-choice input{width:16px;height:16px;flex:none}
+.case-task-row{display:grid;grid-template-columns:minmax(150px,1.4fr) repeat(2,minmax(130px,1fr));gap:12px;padding:12px 0;border-top:1px solid #e5e9f1}.case-task-row>div{min-width:0;overflow-wrap:anywhere}.case-task-row button{font-size:12px;max-width:100%;white-space:normal}.case-task-gap{grid-column:1/-1}
+@media(max-width:720px){.case-task-row{grid-template-columns:repeat(2,minmax(0,1fr))}.case-task-row>div:first-child{grid-column:1/-1}}
+@media(max-width:720px){.case-measure-labels{display:none}.case-measure-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.case-measure-name{grid-column:1/-1}.case-measure-value::before,.case-measure-delta::before{content:attr(data-label);display:block;font-size:11px;color:#64748b;margin-bottom:4px}.case-measure-delta{grid-column:1/-1}.case-measure-detail{margin-top:0}}

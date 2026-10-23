@@ -5,7 +5,7 @@ action ran: submission can interrupt a batch before its later actions execute.
 """
 from .schema import InputError, content_text, event
 
-VERSION = 'mini-swe-agent/2'
+VERSION = 'mini-swe-agent/3'
 
 
 def is_v2(doc):

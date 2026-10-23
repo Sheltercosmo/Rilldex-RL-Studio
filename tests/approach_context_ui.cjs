@@ -1,0 +1,38 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const out=process.env.REVIEW_OUTPUT_DIR,base=process.env.REVIEW_TEST_URL,fixtures=JSON.parse(fs.readFileSync(out+'/fixture.json','utf8'));
+(async()=>{const browser=await chromium.launch({headless:true,channel:'msedge'}),errors=[];try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));
+ const f=fixtures[0],pair=f.rows.find(r=>r.procedure==='reconfigured_procedure');
+ const inspectReason=async()=>{const quote=page.locator('#detail-body pre').filter({hasText:pair.reason.text}).first();await quote.waitFor({state:'attached',timeout:30000});for(const parent of (await quote.locator('xpath=ancestor::details').all()).reverse())if(!(await parent.getAttribute('open')!==null))await parent.locator('summary').first().click();await quote.waitFor();};
+ await page.goto(base+'/?'+new URLSearchParams({view:'strategies',lens:'procedure',observer:f.observer,population_mode:'task_mix',category:'reconfigured_procedure',cases:'1',case_window:'all'}));
+ const card=page.locator('.bd-evidence-case').filter({has:page.locator('.bd-stated-reason')});
+ await card.waitFor({timeout:30000});
+ assert.ok((await card.innerText()).includes(pair.reason.text.slice(0,100)));
+ assert.ok((await card.innerText()).includes('Earlier response:'));
+ assert.ok((await card.innerText()).includes('Later response:'));
+ await card.screenshot({path:out+'/public-case-desktop.png'});
+ const sourceLink=card.getByRole('link',{name:'Inspect stated reason →'}),url=new URL(await sourceLink.getAttribute('href'),base),saved=page.url();
+ assert.equal(url.searchParams.get('focus_unit'),pair.reason.node_id);
+ assert.equal(url.searchParams.get('graph'),f.graph_id);
+ await sourceLink.click();await inspectReason();
+ await page.reload();await inspectReason();
+ await page.locator('#detail-body').getByRole('link',{name:'← Behavior distributions',exact:true}).click();
+ await page.locator('.bd-stated-reason').waitFor();assert.deepEqual(Object.fromEntries(new URL(page.url()).searchParams),Object.fromEntries(new URL(saved).searchParams));
+ await page.getByRole('searchbox',{name:'Find target, source text or rollout'}).fill('permission issues');
+ await page.getByRole('button',{name:'Find cases',exact:true}).click();assert.equal(await page.locator('.bd-evidence-case').count(),1);
+ await page.reload();await page.locator('.bd-stated-reason').waitFor();assert.equal(await page.getByRole('searchbox').inputValue(),'permission issues');
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export matching cases',exact:true}).click();await(await download).saveAs(out+'/exported-case.json');
+ const exported=JSON.parse(fs.readFileSync(out+'/exported-case.json','utf8'));assert.equal(exported.cases.length,1);assert.deepEqual(exported.cases[0].stated_reason,pair.reason);assert.deepEqual(exported.cases[0].response_context,pair.responses);
+ await page.setViewportSize({width:390,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ const reasonBox=page.locator('.bd-stated-reason');const paragraph=await reasonBox.locator('p').boundingBox(),link=await reasonBox.locator('a').boundingBox();assert.ok(paragraph.width>=240);assert.ok(link.y>=paragraph.y+paragraph.height);
+ await page.locator('.bd-evidence-case').screenshot({path:out+'/public-case-mobile.png'});
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto(base+'/semantic-map?'+new URLSearchParams({run:f.run_id,graph:f.graph_id,observer:f.observer,level:'work'}));
+ await page.locator('.wr-target').first().waitFor({timeout:30000});
+ const buttons=page.locator('.wr-target');let found=false;
+ for(let i=0;i<await buttons.count();i++){await buttons.nth(i).click();const reason=page.locator('.wr-sequence .wr-stated-reason').filter({hasText:pair.reason.text.slice(0,80)});if(await reason.count()){found=true;await reason.screenshot({path:out+'/public-work-reason.png'});await reason.getByRole('button',{name:'Inspect stated reason',exact:true}).click();await inspectReason();break;}}
+ assert.ok(found,'Changed procedure appears in the Work path with its source-bound reason');assert.deepEqual(errors,[]);
+ const result={passed:true,installed:true,provider_calls:0,public_rollouts:fixtures.length,selected_pairs:fixtures.reduce((n,f)=>n+f.rows.length,0),checks:['public before/reason/after evidence','exact source navigation','reload and return','reason search persistence','source-bound case export','mobile width and stacked reason','work path reason navigation'],errors};
+ fs.writeFileSync(out+'/browser-report.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1);});

@@ -27,7 +27,7 @@
   for(const [index,r]of (doc.relations||[]).entries())if(byId.has(r.from)&&byId.has(r.to))edges.push({...r,index,family:families[r.type]||'other',label:resultLabels[r.work_result]||r.type.replaceAll('_',' ')});
   return {nodes,edges,lanes,width:52+Math.max(1,lanes.length)*304,height:Math.max(240,100+(row+1)*158),hidden:ordered.length-chosen.length};
  }
- const materialLabels={contents:'Contents recorded',partial_contents:'Some contents recorded',reference_only:'Reference only',recorded_uninspected:'Material uninspected',absent:'No requested material',unresolved:'Material unresolved',uninspected:'Not inspected'};
+ const materialLabels={contents:'Contents recorded',partial_contents:'Some contents recorded',reference_only:'Reference only',recorded_uninspected:'Material uninspected',absent:'No requested material',unresolved:'Material unresolved',uninspected:'Not inspected',conflicting_observations:'Conflicting readings'};
  function mountPlans(host,doc,visible,{focus,onUnit,onStage,onStageEvidence,onTransition,onDeclaredLink}){
   const plans=(doc.plan_execution?.plans||[]).filter(p=>visible.has(p.plan_unit_id)||p.stages.some(s=>s.action_unit_ids.some(id=>visible.has(id))));
   const html=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
@@ -36,6 +36,7 @@
    const section=html('section',undefined,'plan-blueprint');section.dataset.planUnit=plan.plan_unit_id;
    const title=html('button',plan.text,'plan-blueprint-title');title.type='button';title.onclick=()=>onUnit?.(plan.plan_unit_id);section.append(html('p','PLAN STRUCTURE AND OBSERVED WORK','eyebrow'),title);
    section.append(html('p','Dashed gold: declared organization · Solid teal: stage work observed in source order. Open a stage to follow its original units.','blueprint-legend'));
+   if(doc.plan_execution.counting)section.append(html('p','Counts use captured calls, not annotation fragments. A call may serve several roles or stages. Responses count once per stage.','blueprint-legend'));
    const scroller=html('div',undefined,'plan-graph-scroll'),canvas=html('div',undefined,'plan-graph');canvas.style.width=Math.max(310,plan.stages.length*310)+'px';
    const hasResults=plan.stages.some(s=>s.work_result_history?.length),height=hasResults?255:215;
    canvas.style.height=height+'px';
@@ -70,7 +71,7 @@
     const changed=i===0||JSON.stringify(phase.stage_ids)!==JSON.stringify(plan.phases[i-1].stage_ids);
     const stageLabel=changed&&phase.stage_ids.length?phase.stage_ids.map(id=>'Stage '+(plan.stages.findIndex(s=>s.stage_id===id)+1)).join(' + ')+' · ':'';
     const roleLabels={prepares:'Prepare',attempts:'Attempt',checks:'Check'};
-    const b=html('button',`${stageLabel}${phase.roles.map(r=>roleLabels[r]||r).join(' + ')||'Unassigned'}${phase.positions.length>1?' ×'+phase.positions.length:''}`,'plan-phase');b.type='button';b.title=names+'\n'+phase.action_event_ids.join(', ');b.onclick=()=>{if(phase.action_unit_ids[0])onUnit?.(phase.action_unit_ids[0]);};b.disabled=!phase.action_unit_ids.length;phases.append(b);
+    const b=html('button',`${stageLabel}${phase.roles.map(r=>roleLabels[r]||r).join(' + ')||'Unassigned'}${phase.positions.length>1?' ×'+phase.positions.length:''}${phase.order_ambiguous?' · order unknown':''}`,'plan-phase');b.type='button';b.title=names+'\n'+phase.action_event_ids.join(', ');b.onclick=()=>{if(phase.action_unit_ids[0])onUnit?.(phase.action_unit_ids[0]);};b.disabled=!phase.action_unit_ids.length;phases.append(b);
    }
    details.append(phases,html('p',`${plan.counts.unassigned_actions} unassigned dispatches and ${plan.counts.multiple_stage_actions} multiple-stage dispatches retained. These are observations of correspondence, not completion or deviation judgments.`,'blueprint-legend'));section.append(details);
    section.append(html('p',hasResults?'Work results apply to the named scope at the displayed response. Open a stage-change line to see the earlier result available at that moment. These are readings of recorded evidence, not independent verification.':'Completion is not established by material presence. A later stage can begin before an earlier stage has been verified.','blueprint-legend'));host.append(section);

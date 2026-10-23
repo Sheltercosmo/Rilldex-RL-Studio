@@ -4,13 +4,14 @@ The same graph identities back overview, units and source inspection. A cutoff
 limits visible evidence; it does not assert that retrospective annotations were
 produced online. Source order is never promoted into dependency or completion.
 """
-from collections import Counter, defaultdict
+from collections import defaultdict
 from copy import deepcopy
 
 from .schema import InputError, digest
 from .graph_store import validate
+from . import work_dispatches
 
-VERSION = 'work-hierarchy/12'
+VERSION = 'work-hierarchy/13'
 ROLES = {'prepares_plan_step': 'Preparation', 'attempts_plan_step': 'Attempt',
          'checks_plan_step': 'Check'}
 RELATIONS = {'assesses': 'Assesses feedback', 'uses_evidence': 'Uses evidence',
@@ -118,7 +119,10 @@ def build(graph, cutoff_event_id=None):
                 connect(a, b, org['kind'], 'Stated order' if org['kind'] == 'precedes' else 'Requires', evidence=org['evidence'])
 
     actions = {n['id']: n for n in visible.values() if n['properties'].get('kind') == 'action'}
-    role_counts = defaultdict(Counter)
+    from .action_comparison import source_resolver
+    resolve_action = source_resolver(graph)
+    dispatch_ids = {aid: (resolve_action(aid) or {}).get('node_id', aid) for aid in actions}
+    role_counts = defaultdict(lambda: defaultdict(set))
     for e in eligible:
         if e['type'] not in ROLES: continue
         target = e['target'] if e['target'] in stage_parents else e['target'] + ':' + str(e['properties'].get('plan_step_id', ''))
@@ -131,9 +135,11 @@ def build(graph, cutoff_event_id=None):
         if (a['event_index'], a['properties'].get('source', {}).get('start', 0)) < (
                 parent['event_index'], parent['properties'].get('source', {}).get('end', 0)):
             issues.append(dict(type='action_precedes_plan', edge_id=e['id'])); continue
-        add(a, 'action', state='Dispatch recorded'); assigned.add(a['id']); role_counts[target][e['type']] += 1
+        add(a, 'action', state='Dispatch recorded')['dispatch_id'] = dispatch_ids[a['id']]
+        assigned.add(a['id']); role_counts[target][e['type']].add(dispatch_ids[a['id']])
         connect(target, a['id'], e['type'], ROLES[e['type']], [e['id']], e['properties'].get('evidence', []))
-    for sid, counts in role_counts.items():
+    for sid, roles in role_counts.items():
+        counts = {role: len(ids) for role, ids in roles.items()}
         items[sid]['roles'] = dict(counts)
         items[sid]['state'] = ' · '.join(f'{count} {ROLES[k].lower()}{"s" if count != 1 else ""}' for k, count in counts.items())
 
@@ -160,14 +166,16 @@ def build(graph, cutoff_event_id=None):
     # Count the visible agent actions once, preferring annotated units over events.
     covered = {e['target'] for e in eligible if e['type'] == 'grounded_in' and e['source'] in actions}
     all_actions = [n for n in actions.values() if n['id'] not in covered]
-    unassigned = [n['id'] for n in all_actions if n['id'] not in assigned]
+    assigned_dispatches = {dispatch_ids[aid] for aid in assigned}
+    unassigned = [n['id'] for n in all_actions if dispatch_ids[n['id']] not in assigned_dispatches]
     result = dict(schema=VERSION, graph_id=graph['id'], run_id=graph['run_id'], source_hash=graph['source_hash'],
         cutoff_event_id=cutoff_event_id, cutoff_event_index=cutoff, roots=roots,
         nodes=sorted(items.values(), key=lambda n: (n.get('event_index') or 0, n['id'])), links=links,
         unassigned_action_ids=unassigned, issues=issues,
         records=[dict(id=n['properties']['id'], index=n['event_index'], label=f"Record {n['event_index'] + 1}") for n in sorted(events.values(), key=lambda n:n['event_index'])],
         counts=dict(plans=len(plans), roots=len(roots), plan_steps=len(stage_parents),
-                    linked_actions=len(assigned), visible_actions=len(all_actions), unassigned_actions=len(unassigned)),
+                    linked_actions=len(assigned_dispatches), visible_actions=len({dispatch_ids[n['id']] for n in all_actions}),
+                    unassigned_actions=len({dispatch_ids[aid] for aid in unassigned})),
         available=bool(roots),
         limits='Plans and links are saved observations, not verified intent, adoption or completion. Unassigned work is not deviation. Native list states are reported by the agent. Cutoff filters recorded evidence; it does not attest online annotation or causal execution order.')
     if native_tree:
@@ -226,7 +234,7 @@ def stage_paths(items, links, stages, all_actions, graph):
                     assessments.append(dict(node_id=review['id'], link_id=link['id']))
                 feedback.append(dict(node_id=rid, link_ids=sorted(witnesses),
                     assessments=sorted(assessments, key=lambda v: (items[v['node_id']]['event_index'], v['node_id']))))
-            rows.append(dict(action_id=aid, role_link_ids=sorted(e['id'] for e in membership[aid]),
+            rows.append(dict(action_id=aid, dispatch_id=action.get('dispatch_id', aid), role_link_ids=sorted(e['id'] for e in membership[aid]),
                 roles=sorted({e['type'] for e in membership[aid]}), responses=feedback))
         returns = []
         for aid in ordered:
@@ -268,33 +276,31 @@ def stage_paths(items, links, stages, all_actions, graph):
                 intervening=sorted(context,key=lambda n:(n['event_index'],n['id']))))
         out.append(dict(stage_id=sid, rows=rows, return_link_ids=sorted(returns), return_comparisons=comparisons,
             retry_summary=retry_summary(rows, comparisons, links),
-            other_action_ids=sorted(outside), counts=dict(actions=len(rows),
-                attempts=sum('attempts_plan_step' in r['roles'] for r in rows),
-                preparations=sum('prepares_plan_step' in r['roles'] for r in rows),
-                checks=sum('checks_plan_step' in r['roles'] for r in rows),
-                with_feedback=sum(bool(r['responses']) for r in rows),
-                with_assessment=sum(any(v['assessments'] for v in r['responses']) for r in rows),
-                returns=len({items_link['source'] for items_link in links if items_link['id'] in returns}))))
+            other_action_ids=sorted(outside), counts=dict(**work_dispatches.counts(rows),
+                returns=len({items[e['source']].get('dispatch_id', e['source']) for e in links if e['id'] in returns}))))
     return out
 
 
 def retry_summary(rows, comparisons, links):
     """Count later attempts once, not pair edges, checks, or failure statements."""
     attempts = {r['action_id'] for r in rows if 'attempts_plan_step' in r['roles']}
+    dispatches = {r['action_id']: work_dispatches.identity(r) for r in rows}
     by_link = {e['id']: e for e in links}
     cases = {}
     for record in comparisons:
         c = record['comparison']; current, previous = c['current_node_id'], c['previous_node_id']
-        if c['ordering'] != 'source_order' or current not in attempts or previous not in attempts:
+        if (c['ordering'] != 'source_order' or current not in attempts or previous not in attempts
+                or dispatches[current] == dispatches[previous]):
             continue
         witnesses = [by_link[k] for k in record['link_ids'] if k in by_link]
         if not witnesses: continue
-        case = cases.setdefault(current, dict(action_id=current, previous_attempt_ids=[], link_ids=[], after_reported_error=False))
+        case = cases.setdefault(current, dict(action_id=current, dispatch_id=dispatches[current], previous_attempt_ids=[], link_ids=[], after_reported_error=False))
         case['previous_attempt_ids'] = sorted(set(case['previous_attempt_ids']) | {previous})
         case['link_ids'] = sorted(set(case['link_ids']) | {e['id'] for e in witnesses})
         case['after_reported_error'] |= any(e['type'] in {'revisits_after_error_report','completed_after_failed_call'} for e in witnesses)
-    return dict(attempts=len(attempts), attempt_ids=sorted(attempts), repeated_attempts=len(cases),
-                after_reported_error=sum(c['after_reported_error'] for c in cases.values()), cases=list(cases.values()),
+    return dict(attempts=len({dispatches[aid] for aid in attempts}), attempt_ids=sorted(attempts),
+                attempt_dispatch_ids=sorted({dispatches[aid] for aid in attempts}),
+                **work_dispatches.retry_counts(cases.values()), cases=list(cases.values()),
                 coverage='saved_links_only')
 
 
@@ -339,15 +345,14 @@ def attach_outline_evidence(outline, paths, items, stage_parents):
         if not paths_here: continue
         cases = {}; attempts = set()
         for plan, owner, path in paths_here:
-            attempts.update(path['retry_summary']['attempt_ids'])
+            attempts.update(path['retry_summary'].get('attempt_dispatch_ids', path['retry_summary']['attempt_ids']))
             for case in path['retry_summary']['cases']:
-                current = cases.setdefault(case['action_id'], dict(action_id=case['action_id'], previous_attempt_ids=set(), link_ids=set(), after_reported_error=False, stage_ids=set()))
+                current = cases.setdefault(case['action_id'], dict(action_id=case['action_id'], dispatch_id=work_dispatches.identity(case), previous_attempt_ids=set(), link_ids=set(), after_reported_error=False, stage_ids=set()))
                 for key in ('previous_attempt_ids', 'link_ids'): current[key].update(case[key])
                 current['after_reported_error'] |= case['after_reported_error']; current['stage_ids'].add(path['stage_id'])
         for case in cases.values():
             for key in ('previous_attempt_ids','link_ids','stage_ids'): case[key] = sorted(case[key])
-        item['retry_summary'] = dict(attempts=len(attempts), repeated_attempts=len(cases),
-            after_reported_error=sum(c['after_reported_error'] for c in cases.values()), cases=list(cases.values()),
+        item['retry_summary'] = dict(attempts=len(attempts), **work_dispatches.retry_counts(cases.values()), cases=list(cases.values()),
             bound_plan_ids=sorted({p for p, _, _ in paths_here}),
             bound_work_ids=sorted({owner for _, owner, _ in paths_here}),
             stage_ids=sorted({p['stage_id'] for _, _, p in paths_here}), coverage='saved_links_only')
@@ -366,7 +371,7 @@ def outline_execution(item_id, paths, items):
     for plan, owner, path in paths:
         for row in path['rows']:
             action = actions.setdefault(row['action_id'], dict(action_id=row['action_id'],
-                roles=set(), memberships=[], responses={}))
+                dispatch_id=work_dispatches.identity(row), roles=set(), memberships=[], responses={}))
             action['roles'].update(row['roles'])
             membership = dict(plan_id=plan, work_id=owner, stage_id=path['stage_id'],
                 roles=list(row['roles']), role_link_ids=list(row['role_link_ids']),
@@ -395,17 +400,12 @@ def outline_execution(item_id, paths, items):
         rows.append(action)
     owners = sorted({owner for _, owner, _ in paths})
     scope = ('mixed' if len(owners) > 1 else 'direct') if item_id in owners else 'descendants'
-    return dict(scope=scope, coverage='saved_links_only', grain='distinct_action_id',
+    return dict(scope=scope, coverage='saved_links_only', grain='source_dispatch_or_action_id',
         bound_plan_ids=sorted({plan for plan, _, _ in paths}), bound_work_ids=owners,
         binding_ids=sorted({bid for _,_,p in paths for bid in p.get('outline_binding_ids',[])}),
         binding_basis='reviewed_scopes' if all(p.get('binding_basis')=='reviewed_scope' for _,_,p in paths) else 'containing_plan_citation',
         stage_ids=sorted({p['stage_id'] for _, _, p in paths}), rows=rows,
-        counts=dict(actions=len(rows),
-            attempts=sum('attempts_plan_step' in a['roles'] for a in rows),
-            preparations=sum('prepares_plan_step' in a['roles'] for a in rows),
-            checks=sum('checks_plan_step' in a['roles'] for a in rows),
-            with_feedback=sum(bool(a['responses']) for a in rows),
-            with_assessment=sum(any(r['assessments'] for r in a['responses']) for a in rows)))
+        counts=work_dispatches.counts(rows))
 
 
 def native_lists(graph, visible, eligible, items, links, roots):

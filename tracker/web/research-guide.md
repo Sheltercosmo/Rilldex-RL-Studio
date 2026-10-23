@@ -529,6 +529,21 @@ merged into semantic graphs. Use the IDs in your results to open existing maps,
 or build a dedicated visualization in your notebook. That publication boundary
 prevents an arbitrary custom score from silently becoming a product metric.
 
+## Behavior comparisons
+
+Compare saved observations directly, with no model calls or export:
+
+```python
+ws = Workspace("study.sqlite", experiment="training-run", observer="my-observer")
+capture = ws.compare_behavior(lens="procedure", a_start=0, a_end=9,
+                              b_start=10, b_end=19, save=True)
+original = ws.compare_behavior(saved=capture["id"])
+followup = ws.compare_behavior(parent_id=capture["id"], save=True)
+```
+
+Omit `save=True` for a live snapshot. Saved captures retain counts, coverage and
+graph links; follow-ups use the original task, annotation version and windows.
+
 ## Practices borrowed and choices made
 
 For interpreting changing curves, [Population readiness](POPULATION_READINESS.md)

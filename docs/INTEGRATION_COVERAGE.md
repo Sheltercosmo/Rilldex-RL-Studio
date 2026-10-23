@@ -1,5 +1,9 @@
 # RL integration coverage and operating contract
 
+**22 October native control training:** SB3 2.9.0 PPO/DQN capture passed CPU controls for unchanged model weights/logs, vector autoresets, normalization, evaluation and Windows spawned workers. A 5,120-transition CartPole exercise covered offline capture, HTTP delivery and checkpoint resume; logs, hardware, files and source maps remained accessible. [Setup and limits](STABLE_BASELINES.md). Reproduce with `scripts/validate_sb3_capture.py`.
+
+**21 October public trainer replay:** ms-swift GRPO imports preserve 256 published TimeChat-Captioner updates and all 6,912 scalar values, with reward-component and entropy definitions, repeat-import deduplication, exact interval exports and dashboard inspection. This validates recorded logs, not execution of the original distributed trainer. [Source, checks and limits](../research/public-trainer-2026-10-21/README.md).
+
 **15 October input generalization:** setup, directory collection and file import now share one record-schema catalog. JSONL and updating JSON files expose conversations, environment episodes, generations, ATIF and the available framework readers. The Harbor/SWE-agent multi-file reader remains a specialized layout for companion results. Unmarked `messages` and `prompt`/`completion` records, and verl `input`/`output`/`step` exports, use the same automatic recognition in file and worker delivery. Ambiguous shapes require an explicit reader. [Usage and validation](INPUT_GENERALIZATION.md).
 
 **12 October native A*-PO increment:** a second TRL trainer follows cached-reference estimation and on-policy sequence regression, with exact completed-backward/optimizer membership. Capture-on/off native CPU execution agrees; every declared sample resolves to its source. This extends native method coverage, not framework or accelerator coverage. [Contract](TRL_A2PO_CAPTURE.md) · [Execution evidence](../research/a2po-native-2026-10-12/README.md).
@@ -65,7 +69,7 @@ The optional [state recorder](STATE_CAPTURE.md) adds source-bound object version
 
 Portable envelopes use `trajectory_format` with the exact version above. `outcome.reward` is a finite explicitly chosen producer score; `outcome.success` is an explicit boolean or null. No scalar or ending is promoted into success. A step-return sum is not silently substituted for the training reward. Unselected reward components can remain in raw source.
 
-`Episode` records one environment instance and episode. Vectorized environments must be demultiplexed with environment/episode identities; auto-reset wrappers must preserve the actual final observation before the next reset. No automatic vector-environment or auto-reset translator is supplied. Do not send batch flags or the next episode's reset observation as the previous episode's transition.
+`Episode` records one environment instance and episode. Vectorized environments must be demultiplexed with environment/episode identities; auto-reset wrappers must preserve the actual final observation before the next reset. The [SB3 adapter](STABLE_BASELINES.md) handles its native vector environments and autoresets. Other producers supply those boundaries explicitly; do not send the next episode's reset observation as the previous episode's transition.
 
 Helpers are in [`tracker/portable.py`](../tracker/portable.py); transport is [`tracker/capture.py`](../tracker/capture.py). Python SDK requires 3.11+, with no trainer dependencies. Other languages or older Python processes can use the same HTTP envelope. Native log schemas and tool semantics should be version-pinned by the exporter.
 

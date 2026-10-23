@@ -4,7 +4,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from examples.chat_candidate_proposer import propose
+from rilldex.candidate import propose
 
 
 class CandidateExampleTests(unittest.TestCase):
@@ -12,7 +12,7 @@ class CandidateExampleTests(unittest.TestCase):
         packet={'stage':'units','response_contract':{'units':[]},'source':'quoted trace'}
         response=json.dumps({'choices':[{'message':{'content':'{"units":[]}'}}]}).encode()
         for endpoint in ('http://127.0.0.1:8000/v1/chat/completions','https://example.invalid/v1/chat/completions'):
-            with patch('examples.chat_candidate_proposer.urlopen',return_value=io.BytesIO(response)) as call:
+            with patch('rilldex.candidate.urlopen',return_value=io.BytesIO(response)) as call:
                 self.assertEqual(propose(packet,endpoint=endpoint,model='pinned-model'),{'units':[]})
                 call.assert_called_once()
                 request=call.call_args.args[0]
@@ -23,13 +23,13 @@ class CandidateExampleTests(unittest.TestCase):
 
     def test_invalid_endpoints_never_make_a_request(self):
         for endpoint in ('http://remote.invalid/v1/chat/completions','https://user:secret@example.invalid/chat','https://example.invalid/chat?key=secret'):
-            with patch('examples.chat_candidate_proposer.urlopen') as call:
+            with patch('rilldex.candidate.urlopen') as call:
                 with self.assertRaises(ValueError):propose({},endpoint=endpoint,model='model')
                 call.assert_not_called()
 
     def test_nonobject_candidate_is_rejected(self):
         response=json.dumps({'choices':[{'message':{'content':'[]'}}]}).encode()
-        with patch('examples.chat_candidate_proposer.urlopen',return_value=io.BytesIO(response)):
+        with patch('rilldex.candidate.urlopen',return_value=io.BytesIO(response)):
             with self.assertRaises(ValueError):propose({},endpoint='http://localhost:8000/chat',model='model')
 
 

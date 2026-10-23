@@ -13,6 +13,9 @@ from .semantic_extraction import (audit_result, checked_span, read, request,
 from .semantic_map import evidence
 
 VERSION = 'plan-stage-correspondence/2'
+PAGED_VERSION = 'plan-stage-correspondence/3'
+DIRECT_VERSION = 'plan-stage-correspondence/4'
+PAGED_VERSIONS = {PAGED_VERSION, DIRECT_VERSION}
 POLICY = {'schema':'readable-context/1','recent_events':6,
           'max_event_chars':4000,'extra_ranges':[]}
 LIMIT = 24
@@ -88,7 +91,12 @@ def relation_request(run, extraction, action, pool, selected=None, stage_request
     return request(run,action['source'],stage,question,choices,context_policy=policy,**context)
 
 
-def build(run, extraction, choose):
+def build(run, extraction, choose, *, version=VERSION, decide=None, progress=None):
+    if version in PAGED_VERSIONS:
+        from .plan_scope_pages import build as build_pages
+        if decide is None:raise InputError('Plan comparisons require the multi-question decision interface')
+        return build_pages(run,extraction,decide,progress=progress,version=version)
+    if version!=VERSION:raise InputError('Unknown Plan correspondence version')
     if extraction['status']!='complete_local_extraction':raise InputError('Complete local selection is required before plan relations')
     result={'schema':VERSION,'run_id':run['id'],'source_hash':digest(run),
             'extraction_hash':digest(extraction),'candidate_limit':LIMIT,
@@ -129,27 +137,31 @@ def build(run, extraction, choose):
     return result
 
 
-def path_for(directory, extraction):
-    return Path(directory)/'plan_relations'/extraction['run_id']/VERSION.replace('/','-')/f'{digest(extraction)}.json'
+def path_for(directory, extraction, version=VERSION):
+    if version not in {VERSION,*PAGED_VERSIONS}:raise InputError('Unknown Plan correspondence version')
+    return Path(directory)/'plan_relations'/extraction['run_id']/version.replace('/','-')/f'{digest(extraction)}.json'
 
 
 def audit(run, extraction, result, directory):
     audit_result(run,extraction,directory)
-    def replay(req):
+    def replay_many(req):
         key=digest(req);saved=read(Path(directory)/'decisions'/f'{key}.json')
         if saved['request']!=req or saved['response'].get('model')!=req['model']:raise InputError('Plan relation request/model changed')
         answers=replay_decision(saved)
         if answers!=saved['answers']:raise InputError('Plan relation is not raw argmax')
+        return answers,key
+    def replay(req):
+        answers,key=replay_many(req)
         return answers['choice']['value'],key
-    if build(run,extraction,replay)!=result:raise InputError('Plan relations differ from selected local extraction or replay')
+    if build(run,extraction,replay,version=result['schema'],decide=replay_many)!=result:raise InputError('Plan relations differ from selected local extraction or replay')
     return {'actions_reviewed':len(result['actions']),'selected_relations':len(result['relations']),
             'argmax_replayed':True,'completion_inferred':False,'semantic_accuracy':'not independently measured'}
 
 
-def execute(run, extraction, engine):
+def execute(run, extraction, engine, *, version=VERSION, progress=None):
     audit_result(run,extraction,engine.directory)
-    result=build(run,extraction,engine.choose)
+    result=build(run,extraction,engine.choose,version=version,decide=engine.decide,progress=progress)
     validation=audit(run,extraction,result,engine.directory)
     write(Path(engine.directory)/'plan_relation_snapshots'/f'{digest(result)}.json',result)
-    write(path_for(engine.directory,extraction),result)
+    write(path_for(engine.directory,extraction,version),result)
     return result,validation

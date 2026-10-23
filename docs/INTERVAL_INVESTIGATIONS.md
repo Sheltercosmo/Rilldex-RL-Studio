@@ -31,6 +31,8 @@ A log spanning both intervals stays a single aggregate. Partial or unresolved re
 
 **Reference evidence / Selected evidence** open immutable measurement receipts. Recovery evidence shows the failed check, relevant recorded change and later check/result. The linked rollout map uses the same receipt. Counts of repeated-failure windows can overlap; they are not unique attempts or wasted compute.
 
+Search or filter cases by their recorded status, then choose **Open this case on the map**. The map highlights that case on its saved graph. **Back to Investigation** reopens the same receipt, case and task population; reload keeps the selected map case.
+
 Each measure retains its definition version, observation protocol, used graph/harness definitions, available annotation coverage and exact audit associations. Reviewer roles are self-declared. Coverage and agreement on sampled opportunities do not establish general semantic accuracy or detect opportunities omitted by the extractor.
 
 Record curriculum, sampling, reward/grader, budget, restart or infrastructure events with an explicit clock and basis. Only matching events appear on a curve. These are researcher-recorded annotations, not automatic incident detection. Corrections can supersede earlier events through the API; both remain stored.

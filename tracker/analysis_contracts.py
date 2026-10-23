@@ -91,6 +91,11 @@ CONTRACTS = {
         'native action / supported recurrence', ['native_actions', 'action_units', 'work_identity_reviews'],
         'A return needs supported work identity. Missing review is unknown; recurrence is not exploration or objective deviation.',
         'Software, airline and retail public replay; independent relation accuracy not established.'),
+    'repeated_work': projection(
+        'Compare recorded attempts', 'What changed between repeated attempts at the same work?',
+        'supported same-work dispatch pair', ['native_actions', 'action_units', 'work_identity_reviews'],
+        'Compares native inputs or captured action text and source-bound feedback. Missing feedback and uncertain order remain unknown; matching records do not prove failed loops or unchanged environment state.',
+        'Deterministic source comparisons; work identity inherits the selected observer accuracy.'),
     'work_navigation': projection(
         'Connected work visits', 'Which connected work visits explain this rollout?',
         'work visit', ['work_navigation_units', 'work_navigation_reviews'],

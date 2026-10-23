@@ -99,19 +99,23 @@ def load(run,observer,store=None):
         p={**p,**member,'run_id':run['id']}
     if p.get('run_id') and (p['run_id']!=run['id'] or p['source_hash']!=digest(run)):
         raise InputError('Registered observer belongs to another source')
-    result=load_reference(run) if p['kind']=='reference' else load_extraction(run,p['directory'],action_target_version=p.get('action_target_version'))
+    result=load_reference(run) if p['kind']=='reference' else load_extraction(run,p['directory'],action_target_version=p.get('action_target_version'),plan_relation_version=p.get('plan_relation_version'))
     if result['available']:
         if p.get('method_directory'):
             from .method_comparison import load as load_methods
             result['document']['method_comparison']=load_methods(run,result['document'],p['method_directory'])
-        if p.get('extraction_hash') and (p['extraction_hash']!=digest(result['raw_extraction']) or p['map_hash']!=digest(result['document'])):
+        if p.get('extraction_hash') and (p['extraction_hash']!=digest(result['raw_extraction']) or p.get('base_map_hash',p['map_hash'])!=digest(result['document'])):
             raise InputError('Registered observation changed; register its new audited version')
         if p.get('execution_directory'):
             from .execution_reports import path_for,audit,project
             reports=read(path_for(p['execution_directory'],run))
+            if p.get('execution_report_hash') and digest(reports)!=p['execution_report_hash']:
+                raise InputError('Registered execution reports changed')
             validation=audit(run,reports,p['execution_directory'])
             result=project(run,result,reports)
             result['validation']['execution_reports']=validation
+            if p.get('base_map_hash') and p['map_hash']!=digest(result['document']):
+                raise InputError('Registered execution map changed')
         if p.get('stage_material_directory'):
             from .plan_stage_material import path_for,audit
             material=read(path_for(p['stage_material_directory'],run,result['document']))
@@ -191,13 +195,13 @@ def load(run,observer,store=None):
     return result
 
 
-def register(store,directory,run_id,label,*,action_target_version=None,method_directory=None):
+def register(store,directory,run_id,label,*,action_target_version=None,method_directory=None,plan_relation_version=None,execution_directory=None):
     """Register an audited complete pass; bind both extraction and derived map."""
     if not isinstance(label,str) or not label.strip() or len(label)>160:
         raise InputError('Observer label must contain 1–160 characters')
     run=store.get(run_id,raw=True)['run']
     directory=Path(directory).resolve()
-    result=load_extraction(run,directory,action_target_version=action_target_version)
+    result=load_extraction(run,directory,action_target_version=action_target_version,plan_relation_version=plan_relation_version)
     if not result['available'] or result['raw_extraction']['status']!='complete_local_extraction':
         raise InputError('Only an audited complete extraction can be registered')
     if method_directory:
@@ -208,7 +212,17 @@ def register(store,directory,run_id,label,*,action_target_version=None,method_di
               'run_id':run_id,'source_hash':digest(run),'label':label.strip(),
               'extraction_hash':digest(result['raw_extraction']),'map_hash':digest(result['document'])}
     if action_target_version:document['action_target_version']=action_target_version
+    if plan_relation_version:document['plan_relation_version']=plan_relation_version
     if method_directory:document['method_directory']=method_directory
+    if execution_directory:
+        from .execution_reports import path_for,audit,project
+        execution_directory=str(Path(execution_directory).resolve())
+        reports=read(path_for(execution_directory,run))
+        validation=audit(run,reports,execution_directory)
+        result=project(run,result,reports)
+        result['validation']['execution_reports']=validation
+        document.update(execution_directory=execution_directory,execution_report_hash=digest(reports),
+            base_map_hash=document['map_hash'],map_hash=digest(result['document']))
     identifier='saved-'+digest(document)[:24]
     with store.connect() as connection:
         previous=connection.execute('SELECT document FROM semantic_observers WHERE id=?',(identifier,)).fetchone()

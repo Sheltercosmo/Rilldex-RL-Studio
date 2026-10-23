@@ -15,10 +15,14 @@ FORMAT_VERSIONS.update({'chat-messages':'chat-messages/1','environment-episode':
 FORMATS = ("auto", "harbor", "harbor-bundle", "swe-agent", "swe-rl", "mini-swe-agent", "nebius", "agent-process-bench", "devai", "verl-generation", "chat-messages", "environment-episode", "generation", "atif", "tau-bench")
 FORMATS += ('nebius-openhands',)
 FORMATS += ('slime-debug',)
+FORMATS += ('weave',)
 FORMAT_VERSIONS['slime-debug'] = 'slime-debug/1'
+FORMAT_VERSIONS['weave'] = 'weave-calls/1'
 
 
 def detect(document: dict) -> str:
+    from .weave_import import matches as weave_matches
+    if weave_matches(document): return 'weave'
     if document.get('trajectory_format') == 'environment-episode/2': return 'environment-episode'
     if document.get('trajectory_format') == 'slime-debug/1': return 'slime-debug'
     from .nebius_openhands import matches as openhands_matches
@@ -64,6 +68,9 @@ def detect(document: dict) -> str:
 
 
 def normalize(document: dict, fmt: str = "auto", meta: dict | None = None, sources=None) -> list[dict]:
+    from .weave_import import matches as weave_matches, normalize as normalize_weave
+    if fmt == 'weave' or fmt == 'auto' and weave_matches(document):
+        return normalize_weave(document, meta, sources)
     if not isinstance(document, dict):
         raise InputError("A trajectory must be a JSON object")
     fmt = detect(document) if fmt == "auto" else fmt
@@ -166,6 +173,11 @@ def normalize(document: dict, fmt: str = "auto", meta: dict | None = None, sourc
         info = document.get("info") or {}
         result_meta.setdefault("task_id", document.get("instance_id") or info.get("instance_id"))
         result_meta.setdefault("environment", "mini-swe-agent")
+        config = info.get('config') or {}
+        model = config.get('model') if isinstance(config, dict) else None
+        name = model.get('model_name') if isinstance(model, dict) else None
+        if isinstance(name, str) and name: result_meta.setdefault('model', name)
+        if isinstance(info.get('mini_version'), str): result_meta.setdefault('agent_version', info['mini_version'])
         result_meta["source_schema"] = document.get("trajectory_format")
         outcome = {"termination": info.get("exit_status"), "submission": info.get("submission"),
                    "model_stats": info.get("model_stats")}

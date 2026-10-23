@@ -21,6 +21,22 @@ def read_bytes(raw,*,name='snapshot.json',format='auto',meta=None,max_bytes=MAX_
         try:doc=json.loads(text)
         except ValueError as e:raise InputError(f'{name}: invalid JSON: {e}') from e
         return normalize(doc,format,meta)
+    # A Weave line is a call, not a rollout. Assemble interleaved trace groups
+    # across the complete export before any source or metric is published.
+    from .weave_import import is_call
+    lines = [(i, line) for i, line in enumerate(text.splitlines(), 1) if line.strip()]
+    if lines:
+        try: first = json.loads(lines[0][1])
+        except ValueError as e: raise InputError(f'{name}, line {lines[0][0]}: invalid JSON') from e
+        if format == 'weave' or format == 'auto' and is_call(first):
+            calls = []
+            for line, value in lines:
+                try:
+                    call = json.loads(value)
+                    if not is_call(call): raise InputError('Each Weave JSONL line must be a full native call')
+                    calls.append(call)
+                except ValueError as e: raise InputError(f'{name}, line {line}: {e}') from e
+            return normalize({'calls':calls}, 'weave', meta)
     if not meta.get('experiment'):raise InputError('JSONL batch import requires an explicit experiment in metadata')
     file_hash=hashlib.sha256(raw).hexdigest();runs=[]
     for line,text in enumerate(text.splitlines(),1):

@@ -9,5 +9,9 @@ from tracker.trainer_telemetry import TrainerTelemetry
 from tracker.portable import Episode, chat_document, generation_document
 from .execution import ExecutionRecorder
 from tracker.policy_comparison import compare_probabilities
+from tracker.detector_validation import ValidationSet
+from tracker.findings_report import export_findings
+from .run import Run
+from .trials import TrialStudy
 
-__all__ = ['__version__', 'Workspace', 'Outbox', 'TrainerTelemetry', 'ExecutionRecorder', 'compare_probabilities', 'Episode', 'chat_document', 'generation_document']
+__all__ = ['__version__', 'Workspace', 'Outbox', 'Run', 'TrainerTelemetry', 'ExecutionRecorder', 'compare_probabilities', 'ValidationSet', 'export_findings', 'TrialStudy', 'Episode', 'chat_document', 'generation_document']

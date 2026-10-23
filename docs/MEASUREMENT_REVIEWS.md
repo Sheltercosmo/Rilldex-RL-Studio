@@ -10,7 +10,9 @@ A useful rate needs both a declared denominator and a way to check its cases. Th
 4. Save to reveal the saved monitor answer. Open the exact measurement in the rollout map to inspect or correct its underlying evidence using the existing workflow.
 5. Resume the same frozen sample or export its summary. Later monitor corrections do not rewrite the sample or its judgments. A new sample reflects the latest saved measurements.
 
-The first release supports analysis monitors with `opportunity_ratio` aggregation. Count and arbitrary metric monitors do not necessarily expose opportunity denominators and are not silently converted into review samples. The interface requests up to 20 cases with an explicit fixed seed; the API accepts 1–100 and other seeds.
+Supported routes are analysis monitors with `opportunity_ratio` aggregation, binary code monitors, and built-in diagnostic indicators. Binary reviews use one case per saved rollout result and show the full recorded source. Count and arbitrary scalar monitors are not converted into binary cases. The interface requests up to 20 cases with a fixed seed; the API accepts 1–100.
+
+Choose **Save validation set** to reuse reviewed cases across detector versions. [Detector validation →](DETECTOR_VALIDATION_SETS.md)
 
 ## Contract
 

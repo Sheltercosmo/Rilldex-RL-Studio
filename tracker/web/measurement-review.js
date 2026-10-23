@@ -15,6 +15,7 @@ function summary(){
  const me=sample.reviewers.find(r=>r.reviewer===$('reviewer').value.trim());
  $('progress').textContent=`${me?.reviewed||0} / ${sample.sample_size} reviewed by ${$('reviewer').value.trim()||'you'} · ${sample.runs_without_case_frame.length} rollouts without a case frame`;
  $('export').href='/api/measurement-reviews/'+sample.id+'?download=1';
+ $('validation').href='/detector-validation?sample='+encodeURIComponent(sample.id);
  $('case-list').replaceChildren(...sample.cases.map((c,i)=>{const b=el('button',`Case ${i+1}${c.reviewed_by.includes($('reviewer').value.trim())?' ✓':''}`);b.type='button';b.dataset.case=c.id;b.setAttribute('aria-current',String(c.id===currentId));b.append(el('small',c.run_id.slice(0,13)));b.onclick=()=>loadCase(c.id);return b;}));
  const table=el('table'),head=el('tr');['Reviewer / declared role','Reviewed','Comparable','Agreement','False positive','False negative','Unresolved reference','Unresolved prediction¹','Scope disagreements','Scope agreements','Unresolved scope'].forEach(x=>head.append(el('th',x)));table.append(head);
  for(const r of sample.reviewers){const tr=el('tr');[r.reviewer+' / '+r.declared_roles.join(', '),r.reviewed+'/'+sample.sample_size,r.comparable||0,r.agreement===null?'—':(100*r.agreement).toFixed(1)+'%',r.false_positive||0,r.false_negative||0,r.reference_unknown||0,r.prediction_unknown_with_decidable_reference||0,r.eligibility_disputes||0,r.scope_agreements||0,r.scope_unresolved||0].forEach(x=>tr.append(el('td',x)));table.append(tr);}
@@ -77,5 +78,5 @@ $('next').onclick=()=>{const i=sample.cases.findIndex(c=>c.id===currentId);if(i+
 $('samples').onchange=()=>{location.href='/measurement-review?sample='+encodeURIComponent($('samples').value);};
 (async()=>{try{if(!sid)throw Error('Open a sampled review from a rate or binary code monitor’s rollout values.');$('reviewer').value=localStorage.getItem('measurement-reviewer')||'';sample=await api('/api/measurement-reviews/'+sid);summary();
  const siblings=await api('/api/measurement-reviews?monitor='+encodeURIComponent(sample.monitor_id));$('samples').replaceChildren(...ChoiceLabels.choices(siblings.map(s=>({id:s.id,label:`${s.sample_size} cases · Seed ${s.seed}`})),{noun:'Sample'}).map(r=>{const o=ChoiceLabels.option(r);o.selected=r.id===sid;return o;}));
- await loadCase(sample.cases[0].id);
+ await loadCase(sample.cases.some(c=>c.id===params.get('case'))?params.get('case'):sample.cases[0].id);
 }catch(e){error(e);}})();

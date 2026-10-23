@@ -11,7 +11,7 @@ from .schema import InputError, digest
 
 VERSION = 'investigation-followups/1'
 ASSESSMENTS = {'supports', 'contradicts', 'inconclusive', 'not_run'}
-SCHEMAS = {'failure-investigation/1', 'training-investigation/1', 'interval-investigation/1'}
+SCHEMAS = {'failure-investigation/1', 'training-investigation/1', 'interval-investigation/1', 'case-investigation/1'}
 
 
 def text(value, label, limit=6000, required=True):
@@ -92,7 +92,7 @@ def save(store, raw):
     if flow['schema'] != VERSION: raise InputError('Unsupported follow-up version')
     raw_check = raw['check']
     if raw['action'] == 'plan':
-        fields(raw_check, ('title', 'hypothesis', 'procedure', 'expected_result'), ('controls', 'follows_check'))
+        fields(raw_check, ('title', 'hypothesis', 'procedure', 'expected_result'), ('controls', 'follows_check', 'trial'))
         plan = {key: text(raw_check[key], key, 160 if key == 'title' else 6000)
                 for key in ('title', 'hypothesis', 'procedure', 'expected_result')}
         plan['controls'] = text(raw_check.get('controls', ''), 'controls', required=False)
@@ -100,9 +100,39 @@ def save(store, raw):
         if follows is not None and (not isinstance(follows, str) or follows not in {c['id'] for c in flow['checks']}):
             raise InputError('Previous check is outside this investigation')
         plan.update(basis_id=parent['id'], follows_check=follows)
+        if raw_check.get('trial') is not None:
+            from .investigation_trials import prepare
+            plan['trial'] = prepare(store, parent, raw_check['trial'])
         plan['id'] = 'check-' + digest(plan)
         if len(flow['checks']) >= 32: raise InputError('At most 32 checks per investigation')
         flow['checks'].append({**plan, 'results': []})
+    elif raw['action'] in {'trial', 'trial_results', 'trial_evidence'}:
+        fields(raw_check, ('id',) if raw['action']=='trial_evidence' else ('id', 'trial' if raw['action'] == 'trial' else 'results'))
+        check = next((c for c in flow['checks'] if c['id'] == raw_check['id']), None)
+        if check is None: raise InputError('Check is outside this investigation')
+        from .investigation_trials import prepare, receipt, compare
+        if raw['action'] == 'trial':
+            if check.get('trial'): raise InputError('Trial design is pinned. Plan a follow-up to change it.')
+            check['trial'] = prepare(store, parent, raw_check['trial'])
+        elif raw['action']=='trial_results':
+            if not check.get('trial'): raise InputError('Prepare a trial first')
+            results = raw_check['results']
+            if not isinstance(results, list) or not 1 <= len(results) <= 2304: raise InputError('Return 1–2304 trial receipts, including retries')
+            checked = [receipt(store, check, r) for r in results]
+            prior = check.setdefault('trial_results', [])
+            known = {r['id'] for r in prior}
+            additions = [r for r in checked if r['id'] not in known]
+            if not additions: return parent
+            if len(prior) + len(additions) > 2304: raise InputError('Too many result revisions; start a follow-up')
+            for result in additions:
+                if result['id'] not in known: prior.append(result); known.add(result['id'])
+        if not check.get('trial'):raise InputError('Prepare a trial first')
+        if raw['action'] in {'trial_results','trial_evidence'}:
+            from .trial_rollouts import capture
+            captured=capture(store,check)
+            if raw['action']=='trial_evidence' and captured==check.get('trial_evidence'):return parent
+            check['trial_evidence']=captured
+        check['trial_comparison'] = compare(check)
     elif raw['action'] == 'result':
         fields(raw_check, ('id', 'assessment', 'conclusion', 'evidence'), ('limitations', 'next_action'))
         check = next((c for c in flow['checks'] if c['id'] == raw_check['id']), None)
@@ -124,7 +154,7 @@ def save(store, raw):
         if any(r['id'] == result['id'] for r in check['results']): return parent
         if len(check['results']) >= 32: raise InputError('At most 32 findings per check')
         check['results'].append(result)
-    else: raise InputError('Choose plan or result')
+    else: raise InputError('Choose plan, trial, trial_results or result')
     value = {k: deepcopy(v) for k, v in parent.items() if k != 'id'}
     value.update(parent_id=parent['id'], follow_up=flow)
     return failure_investigations.persist(store, value)

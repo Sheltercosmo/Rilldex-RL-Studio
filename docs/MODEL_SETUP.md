@@ -1,49 +1,55 @@
-# Local and API model setup
+# Model setup
 
-No model is needed to collect data, capture trainer metrics, inspect source records or query saved analyses. Enable semantic observation only when you want new model-selected annotations.
+Collection, trainer signals and source inspection need no model credentials. For semantic activities and relationships, use **Data & workflows → Models** or the installed commands below.
 
-## Candidate LLM
+## Configure
 
-The worker runs an argument list, writes one request packet to stdin, and reads a JSON candidate object from stdout. Requests include source evidence, stage instructions and a response contract. You can run a local model directly or call a hosted API in that process.
+| Variable | Value |
+| --- | --- |
+| `RILLDEX_LLM_PRESET` | `local` (port 8000), `ollama` (port 11434), or `custom` |
+| `RILLDEX_LLM_URL` | Full HTTPS or loopback `/v1/chat/completions` URL; overrides the preset |
+| `RILLDEX_LLM_MODEL` | Explicit candidate model identifier |
+| `RILLDEX_LLM_API_KEY` | Candidate credential, when required |
+| `JEV_API_KEY` | Jev/Typesafe decision credential |
 
-The supplied [chat-completions adapter](../examples/chat_candidate_proposer.py) supports a local server or hosted endpoint that accepts `messages` and JSON-object `response_format` and returns `choices[0].message.content`. It requires no provider SDK. Not all model servers implement this contract; adapt the script for your provider if necessary.
+Use `export NAME="value"` in Bash or `$env:NAME="value"` in PowerShell, then start Rilldex in that environment. The UI provides both templates. Proxy environment variables are respected; local servers may need `NO_PROXY=127.0.0.1,localhost`.
 
-Set these variables in the candidate worker environment:
+The installed adapter accepts chat completions with JSON-object `response_format`. The candidate model proposes source-bound alternatives; Jev selects the maximum-probability supplied option. No confidence threshold is used.
 
-| Variable | Local example | Hosted example |
-| --- | --- | --- |
-| `RILLDEX_LLM_URL` | `http://127.0.0.1:8000/v1/chat/completions` | Your provider's HTTPS chat-completions URL |
-| `RILLDEX_LLM_MODEL` | Your served model identifier | Your pinned API model identifier |
-| `RILLDEX_LLM_API_KEY` | Only if your local server requires it | Your provider credential |
+For staged work-content extraction directly from a saved graph, see [source qualifications](SCOPE_MEMBERSHIP.md). It supports bounded generation, contract repair, partial results and resume through Python, without an export step. This remains experimental and does not replace the main map extractor.
 
-Use `export NAME="value"` in Bash or `$env:NAME="value"` in PowerShell. Credentials are read from the environment and are not placed in launch files or command arguments.
-
-From a checkout, configure the supplied script:
+## Check and try one rollout
 
 ```sh
-rilldex --db study.sqlite semantic watch-init observations --experiment run-a --label "Activities and work" --candidate-producer my-model-prompt-v1 --candidate-command python examples/chat_candidate_proposer.py
-rilldex --db study.sqlite semantic watch-budget observations --max-new-calls 100 --max-candidate-calls 100 --max-input-bytes 2000000
-rilldex --db study.sqlite semantic watch-run observations --follow --candidate-command python examples/chat_candidate_proposer.py
+python -m rilldex.models check
+python -m rilldex.models probe
+python -m rilldex.models pilot ./pilot --db study.sqlite --run-id ROLLOUT_ID --candidate-calls 20 --decision-calls 20 --input-bytes 1000000
 ```
 
-Use an absolute script path when launching from another directory. Use the same command on resume. Change the producer version and create a fresh observer configuration when changing the model or prompting. The sample adapter makes one request per invocation and does not retry automatically; JSON validity does not establish semantic accuracy.
+`check` is offline. `probe` makes one candidate request to test the JSON contract, not semantic accuracy. New pilots extract activities, connect plans and work targets, inspect execution feedback, and compare approaches. Open the activity map while analysis is pending; **Plans & attempts** and **Review approach comparisons** link to completed results. Remote workers use the same command.
 
-## Decision model
+Limits are **lifetime totals for that pilot directory**, not token or currency estimates. Restart with the same directory and limits to reuse saved work; raise limits to continue a blocked pilot. Interrupted attempts remain counted. A changed model or endpoint requires a new directory. Secrets stay in the environment.
 
-The built-in decision provider is **Jev/Typesafe**, separate from your candidate LLM. Set `JEV_API_KEY` in the observer environment before starting the worker. The current pinned model is defined in `tracker.jev.DEFAULT_MODEL`. Normal `HTTP_PROXY` / `HTTPS_PROXY` configuration is respected by the HTTP client; for loopback services, set `NO_PROXY=127.0.0.1,localhost` if needed.
+All stages share the allowance. Comparisons grow with action and plan counts; a small pilot may stop before all pairs are inspected. Old directories retain their original protocols. Plan links distinguish direct preparation, attempts and checks; upstream work is retained separately instead of becoming a direct plan link. One action can support several steps. These links do not establish completion. Work links describe shared targets and scope overlap, not causal retries or successful recovery. Semantic selections remain fallible; inspect their source evidence.
 
-Each decision chooses the maximum-probability option in the supplied finite set. Candidate generation, evidence retrieval and structural validation happen outside that selection. There is no confidence threshold. The Jev key is removed from the candidate subprocess environment.
+For an older pilot, click **Inspect execution feedback** or add `--inspect-feedback` to its command. Existing annotations and decisions are reused. Reported errors connect to later returns to the same work; retrieved error text is inspected in its tool context. No reported error is not a success verdict. Uninspected or unreadable feedback stays unknown.
 
-### Custom/local decision engines
+To add approach comparisons to an older pilot with work links, click **Compare approaches** or add `--inspect-approaches`. Each repeated-work pair uses up to two decision calls: confirm comparable work, then compare procedure and stated reason. Native arguments are included when captured. Progress survives a stop between calls; evidence-limit gaps remain visible. A changed procedure does not establish success or exploration.
 
-Python integrations can supply `transport(request)` to `tracker.semantic_workspace.execute()` or `tracker.semantic_watch.run_once()`. The callable receives the complete decision request and must return the requested model identity plus an `answers` object. Each answer has `type: "choice"` and a normalized `probabilities` mapping containing **exactly** the supplied criterion names. Raw argmax selection remains in Rilldex.
+## Continuous or custom workers
 
-This is a developer integration interface, not a CLI model switch or an installed local inference engine. The staged pipeline currently pins the built-in request model identity; a different decision engine needs a separately versioned protocol/cache identity before production use. Do not relabel a local model as Jev or reuse Jev decisions for it. The supported turnkey pairing is a local/API candidate command plus Jev API selection.
+After a pilot, observe the experiment with the same models:
 
-## Budget and restart
+```sh
+python -m rilldex.models watch ./observations --db study.sqlite --experiment trial --from-pilot ./pilot --follow
+```
 
-`watch-init` permits zero new calls. `watch-budget` explicitly raises lifetime request and UTF-8 byte ceilings; these are not token or currency limits. Failed or interrupted provider invocations remain accounted for. Exact compatible candidates and decisions are reused. `rilldex semantic watch-status observations` shows queued, blocked and published work and retained usage reports.
+This reuses the pilot's exact saved requests and follows existing and arriving completed rollouts under one observer. New workers start at zero additional allowance. Set `--candidate-calls`, `--decision-calls` and `--input-bytes` to permit new analysis; omitted limits retain saved ceilings on restart. Add `--retry-run ROLLOUT_ID` to resume a blocked job. **Models → Observe an experiment continuously** generates the command.
 
-[Continuous observation and recovery](CONTINUOUS_OBSERVATION.md) covers live prefixes, staged layers and resuming a blocked rollout.
+All analysis stages share that allowance. Error, revisit, approach-change and coverage measures appear in **Overview → Behavior measures** for the experiment. Paused monitors remain paused. Status: `rilldex --db study.sqlite semantic watch-status ./observations`. Keep both the database and worker directory on durable storage. This is a local worker, not a distributed scheduler.
 
-[Experimental attachment review](ATTACHMENT_REVIEW.md) compares qualifier and intention attachments without changing saved maps.
+For a new worker, omitting `--from-pilot` selects the current installed protocol. Custom proposers still use `semantic watch-init --behavior-links` and `semantic watch-run`, with `python -m rilldex.candidate` or a JSON stdin/stdout command. See [continuous observation](CONTINUOUS_OBSERVATION.md).
+
+To restart, reuse the worker directory; `--from-pilot` is no longer required. Saved protocols, labels, prefix settings and limits remain pinned. In the UI, choose **Resume saved worker** and leave limits blank. After a package update, choose **Refresh after package update** or add `--refresh-worker`: it replays saved evidence offline and resumes only if published maps are unchanged. Refresh keeps prior usage and blocked jobs; `--retry-run` remains explicit.
+
+Custom decision transports remain available through `tracker.semantic_workspace.execute()` and `tracker.semantic_watch.run_once()`. Return the requested model identity and normalized probabilities for exactly the supplied choices. A different decision engine needs its own versioned protocol/cache identity; do not relabel it as Jev. The turnkey pairing is a local/API candidate plus Jev API selection.

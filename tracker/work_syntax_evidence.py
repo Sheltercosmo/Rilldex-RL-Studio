@@ -67,6 +67,50 @@ def checked(prepared, bound, record):
     return record['parsed']
 
 
+def outline(prepared, bound, record):
+    """Compact source structure for generation, without changing the base unit.
+
+    Include every predicted sentence and lexical predicate. Auxiliary, modal,
+    attribution and relative-clause heads remain distinguishable; none becomes
+    a work content merely because a parser predicted it.
+    """
+    parsed = checked(prepared,bound,record)
+    tokens = parsed['tokens']; source = parsed['source']; sentences = {}
+    for token in tokens:
+        sentences.setdefault(token['sentence'],[]).append(token)
+    spans=[]
+    for sid,group in sentences.items():
+        a,z=group[0]['start'],group[-1]['end']
+        spans.append(dict(sentence=sid,start=a,end=z,text=source['text'][a-source['start']:z-source['start']]))
+    copular_heads={t['head'] for t in tokens if t['relation']=='cop'}
+    predicates=[t['id'] for t in tokens if (
+        t['pos']=='VERB' and t['relation'] not in {'aux','auxpass','aux:pass'} or
+        t['head']==t['id'] and t['pos'] in {'AUX','ADJ','NOUN'} or
+        t['id'] in copular_heads)]
+    return dict(syntax_id=record['id'],parser=deepcopy(parsed['parser']),
+        sentences=spans,predicate_token_ids=predicates,
+        tokens=[{k:t[k] for k in ('id','text','head','relation','pos','sentence')} for t in tokens],
+        limit='Predicted syntax is a fallible reading aid, not work segmentation, semantic roles, execution evidence or complete content coverage.')
+
+
+def attachment_context(prepared, bound, feature_id, record):
+    """Show exact anchors and dependency paths for the current scope decision."""
+    parsed=checked(prepared,bound,record);tokens=parsed['tokens']
+    feature=next((f for f in bound['features'] if f['id']==feature_id),None)
+    require(feature is not None,'unknown source feature')
+    fa=_anchor(feature['expression'],tokens);pairs=[]
+    for content in sorted(bound['contents'],key=lambda c:c['id']):
+        ca=_anchor(content['expression'],tokens)
+        shared=(fa['status']==ca['status']=='aligned' and
+                len(fa['sentence_ids'])==len(ca['sentence_ids'])==1 and
+                fa['sentence_ids']==ca['sentence_ids'] and
+                len(fa['head_ids'])<=MAX_HEADS and len(ca['head_ids'])<=MAX_HEADS)
+        pairs.append(dict(content_id=content['id'],content_anchor=ca,
+            paths=[_path(tokens,f,c) for f in fa['head_ids'] for c in ca['head_ids']] if shared else [],
+            path_status='available' if shared else 'not_comparable'))
+    return dict(**outline(prepared,bound,record),feature_anchor=fa,pairs=pairs)
+
+
 def _anchor(expression, tokens):
     a,z = expression['start'],expression['end']
     overlap = [t for t in tokens if t['start'] < z and a < t['end']]

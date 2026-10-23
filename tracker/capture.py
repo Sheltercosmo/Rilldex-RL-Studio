@@ -69,7 +69,7 @@ class Outbox:
     def _payload(self, rollout_id, document, *, state, format='auto', metadata=None, sources=None):
         if not isinstance(rollout_id,str) or not rollout_id.strip() or len(rollout_id)>240:
             raise InputError('rollout_id must contain 1–240 characters')
-        if rollout_id.startswith(('@training/','@execution/','@cohorts/','@telemetry/')):
+        if rollout_id.startswith(('@training/','@execution/','@cohorts/','@telemetry/','@run-records/')):
             raise InputError('This rollout prefix is reserved for fact-packet transport')
         if state not in {'in_progress','complete','failed'} or format not in FORMATS:
             raise InputError('Supply an explicit state and supported source format')
@@ -112,6 +112,12 @@ class Outbox:
         from .trainer_telemetry import VERSION, validate
         packet=validate(dict(schema=schema or VERSION,producer=self.producer,experiment=experiment,records=records))
         return self._enqueue([{'rollout_id':'@telemetry/'+digest(packet),'trainer_telemetry':packet}])[0]
+
+    def log_run_records(self, experiment, records):
+        """Queue console, hardware, config and file snapshots for durable delivery."""
+        from .run_records import VERSION, validate
+        packet=validate(dict(schema=VERSION,producer=self.producer,experiment=experiment,records=records))
+        return self._enqueue([{'rollout_id':'@run-records/'+digest(packet),'run_records':packet}])[0]
 
     def log_cohorts(self, experiment, cohorts):
         """Queue scheduler membership snapshots, including work not yet delivered.
@@ -175,7 +181,9 @@ class Outbox:
                     endpoint='/api/generation-cohorts' if cohorts else '/api/execution-records' if executions else '/api/continuation-studies' if continuations else '/api/training-recipes' if recipes else '/api/training-records' if training else '/api/ingest'
                     telemetry=envelope.get('trainer_telemetry')
                     if telemetry:endpoint='/api/trainer-telemetry'
-                    packet=telemetry or cohorts or executions or continuations or recipes or training
+                    run_records=envelope.get('run_records')
+                    if run_records:endpoint='/api/run-records'
+                    packet=run_records or telemetry or cohorts or executions or continuations or recipes or training
                     payload=dumps(packet).encode() if packet else row['payload'].encode()
                     request=Request(self.endpoint+endpoint,data=payload,headers={'Content-Type':'application/json'})
                     with urlopen(request,timeout=self.timeout) as response:
@@ -186,6 +194,8 @@ class Outbox:
                         raise ValueError('Tracker acknowledged a different training packet')
                     if telemetry and receipt['id']!='telemetry-packet-'+digest(telemetry):
                         raise ValueError('Tracker acknowledged a different telemetry packet')
+                    if run_records and receipt['id']!='run-packet-'+digest(run_records):
+                        raise ValueError('Tracker acknowledged a different run packet')
                     if executions and receipt['id']!='execution-packet-'+digest(executions):
                         raise ValueError('Tracker acknowledged a different execution packet')
                     if cohorts and receipt['id']!='cohort-packet-'+digest(cohorts):

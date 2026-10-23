@@ -9,6 +9,13 @@ from tracker.semantic_extraction import Pipeline,FileCandidates
 from research.method_comparison_trial import fixture,CASES
 
 
+def native_response(req,*,work='same_work_instance',procedure='same_procedure',basis='no_expressed_basis'):
+    """Authored choices for contract tests, not an automatic classifier."""
+    values=dict(work_instance=work,comparison=procedure,stated_basis=basis)
+    return dict(model=req['model'],answers={k:dict(type='choice',probabilities={v:float(v==values[k]) for v in q['criteria']})
+        for k,q in req['questions'].items()})
+
+
 class MethodComparisonTests(TestCase):
     def choose(self,req):
         return {k:{'value':'same_procedure' if k=='comparison' else 'no_expressed_basis'} for k in req['questions']},digest(req)
