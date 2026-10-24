@@ -35,7 +35,7 @@ def initialize(c):
 
 def validate(raw):
     if not isinstance(raw,dict):raise InputError('Monitor must be an object')
-    allowed={'schema','name','kind','observer','metric','requirement','group','analysis','analysis_definition','population','custom'}
+    allowed={'schema','name','kind','observer','metric','requirement','group','analysis','analysis_definition','population','custom','alert'}
     if set(raw)-allowed:raise InputError('Unknown monitor fields')
     d={**raw,'schema':VERSION}
     if raw.get('schema',VERSION)!=VERSION:raise InputError('Unsupported monitor schema')
@@ -43,6 +43,14 @@ def validate(raw):
         if not isinstance(d.get(k),str) or not d[k].strip() or len(d[k])>200:raise InputError('Provide '+k)
     if d.get('group','Behavior') not in {'Training','Behavior','Reward integrity'}:raise InputError('Unknown monitor group')
     d.setdefault('group','Behavior')
+    if 'alert' in d:
+        rule=d['alert']
+        if (not isinstance(rule,dict) or set(rule)!={'operator','threshold','severity'} or
+                rule.get('operator') not in {'gt','ge','lt','le'} or
+                type(rule.get('threshold')) not in (int,float) or not math.isfinite(rule['threshold']) or
+                rule.get('severity') not in {'warning','critical'}):
+            raise InputError('Alert requires an operator (gt/ge/lt/le), finite threshold and warning/critical severity')
+        d['alert']=dict(rule)
     if 'population' in d:
         scope=d['population']
         if (not isinstance(scope,dict) or set(scope)-{'experiment','environment','split'} or

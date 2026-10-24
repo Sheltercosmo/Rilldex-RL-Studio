@@ -1,0 +1,506 @@
+{
+  "provenance": "Authored demonstration of a deeply nested software rollout; not extracted from the public trace and not an evaluation result.",
+  "synthetic": true,
+  "roots": [
+    "root"
+  ],
+  "nodes": [
+    {
+      "id": "root",
+      "label": "Evaluate a predictor",
+      "kind": "outline_item",
+      "work_kind": "objective",
+      "depth": 0
+    },
+    {
+      "id": "data",
+      "label": "Prepare data",
+      "kind": "outline_item",
+      "work_kind": "subgoal",
+      "depth": 1
+    },
+    {
+      "id": "ingest",
+      "label": "Load & inspect",
+      "kind": "plan",
+      "depth": 2
+    },
+    {
+      "id": "load",
+      "label": "Load source data",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "schema",
+      "label": "Check schema",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "split",
+      "label": "Split by group",
+      "kind": "outline_item",
+      "work_kind": "approach",
+      "depth": 2
+    },
+    {
+      "id": "holdout",
+      "label": "Hold out patients",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "leakage",
+      "label": "Check leakage",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "clean",
+      "label": "Clean inputs",
+      "kind": "plan",
+      "depth": 2
+    },
+    {
+      "id": "missing",
+      "label": "Handle missingness",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "encode",
+      "label": "Encode categories",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "model",
+      "label": "Build baselines",
+      "kind": "outline_item",
+      "work_kind": "subgoal",
+      "depth": 1
+    },
+    {
+      "id": "baseline",
+      "label": "Compare models",
+      "kind": "plan",
+      "depth": 2
+    },
+    {
+      "id": "linear",
+      "label": "Fit linear model",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "svm",
+      "label": "Fit SVM",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "search",
+      "label": "Tune on train only",
+      "kind": "outline_item",
+      "work_kind": "approach",
+      "depth": 2
+    },
+    {
+      "id": "grid",
+      "label": "Search parameters",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "select",
+      "label": "Select candidate",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "eval",
+      "label": "Evaluate model",
+      "kind": "outline_item",
+      "work_kind": "subgoal",
+      "depth": 1
+    },
+    {
+      "id": "cv",
+      "label": "Cross-validation",
+      "kind": "outline_item",
+      "work_kind": "approach",
+      "depth": 2
+    },
+    {
+      "id": "fold",
+      "label": "Evaluate one fold",
+      "kind": "outline_item",
+      "work_kind": "subgoal",
+      "depth": 3
+    },
+    {
+      "id": "fit",
+      "label": "Fit fold pipeline",
+      "kind": "plan",
+      "depth": 4
+    },
+    {
+      "id": "features",
+      "label": "Fit preprocessing",
+      "kind": "outline_item",
+      "work_kind": "subgoal",
+      "depth": 5
+    },
+    {
+      "id": "transform",
+      "label": "Train-only scaling",
+      "kind": "outline_item",
+      "work_kind": "approach",
+      "depth": 6
+    },
+    {
+      "id": "scale",
+      "label": "Fit scaler on train",
+      "kind": "plan_step",
+      "depth": 7
+    },
+    {
+      "id": "apply",
+      "label": "Transform held-out",
+      "kind": "plan_step",
+      "depth": 7
+    },
+    {
+      "id": "train",
+      "label": "Train on fold",
+      "kind": "plan_step",
+      "depth": 5
+    },
+    {
+      "id": "score",
+      "label": "Score held-out fold",
+      "kind": "plan_step",
+      "depth": 4
+    },
+    {
+      "id": "aggregate",
+      "label": "Aggregate folds",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "validation",
+      "label": "Independent checks",
+      "kind": "plan",
+      "depth": 2
+    },
+    {
+      "id": "test",
+      "label": "Test on holdout",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "compare",
+      "label": "Compare baselines",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "report",
+      "label": "Produce report",
+      "kind": "outline_item",
+      "work_kind": "subgoal",
+      "depth": 1
+    },
+    {
+      "id": "figures",
+      "label": "Make figures",
+      "kind": "plan",
+      "depth": 2
+    },
+    {
+      "id": "lossplot",
+      "label": "Plot learning curve",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "rmseplot",
+      "label": "Plot fold errors",
+      "kind": "plan_step",
+      "depth": 3
+    },
+    {
+      "id": "export",
+      "label": "Markdown to PDF",
+      "kind": "outline_item",
+      "work_kind": "approach",
+      "depth": 2
+    },
+    {
+      "id": "pdf",
+      "label": "Build document",
+      "kind": "plan",
+      "depth": 3
+    },
+    {
+      "id": "render",
+      "label": "Render PDF",
+      "kind": "plan_step",
+      "depth": 4
+    },
+    {
+      "id": "repair",
+      "label": "Repair rendering",
+      "kind": "outline_item",
+      "work_kind": "approach",
+      "depth": 4
+    },
+    {
+      "id": "template",
+      "label": "Fix template",
+      "kind": "outline_item",
+      "work_kind": "subgoal",
+      "depth": 5
+    },
+    {
+      "id": "fix",
+      "label": "Escape markup",
+      "kind": "plan_step",
+      "depth": 6
+    },
+    {
+      "id": "publish",
+      "label": "Save report",
+      "kind": "plan_step",
+      "depth": 2
+    }
+  ],
+  "links": [
+    {
+      "source": "data",
+      "target": "root",
+      "type": "part_of"
+    },
+    {
+      "source": "ingest",
+      "target": "data",
+      "type": "part_of"
+    },
+    {
+      "source": "load",
+      "target": "ingest",
+      "type": "part_of"
+    },
+    {
+      "source": "schema",
+      "target": "ingest",
+      "type": "part_of"
+    },
+    {
+      "source": "split",
+      "target": "data",
+      "type": "part_of"
+    },
+    {
+      "source": "holdout",
+      "target": "split",
+      "type": "part_of"
+    },
+    {
+      "source": "leakage",
+      "target": "split",
+      "type": "part_of"
+    },
+    {
+      "source": "clean",
+      "target": "data",
+      "type": "part_of"
+    },
+    {
+      "source": "missing",
+      "target": "clean",
+      "type": "part_of"
+    },
+    {
+      "source": "encode",
+      "target": "clean",
+      "type": "part_of"
+    },
+    {
+      "source": "model",
+      "target": "root",
+      "type": "part_of"
+    },
+    {
+      "source": "baseline",
+      "target": "model",
+      "type": "part_of"
+    },
+    {
+      "source": "linear",
+      "target": "baseline",
+      "type": "part_of"
+    },
+    {
+      "source": "svm",
+      "target": "baseline",
+      "type": "part_of"
+    },
+    {
+      "source": "search",
+      "target": "model",
+      "type": "part_of"
+    },
+    {
+      "source": "grid",
+      "target": "search",
+      "type": "part_of"
+    },
+    {
+      "source": "select",
+      "target": "search",
+      "type": "part_of"
+    },
+    {
+      "source": "eval",
+      "target": "root",
+      "type": "part_of"
+    },
+    {
+      "source": "cv",
+      "target": "eval",
+      "type": "part_of"
+    },
+    {
+      "source": "fold",
+      "target": "cv",
+      "type": "part_of"
+    },
+    {
+      "source": "fit",
+      "target": "fold",
+      "type": "part_of"
+    },
+    {
+      "source": "features",
+      "target": "fit",
+      "type": "part_of"
+    },
+    {
+      "source": "transform",
+      "target": "features",
+      "type": "part_of"
+    },
+    {
+      "source": "scale",
+      "target": "transform",
+      "type": "part_of"
+    },
+    {
+      "source": "apply",
+      "target": "transform",
+      "type": "part_of"
+    },
+    {
+      "source": "train",
+      "target": "fit",
+      "type": "part_of"
+    },
+    {
+      "source": "score",
+      "target": "fold",
+      "type": "part_of"
+    },
+    {
+      "source": "aggregate",
+      "target": "cv",
+      "type": "part_of"
+    },
+    {
+      "source": "validation",
+      "target": "eval",
+      "type": "part_of"
+    },
+    {
+      "source": "test",
+      "target": "validation",
+      "type": "part_of"
+    },
+    {
+      "source": "compare",
+      "target": "validation",
+      "type": "part_of"
+    },
+    {
+      "source": "report",
+      "target": "root",
+      "type": "part_of"
+    },
+    {
+      "source": "figures",
+      "target": "report",
+      "type": "part_of"
+    },
+    {
+      "source": "lossplot",
+      "target": "figures",
+      "type": "part_of"
+    },
+    {
+      "source": "rmseplot",
+      "target": "figures",
+      "type": "part_of"
+    },
+    {
+      "source": "export",
+      "target": "report",
+      "type": "part_of"
+    },
+    {
+      "source": "pdf",
+      "target": "export",
+      "type": "part_of"
+    },
+    {
+      "source": "render",
+      "target": "pdf",
+      "type": "part_of"
+    },
+    {
+      "source": "repair",
+      "target": "pdf",
+      "type": "part_of"
+    },
+    {
+      "source": "template",
+      "target": "repair",
+      "type": "part_of"
+    },
+    {
+      "source": "fix",
+      "target": "template",
+      "type": "part_of"
+    },
+    {
+      "source": "publish",
+      "target": "report",
+      "type": "part_of"
+    }
+  ],
+  "relations": [
+    {
+      "source": "fix",
+      "target": "render",
+      "type": "retry_after_change"
+    }
+  ],
+  "focus": [
+    "fold",
+    "fit",
+    "features",
+    "transform"
+  ]
+}

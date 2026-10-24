@@ -10,6 +10,29 @@ import test_monitor_current_queries as queries
 
 
 class MonitorAlertsTests(unittest.TestCase):
+    def test_metric_threshold_missing_values_and_pause(self):
+        self.add('bad'); self.add('good', passed=True)
+        definition = dict(name='Reward threshold',kind='metric',observer='source',metric='recorded_reward',
+                          alert={'operator':'ge','threshold':0,'severity':'critical'})
+        monitor=monitoring.create(self.store,definition)
+        monitoring.sync(self.store,[monitor['id']])
+        alerts=monitor_alerts.snapshot(self.store)['alerts']
+        self.assertEqual(len(alerts),2)
+        self.assertEqual(alerts[0]['severity'],'critical')
+        changed=monitoring.create(self.store,{**definition,'alert':{'operator':'lt','threshold':-100,'severity':'warning'}},replace=monitor['id'])
+        monitoring.sync(self.store,[changed['id']])
+        self.assertEqual(monitor_alerts.snapshot(self.store)['total'],0)
+        unknown=monitoring.create(self.store,{**definition,'metric':'plan_deviation_rate'})
+        monitoring.sync(self.store,[unknown['id']])
+        self.assertEqual(monitor_alerts.snapshot(self.store)['total'],0)
+
+    def test_invalid_threshold_rules_are_rejected(self):
+        from tracker.schema import InputError
+        for rule in [None,{},dict(operator='gt',threshold=float('nan'),severity='warning'),
+                     dict(operator='gt',threshold=True,severity='warning'),dict(operator='eval',threshold=1,severity='warning')]:
+            with self.assertRaises(InputError):
+                monitoring.validate(dict(name='Depth',kind='metric',observer='source',metric='actions',alert=rule))
+
     setUp = rewards.RewardDetectorTests.setUp
     add = rewards.RewardDetectorTests.add
     detector = rewards.RewardDetectorTests.detector

@@ -55,6 +55,46 @@ def captured_plan():
 
 
 class WorkStructureMetricTests(unittest.TestCase):
+    def test_depth_can_be_monitored_and_receipt_is_inspectable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / 'db.sqlite')
+            run = normalize(tree())[0]; store.add([run])
+            monitor = monitoring.create(store, dict(name='Goal depth', kind='analysis', observer='source',
+                analysis={'measure':'native_goal_depth'}, alert={'operator':'ge','threshold':1,'severity':'warning'}))
+            self.assertEqual(monitoring.sync(store, [monitor['id']])['errors'], 0)
+            value = monitoring.values(store, monitor['id'], [run['id']])[run['id']]
+            self.assertEqual(value['value'], 1)
+            self.assertTrue(monitor_evidence.read(store, value['id'])['explanation']['analysis_cases'])
+            from tracker.monitor_alerts import snapshot
+            self.assertEqual(snapshot(store)['alerts'][0]['run_id'], run['id'])
+
+    def test_declared_order_departure_requires_comparable_attempts(self):
+        graph = plan()
+        p = next(n for n in graph['nodes'] if n['id'] == 'plan')
+        p['properties']['plan_structure']['links'] = [dict(kind='precedes', **{'from':'a','to':'b'},
+            evidence=p['properties']['plan_structure']['steps'][0]['evidence'])]
+        self.assertIsNone(metrics.measure(metrics.project(finish(graph)), 'plan_order_departures')['value'])
+        # B is attempted first, A later. Source order is a recorded departure,
+        # not evidence that the adaptation was wrong or that work failed.
+        next(e for e in graph['edges'] if e['id']=='attempt')['properties']['plan_step_id']='b'
+        event = deepcopy(next(n for n in graph['nodes'] if n['id']=='event:e1'))
+        event.update(id='event:e4',event_index=4);event['properties']['id']='e4'
+        action = deepcopy(next(n for n in graph['nodes'] if n['id']=='action'))
+        action.update(id='later',event_index=4);action['properties']['source']['event_id']='e4'
+        graph['nodes'].extend([event,action])
+        graph['edges'].extend([dict(id='ground-later',source='later',target='event:e4',type='grounded_in',properties={}),
+            dict(id='later-attempt',source='later',target='plan',type='attempts_plan_step',properties={'plan_step_id':'a'})])
+        out = metrics.project(finish(graph))
+        self.assertEqual(metrics.measure(out,'plan_order_departures')['value'],1)
+        self.assertEqual(out['cases']['plan_order_departures'][0]['edge_ids'],['attempt','later-attempt'])
+        self.assertIsNone(metrics.measure(metrics.project(finish(graph),'e2'),'plan_order_departures')['value'])
+        event['properties']['batch_size']=2
+        self.assertIsNone(metrics.measure(metrics.project(finish(graph)),'plan_order_departures')['value'])
+        event['properties'].pop('batch_size')
+        next(e for e in graph['edges'] if e['id']=='attempt')['properties']['plan_step_id']='a'
+        next(e for e in graph['edges'] if e['id']=='later-attempt')['properties']['plan_step_id']='b'
+        self.assertEqual(metrics.measure(metrics.project(finish(graph)),'plan_order_departures')['value'],0)
+
     def test_monitor_receipt_keeps_relationships_and_remains_readable_after_upgrade(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'db.sqlite')

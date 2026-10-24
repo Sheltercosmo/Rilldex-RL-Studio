@@ -1,0 +1,156 @@
+{
+  "provenance": "Reviewed work outline over the public OpenHands drug-response trace. Display labels shortened; no added relationships.",
+  "graph_id": "graph-65724e97b3d3411a983f6ed0f44dcaa430f7902c1ad579a3e4469c6d88003153",
+  "nodes": [
+    {
+      "id": "objective",
+      "label": "Build and evaluate an SVM drug-response predictor",
+      "state": "No decision recorded",
+      "counts": {
+        "actions": 12,
+        "attempts": 5,
+        "preparations": 6,
+        "checks": 1,
+        "with_feedback": 12,
+        "with_assessment": 9
+      }
+    },
+    {
+      "id": "features",
+      "label": "Prepare GDSC data and select features",
+      "state": "No decision recorded",
+      "counts": null
+    },
+    {
+      "id": "regressor",
+      "label": "Implement the SVM regressor",
+      "state": "Chosen for work",
+      "counts": null
+    },
+    {
+      "id": "evaluate",
+      "label": "Evaluate with cross-validation",
+      "state": "No decision recorded",
+      "counts": null
+    },
+    {
+      "id": "metrics",
+      "label": "Save performance results",
+      "state": "No decision recorded",
+      "counts": null
+    },
+    {
+      "id": "visualize",
+      "label": "Visualize regression results",
+      "state": "No decision recorded",
+      "counts": null
+    },
+    {
+      "id": "report",
+      "label": "Produce a PDF report",
+      "state": "Reported complete",
+      "counts": {
+        "actions": 12,
+        "attempts": 5,
+        "preparations": 6,
+        "checks": 1,
+        "with_feedback": 12,
+        "with_assessment": 9
+      }
+    },
+    {
+      "id": "rmse-plot",
+      "label": "Plot the distribution of cross-validation RMSE scores",
+      "state": "Reported complete",
+      "counts": null
+    },
+    {
+      "id": "synthetic-test",
+      "label": "Test the implementation with a synthetic sample",
+      "state": "Chosen for work",
+      "counts": null
+    },
+    {
+      "id": "report-approach",
+      "label": "Draft in Markdown, then convert to PDF",
+      "state": "No decision recorded",
+      "counts": {
+        "actions": 12,
+        "attempts": 5,
+        "preparations": 6,
+        "checks": 1,
+        "with_feedback": 12,
+        "with_assessment": 9
+      }
+    },
+    {
+      "id": "draft",
+      "label": "Draft the report in Markdown",
+      "state": "Chosen for work",
+      "counts": null
+    },
+    {
+      "id": "convert",
+      "label": "Convert the Markdown report to PDF",
+      "state": "Chosen for work",
+      "counts": null
+    }
+  ],
+  "links": [
+    {
+      "source": "features",
+      "target": "objective",
+      "type": "part_of"
+    },
+    {
+      "source": "regressor",
+      "target": "objective",
+      "type": "part_of"
+    },
+    {
+      "source": "evaluate",
+      "target": "objective",
+      "type": "part_of"
+    },
+    {
+      "source": "metrics",
+      "target": "objective",
+      "type": "part_of"
+    },
+    {
+      "source": "visualize",
+      "target": "objective",
+      "type": "part_of"
+    },
+    {
+      "source": "report",
+      "target": "objective",
+      "type": "part_of"
+    },
+    {
+      "source": "rmse-plot",
+      "target": "visualize",
+      "type": "part_of"
+    },
+    {
+      "source": "synthetic-test",
+      "target": "objective",
+      "type": "part_of"
+    },
+    {
+      "source": "draft",
+      "target": "report-approach",
+      "type": "part_of"
+    },
+    {
+      "source": "convert",
+      "target": "report-approach",
+      "type": "part_of"
+    },
+    {
+      "source": "report-approach",
+      "target": "report",
+      "type": "part_of"
+    }
+  ]
+}

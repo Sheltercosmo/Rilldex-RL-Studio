@@ -9,7 +9,7 @@ from collections import defaultdict, deque
 from .schema import digest, InputError
 from . import work_dispatches
 
-VERSION = 'work-structure-measures/2'
+VERSION = 'work-structure-measures/3'
 LIMIT = ('Recorded structure only. Unlinked or unvisited work remains unobserved, not ignored or abandoned. '
          'Native operation requests do not prove execution; linked Plan attempts do not prove completion. '
          'Stop, defer and resume are attributed decisions. Depth and effort depend on the captured hierarchy; '
@@ -17,6 +17,12 @@ LIMIT = ('Recorded structure only. Unlinked or unvisited work remains unobserved
          'exploration, exploitation, strategy quality or independent semantic accuracy.')
 
 MEASURES = {
+    'native_goal_depth': ('declared_tree', 'Maximum declared goal depth',
+        'Maximum parent-to-child distance from a producer-declared root, with root depth 0. Measures captured nesting, not reasoning quality.'),
+    'work_outline_depth': ('work_outline', 'Maximum work-outline depth',
+        'Maximum annotated parent-to-child distance from a reviewed work root, with root depth 0. Shared work retains all parent paths.'),
+    'plan_order_departures': ('plan_order', 'Declared-order departures',
+        'Explicit precedes links whose first linked attempts appear in the reverse source order. Counts observed order differences, not failed work or unjustified deviation. Missing, shared and unordered attempts remain unresolved; preparation and checks are excluded.'),
     'plan_steps_attempted': ('plan_steps', 'Plan steps with linked attempts',
         'Distinct declared semantic Plan steps with at least one saved attempts_plan_step witness. Other steps are unobserved, not failed or ignored.'),
     'plan_attempt_dispatches': ('plan_steps', 'Distinct dispatches linked as Plan attempts',
@@ -193,9 +199,63 @@ def summarize(graph, hierarchy):
     profiles['work_outline'] = dict(available=outline is not None, declared=len(work_items),
         observed=sum(r['profile'] == 'work_outline' and r['observed'] for r in rows),
         distinct_effort=len(all_actions), effort_unit='linked dispatches')
+    scalars = {}
+    for key, basis in [('native_goal_depth', 'declared_tree'), ('work_outline_depth', 'work_outline')]:
+        scoped_rows = [r for r in rows if r['profile'] == basis]
+        scalars[key] = max((r['depth_max'] for r in scoped_rows), default=None)
+        # The maximum is witnessed by its deepest nodes and all parent paths.
+        parent_links = ([e for e in hierarchy['links'] if e['type'] == 'contains'] if basis == 'declared_tree' else
+                        [dict(e, source=e['target'], target=e['source']) for e in (outline or {}).get('links', []) if e['type'] == 'part_of'])
+        incoming = defaultdict(list)
+        for edge in parent_links: incoming[edge['target']].append(edge)
+        for row in scoped_rows:
+            if row['depth_max'] != scalars[key]: continue
+            ancestors, pending, parent_edges = set(), [row['id']], set()
+            while pending:
+                child = pending.pop()
+                if child in ancestors: continue
+                ancestors.add(child)
+                for edge in incoming[child]:
+                    pending.append(edge['source'])
+                    parent_edges.update(eid for eid in [edge['id'], *edge.get('edge_ids', [])] if eid in edge_by_id)
+            cases[key].append(witness(row['id'], row['label'], set(row['node_ids']) | ancestors, set(row['edge_ids']) | parent_edges,
+                value=row['depth_max'], work_structure=dict(profile=basis, focus=row['id'], depth=[row['depth_min'], row['depth_max']])))
+    from .work_order import Evidence
+    events = {n['properties']['id']: dict(n['properties'], index=n['event_index'], trajectory_id=n['trajectory_id'])
+              for n in source.values() if n['kind'] == 'event'}
+    order = Evidence(events)
+    compared = unresolved = 0
+    order_cases = []
+    for link in hierarchy['links']:
+        if link['type'] != 'precedes': continue
+        endpoints = []
+        for sid in (link['source'], link['target']):
+            attempts = [r for r in paths.get(sid, {}).get('rows', []) if 'attempts_plan_step' in r['roles']]
+            first = min(attempts, key=lambda r: items[r['action_id']]['event_index'], default=None)
+            aid = first['action_id'] if first else None
+            event_id = source[aid]['properties'].get('source', {}).get('event_id') if aid else None
+            endpoints.append((first, event_id))
+        (a, ae), (b, be) = endpoints
+        known = bool(ae in events and be in events and ae != be and order.is_ordered(ae) and order.is_ordered(be)
+                     and events[ae]['index'] != events[be]['index'])
+        if not known:
+            unresolved += 1
+        else:
+            compared += 1
+        taken = events[ae]['index'] > events[be]['index'] if known else None
+        record = dict(id=link['id'], from_step=link['source'], to_step=link['target'],
+                      taken=taken, evidence=link['evidence'], reason=None if known else 'Missing, shared or unordered first linked attempts')
+        order_cases.append(record)
+        if taken:
+            edge_ids = {eid for row in (a, b) for lid in row['role_link_ids']
+                        for eid in hierarchy_links[lid]['edge_ids'] if edge_by_id[eid]['type'] == 'attempts_plan_step'}
+            cases['plan_order_departures'].append(witness(link['id'], items[link['target']]['label'] + ' before ' + items[link['source']]['label'],
+                [link['source'], link['target'], a['action_id'], b['action_id'], 'event:'+ae, 'event:'+be], edge_ids,
+                work_structure=dict(profile='plan_steps', focus=link['source']), declared_order=record))
+    profiles['plan_order'] = dict(available=compared > 0, declared=len(order_cases), compared=compared, unresolved=unresolved)
     from .decision_followthrough import windows
     return dict(schema=VERSION, profiles=profiles, rows=rows, cases=cases,
-                decision_windows=windows(outline), limits=LIMIT)
+                scalars=scalars, order_comparisons=order_cases, decision_windows=windows(outline), limits=LIMIT)
 
 
 def project(graph, cutoff_event_id=None):
@@ -210,6 +270,7 @@ def project(graph, cutoff_event_id=None):
 def measure(output, key):
     profile = output['profiles'][MEASURES[key][0]]
     cases = output['cases'][key]
-    return dict(value=len(cases) if profile['available'] else None, numerator=None, denominator=None,
+    value = output.get('scalars', {}).get(key, len(cases)) if profile['available'] else None
+    return dict(value=value, numerator=None, denominator=None,
                 opportunities=None, unknown=None, cases=cases, coverage=profile,
                 reason=None if profile['available'] else 'The selected graph has no supported ' + MEASURES[key][0].replace('_', ' ') + ' evidence.')

@@ -27,7 +27,7 @@ const WorkspaceAlerts=(()=>{
    const chart=el('a','Open monitor');chart.href=item.monitor_url;actions.append(evidence,chart);card.append(actions);return card;
   }
   function renderList(host,rows){host.replaceChildren();for(const item of rows)host.append(row(item));if(!rows.length)host.append(el('p','No current findings from enabled monitors.','field-note'));}
-  function renderDialog(){toggle.checked=!prefs.muted;status.textContent=data?(data.total>data.alerts.length?`Showing the latest ${data.alerts.length} of ${data.total} findings. `:'')+'Flags link to saved evidence; they do not confirm reward hacking.':'Loading findings…';renderList(list,data?.alerts||[]);}
+  function renderDialog(){toggle.checked=!prefs.muted;status.textContent=data?(data.total>data.alerts.length?`Showing the latest ${data.alerts.length} of ${data.total} findings. `:'')+'Findings link to saved evidence. Thresholds describe measurements, not verified failures.':'Loading findings…';renderList(list,data?.alerts||[]);}
   function renderFocus(){const host=document.getElementById('reward-findings');if(!host)return;const rows=scoped(data?.alerts||[],scope).filter(r=>r.category==='reward');renderList(host,rows);const count=document.getElementById('reward-finding-count');if(count)count.textContent=`${rows.length} current findings`+(data?.total>data?.alerts.length?' · latest 100 workspace findings searched':'');}
   function announce(rows,first){
    if(prefs.muted||(!rows.length&&!pending.length))return;

@@ -180,3 +180,8 @@ names identify intent. It also follows the reusable-analysis direction in
 [Docent Analysis Plans](https://docs.transluce.org/analysis/analysis-plans): reuse
 saved observations for a new deterministic question before purchasing another
 model reading. Neither comparison establishes competitive superiority.
+## Structure lines and notifications
+
+In **Plans & attempts**, select **Structure lines** to fold branches and open their evidence. **Track across rollouts** creates a monitor in the same population. Depth starts at 0; declared goals and reviewed outlines are separate measures.
+
+In **Add/Edit monitor → Notification**, choose a threshold for Findings and browser popups. **Declared-order departures** compares the first linked attempts with explicit `precedes` links. It flags reversed recorded order, not unjustified behavior; missing or parallel attempts remain unresolved. Python monitors accept `alert={"operator": "gt", "threshold": 2, "severity": "warning"}`.

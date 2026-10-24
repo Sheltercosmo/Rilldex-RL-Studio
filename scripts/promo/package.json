@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "scripts": { "render": "node render.cjs" },
+  "dependencies": { "@napi-rs/canvas": "0.1.100" }
+}

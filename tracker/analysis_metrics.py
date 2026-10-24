@@ -60,6 +60,12 @@ def catalog(*, legacy=False):
     for name, (basis,label,description) in work_structure_metrics.MEASURES.items():
         result[name] = dict(operation='work_structure',key=name,label=label,aggregation='count',unit='value',
             version=VERSION+'|'+investigation_plans.OPS['work_structure'],description=description+' '+work_structure_metrics.LIMIT)
+        if name in {'native_goal_depth','work_outline_depth'}:
+            result[name].update(aggregation='mean', reducer='max', unit='levels')
+        if name in {'native_goal_depth','work_outline_depth','plan_order_departures'}:
+            result[name]['description'] = description
+        if legacy and name not in {'native_goal_depth','work_outline_depth','plan_order_departures'}:
+            result[name]['version'] = VERSION+'|work-structure-measures/2|work-hierarchy/13'
     for name, (key,label,description) in repeated_work.MEASURES.items():
         result[name] = dict(operation='repeated_work',key=key,label=label,aggregation='opportunity_ratio',unit='fraction',
             version=VERSION+'|'+repeated_work.RECIPE,description=description+' '+repeated_work.LIMIT)
@@ -400,7 +406,9 @@ def receipt(store,value,monitor):
     if spec['aggregation']=='opportunity_ratio':
         n=sum(c['taken'] is True for c in cases);d=sum(c['taken'] is not None for c in cases)
         expected={'value':n/d if d else None,'numerator':n,'denominator':d,'opportunities':len(cases),'unknown':len(cases)-d}
-    else:expected={'value':len(cases) if m['value'] is not None else None,'numerator':None,'denominator':None,'opportunities':None,'unknown':None}
+    else:
+        scalar = max((c['value'] for c in cases), default=None) if spec.get('reducer') == 'max' else len(cases)
+        expected={'value':scalar if m['value'] is not None else None,'numerator':None,'denominator':None,'opportunities':None,'unknown':None}
     if any(value.get(k)!=v or m.get(k)!=v for k,v in expected.items()):raise InputError('Analysis arithmetic differs from cases')
     evidence=list(dict.fromkeys(i for c in cases if c['taken'] is True for i in c['node_ids']))
     if value['evidence_ids']!=evidence:raise InputError('Analysis contributing evidence differs from cases')

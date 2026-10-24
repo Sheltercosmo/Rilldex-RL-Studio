@@ -16,41 +16,22 @@
 
 ## Product tour
 
-**Training overview:** keep one run selected and move between training, behavior, execution and data.
+**Watch the 60-second tour.** Follow a training change into the rollout, inspect how the agent organizes its work, and compare what changes across runs.
 
-![A focused training overview with aligned task-success and trainer–sampler-gap trends](docs/assets/demo/training-overview.svg)
+https://github.com/user-attachments/assets/398d7ddc-190f-49c3-b8be-8406af7e9bad
 
-**Unit map:** follow actions, feedback and retries through saved relationships.
+- **Training & comparisons:** align outcomes and trainer signals; select an interval to inspect its updates and rollouts.
+- **Unit & structure maps:** follow actions, feedback and retries, then zoom out to branches, nested work and repeated attempts.
+- **Execution:** see parallel workers, timeouts, retries and learner updates on a shared timeline.
+- **Behavior & monitors:** track recovery, unresolved follow-up, depth and declared-order departures; open the evidence behind a change.
 
-![Unit map showing a failed installation, feedback assessment and a changed retry command](docs/assets/demo/unit-map.svg)
-
-**Plans & attempts:** focus a branch to see its steps, repeated attempts and reported status.
-
-![A report-production branch with Markdown drafting, PDF conversion and repeated attempts](docs/assets/demo/plans-and-attempts.svg)
-
-**Rollout measures:** compare reward, task outcomes and recheck success for the same cohort.
-
-![Reward, task success and recheck success across a clearly labeled 64-step training simulation](docs/assets/demo/training-signals.svg)
-
-**Behavior comparison:** compare recorded approaches and subsequent responses, inspect matching pairs, and save the evidence.
-
-![Earlier and later procedure changes with error follow-up, eligible pairs and unresolved observations](docs/assets/demo/behavior-comparison.svg)
-
-**Run comparison:** align outcomes and policy mismatch, select an interval, and inspect the recorded updates.
-
-![Three simulated runs with noisy task-success curves, aligned probability-gap trends, and selected-step values](docs/assets/demo/run-comparison.svg)
-
-**Execution timeline:** follow parallel workers, a timed-out request and its retry alongside learner updates.
-
-![An asynchronous execution timeline with worker lanes, learner updates, weight synchronization, and linked retry details](docs/assets/demo/execution-timeline.svg)
-
-Maps use a [public OpenHands trace](https://github.com/metauto-ai/agent-as-a-judge/blob/43c2fa7b84ef0c1522e8250576e6798bace29dd0/benchmark/trajectories/OpenHands/39_Drug_Response_Prediction_SVM_GDSC_ML.json). Other figures use labeled, authored examples rendered as focused product views.
+The film uses labeled simulations and a [public OpenHands trace](https://github.com/metauto-ai/agent-as-a-judge/blob/43c2fa7b84ef0c1522e8250576e6798bace29dd0/benchmark/trajectories/OpenHands/39_Drug_Response_Prediction_SVM_GDSC_ML.json).
 
 ## Core features
 
 | Capability | What you can do |
 | --- | --- |
-| Behavior maps | Inspect failed checks, retry paths and paired attempts; move between units, work and plans with source evidence attached. |
+| Behavior maps | Inspect failed checks, retry paths and paired attempts. Switch between detailed cards and compact, colored structure lines; follow branches back to source evidence. |
 | Training overview | Start with a combined summary, then open focused Training, Behavior, Execution or Training data views. |
 | Shared workspace | Switch the training run once across views. Search, pin investigations, and organize runs and projects separately from the live overview. |
 | Run comparisons | Align up to three runs and inspect matching task rollouts. Compare behavior across all selected rollouts or equally weighted shared tasks, with saved measurements and maps attached. |
@@ -59,7 +40,7 @@ Maps use a [public OpenHands trace](https://github.com/metauto-ai/agent-as-a-jud
 | Trainer telemetry | Connect TRL, ms-swift GRPO or [Stable-Baselines3](docs/STABLE_BASELINES.md), import verl logs, or use custom definitions. Preserve objective, version, writer and restart boundaries. |
 | Execution timeline | Inspect worker spans, failures, configuration and weight-sync events alongside linked signals and samples. Save a captured view or export it. |
 | Policy mismatch | Measure aligned token probability gaps and compare probability-based and ratio-based exclusion rules using existing log probabilities. No additional inference required. |
-| Monitor management | Use built-in measures, relationship queries and Python-defined monitors; inspect coverage and contributing cases. |
+| Monitor management | Use built-in measures, relationship queries and Python-defined monitors. Set threshold notifications; inspect coverage and contributing cases. |
 | [Detector validation](docs/DETECTOR_VALIDATION_SETS.md) | Freeze reviewed cases, compare detector versions, and inspect disagreements with coverage alongside accuracy. |
 | [Findings reports](docs/FINDINGS_REPORTS.md) | Share offline reports with conclusions, counterevidence, cohort counts and exact saved evidence. |
 | Reward hacking detection | Select common behavior checks or define reward-specific detectors; follow flagged rollouts and inspect their supporting evidence. |
@@ -144,6 +125,8 @@ For verl, choose `framework="verl"` and call `metrics.log(native_metrics, step=g
 Use the **Training run** switcher in the sidebar; the selection follows you across views. **Summary** previews training signals and rollout measures; **Training** compares full runs. Select an interval, then **Inspect updates** to open original logs and linked rollouts. **Browse metrics** finds additional signals; **Export comparison** downloads raw records or the plotted view. Ordinary trainer logs are enough to start.
 
 **Behavior** contains measures, distributions and strategy profiles. **Execution** shows timing recorded with `ExecutionRecorder`; **Training data** follows generation, scoring, selection and learner use. Each view keeps the selected experiment and environment. [Execution capture and probability comparisons →](docs/TRAINER_TELEMETRY.md#execution-and-training-signals)
+
+In the behavior map, open **Plans → Structure lines** to inspect larger hierarchies and fold branches. Add depth, repeated-work or declared-order measures in **Monitors**, then set a notification threshold. [Structure measures →](docs/WORK_STRUCTURE_MEASURES.md)
 
 In **Behavior → Distributions**, select two windows and an activity or procedure category to inspect matching cases. **Save latest comparison** retains its observations and membership. **Capture latest evidence** revisits the same windows while preserving the original.
 

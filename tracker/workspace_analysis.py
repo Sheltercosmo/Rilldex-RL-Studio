@@ -156,7 +156,7 @@ Each call sees fresh committed data; joins within one call share a read snapshot
             if source.frozen: raise InputError('Saving a comparison requires the live workspace or a full restore')
         return trainer_case_studies.save(Store(self.data.path),dict(reference=reference,selected=selected,title=title,hypothesis=hypothesis,monitor_ids=monitor_ids))
 
-    def monitor(self,name,*,version,description,unit='value',aggregation='mean',config=None,group='Behavior',evaluations=None):
+    def monitor(self,name,*,version,description,unit='value',aggregation='mean',config=None,group='Behavior',evaluations=None,alert=None):
         """Register a code-defined monitor whose saved results appear in the UI.
 
         Use .run(callback) for backfill and .follow(callback) for new rollouts.
@@ -164,7 +164,7 @@ Each call sees fresh committed data; joins within one call share a read snapshot
         """
         from .custom_monitors import CustomMonitor
         return CustomMonitor(self,name,version=version,description=description,unit=unit,
-                             aggregation=aggregation,config=config,group=group,evaluations=evaluations)
+                             aggregation=aggregation,config=config,group=group,evaluations=evaluations,alert=alert)
 
     def reward_detector(self,name,*,version,description,reward_definition,inputs,
                         definition_path='/metadata/reward_definition',stage='custom',config=None,evaluations=None):

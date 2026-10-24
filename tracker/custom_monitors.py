@@ -216,12 +216,13 @@ class Context:
 
 class CustomMonitor:
     """Arbitrary local Python; immutable published results shared with the UI."""
-    def __init__(self,workspace,name,*,version,description,unit='value',aggregation='mean',config=None,group='Behavior',evaluations=None):
+    def __init__(self,workspace,name,*,version,description,unit='value',aggregation='mean',config=None,group='Behavior',evaluations=None,alert=None):
         from .store import Store
         from .monitoring import create,validate,definitions
         if workspace.scope['history']:raise InputError('Create monitors from a current workspace, not history=True')
         self.workspace=workspace;self.store=Store(workspace.data.path)
         raw=validate(dict(name=name,kind='custom',observer=workspace.scope['observer'] or 'source',group=group,
+            **({'alert':alert} if alert is not None else {}),
             population={k:v for k,v in workspace.scope.items() if k=='experiment' and v is not None},
             custom=dict(version=version,description=description,unit=unit,aggregation=aggregation,config={} if config is None else config,
                         **({'evaluations':evaluations} if evaluations is not None else {}))))

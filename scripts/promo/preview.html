@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rilldex — Product film</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#080f20;color:#e7f0ff;font:15px/1.5 system-ui,sans-serif}
+  main{max-width:1440px;margin:auto;padding:32px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}
+  h1{font-size:23px;letter-spacing:-.5px;margin:0}p{color:#93a8c8;margin:5px 0}video{display:block;width:100%;aspect-ratio:16/9;background:#080f20;border:1px solid #23324b;border-radius:16px}
+  nav{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0}button,a{border:1px solid #344969;background:#12233d;color:#cddfff;border-radius:9px;padding:10px 15px;font:inherit;text-decoration:none;cursor:pointer}
+  button:hover,a:hover{background:#1c365b}button:focus-visible,a:focus-visible{outline:2px solid #8ab9ff;outline-offset:3px}
+  #play{background:#3c6ae7;border-color:#3c6ae7;color:white}small{color:#91a6c6} @media(max-width:600px){main{padding:16px}header{align-items:flex-start;flex-direction:column}}
+</style>
+<main>
+  <header><div><h1>Rilldex RL Studio</h1><p>Animated product film · 60 sec · 1080p / 60 fps · silent</p></div><a href="rilldex-product-tour.mp4?v=16" download>Download MP4</a></header>
+  <video id="film" controls playsinline preload="metadata" poster="poster.png?v=16"><source src="rilldex-product-tour.mp4?v=16" type="video/mp4"></video>
+  <nav aria-label="Video chapters">
+    <button id="play">Play film</button>
+    <button data-time="0">00:00 Introduction</button>
+    <button data-time="5.667">00:06 Training</button>
+    <button data-time="12.334">00:12 Unit map</button>
+    <button data-time="19">00:19 Plans</button>
+    <button data-time="28.334">00:28 Execution</button>
+    <button data-time="35">00:35 Compare</button>
+    <button data-time="43">00:43 Behavior</button>
+    <button data-time="48.334">00:48 Rilldex</button>
+  </nav>
+  <p><a href="https://github.com/Sheltercosmo/Rilldex-RL-Studio" target="_blank" rel="noopener">Explore Rilldex on GitHub ↗</a></p>
+  <p><small>Animated product demonstration. Simulated metrics and public trace excerpts are labeled in the film.</small></p>
+</main>
+<script>
+  const film=document.getElementById('film'),play=document.getElementById('play');
+  play.addEventListener('click',()=>film.paused?film.play():film.pause());
+  film.addEventListener('play',()=>play.textContent='Pause film');
+  film.addEventListener('pause',()=>play.textContent='Play film');
+  document.querySelectorAll('[data-time]').forEach(button=>button.addEventListener('click',()=>{film.currentTime=Number(button.dataset.time);film.play();}));
+</script>
+</html>
