@@ -126,6 +126,8 @@ Use the **Training run** switcher in the sidebar; the selection follows you acro
 
 **Behavior** contains measures, distributions and strategy profiles. **Execution** shows timing recorded with `ExecutionRecorder`; **Training data** follows generation, scoring, selection and learner use. Each view keeps the selected experiment and environment. [Execution capture and probability comparisons →](docs/TRAINER_TELEMETRY.md#execution-and-training-signals)
 
+Select an agent step in the map and choose **Scan context** to inspect its input mixture, repeated blocks and captured instruction changes. [Context scan →](docs/CONTEXT_SCAN.md)
+
 In the behavior map, open **Plans → Structure lines** to inspect larger hierarchies and fold branches. Add depth, repeated-work or declared-order measures in **Monitors**, then set a notification threshold. [Structure measures →](docs/WORK_STRUCTURE_MEASURES.md)
 
 In **Behavior → Distributions**, select two windows and an activity or procedure category to inspect matching cases. **Save latest comparison** retains its observations and membership. **Capture latest evidence** revisits the same windows while preserving the original.

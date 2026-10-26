@@ -52,6 +52,7 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
     elif host not in {"127.0.0.1", "localhost", "::1"}:
         raise InputError("This version is a local research application; bind to loopback only")
     snapshot_lock = threading.Lock()
+    context_review_lock = threading.Lock()
     from .model_pilot import ModelPilotService
     model_pilot = ModelPilotService(store)
     import uuid
@@ -97,6 +98,12 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
             path = unquote(urlsplit(self.path).path)
             params = parse_qs(urlsplit(self.path).query)
             try:
+                if path in {'/context-mix.js','/context-mix.css'}:
+                    return self.response(200,(WEB/path[1:]).read_bytes(),'text/css; charset=utf-8' if path.endswith('.css') else 'text/javascript; charset=utf-8')
+                if path == '/api/context-mix':
+                    from .context_mix import load
+                    return self.response(200,load(store,params.get('run',[''])[0],params.get('event',[''])[0]),
+                        download_name='context-mix.json' if params.get('download')==['1'] else None)
                 if path == '/data-access.js':
                     return self.response(200,(WEB/'data-access.js').read_bytes(),'text/javascript; charset=utf-8')
                 if path == '/native-analysis.js':
@@ -735,6 +742,13 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                 body = json.loads(self.rfile.read(length))
                 if not isinstance(body, dict):
                     raise InputError("Request body must be an object")
+                if self.path == '/api/context-mix/review':
+                    from .context_mix import review
+                    if not context_review_lock.acquire(blocking=False):
+                        return self.response(409,{'error':'A context review is already running. Try again after it finishes.'})
+                    try:
+                        return self.response(200,review(store,body.get('run'),body.get('event'),body.get('block')))
+                    finally: context_review_lock.release()
                 if self.path.startswith('/api/workspaces/') and workspace_manager is None:
                     return self.response(503,{'error':'Workspace picker unavailable: '+str(workspace_error)})
                 if self.path == '/api/workspaces/open':
