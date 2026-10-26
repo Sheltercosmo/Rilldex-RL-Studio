@@ -11,7 +11,49 @@
   for(const candidate of [explicit,arrival,referrer]){const path=internal(candidate,current);if(path&&path!==here)return path;}
   return new URL(current).pathname==='/semantic-map'||new URL(current).pathname==='/source'?'/runs':'/';
  }
- function title(path){const u=new URL(path,'http://workspace.local');if(['/','/dashboard'].includes(u.pathname)&&u.searchParams.get('view')==='experiments')return 'Runs & projects';return names[u.pathname]||'workspace';}
+ const sections=[
+  {id:'training',label:'Training',fold:true,items:[
+   ['overview','Overview','/','Current training signals, rollout behavior and collection'],
+   ['signals','Signals & comparison','/?view=health','Compare training curves, loss, entropy, KL and outcomes'],
+   ['behavior','Behavior','/?view=measures','Measures, distributions and changes across training'],
+   ['execution','Execution timeline','/?view=execution','Parallel workers, timeouts, retries and throughput'],
+   ['samples','Training data','/?view=training','Generated, admitted and consumed samples']
+  ]},
+  {id:'investigate',label:'Investigate',items:[
+   ['rollouts','Rollouts','/runs','Find a rollout, then open its map, plans and source evidence'],
+   ['investigations','Investigations','/investigate','Saved comparisons, hypotheses and follow-up trials']
+  ]},
+  {id:'monitor',label:'Monitoring',items:[
+   ['monitors','Monitors','/monitors','Configure measures, alerts and custom code'],
+   ['reward','Reward hacking','/monitors?view=reward','Findings, scan budgets, common checks and custom detectors']
+  ]},
+  {id:'workspace',label:'Workspace',fold:true,items:[
+   ['library','Runs & projects','/?view=experiments','Organize runs, files and saved comparisons'],
+   ['connections','Data & workflows','/connections','Capture, imports, models and integration settings']
+  ]}
+ ];
+ function routeKey(path,search=''){
+  const q=new URLSearchParams(search),view=q.get('view');
+  if(['/','/dashboard','/rollouts'].includes(path)){
+   if(view==='experiments')return 'library';
+   if(view==='health')return 'signals';if(view==='execution')return 'execution';if(view==='training')return 'samples';
+   if(['measures','strategies'].includes(view)||q.has('monitor')||q.has('comparison'))return 'behavior';return 'overview';
+  }
+  if(['/runs','/semantic-map','/source','/relations','/measurement-review'].includes(path))return 'rollouts';
+  if(path==='/investigate')return 'investigations';
+  if(path==='/monitors')return view==='reward'?'reward':'monitors';
+  if(path==='/detector-validation')return 'reward';return 'connections';
+ }
+ function groups(path,search=''){
+  const active=routeKey(path,search);
+  return sections.map(section=>({...section,active:section.items.some(([id])=>id===active),items:section.items.map(([id,label,href,hint])=>({id,label,href,hint,active:id===active}))}));
+ }
+ function shortcuts(){return [...sections.flatMap(s=>s.items.map(([,label,path,hint])=>[label,hint,path])),
+  ['Rollout map','Behavior map: activities, structure, revisions and context mixture','/semantic-map'],
+  ['After an error','Compare approach changes, repeated errors and unresolved follow-up','/?view=strategies&lens=procedure'],
+  ['Revision benefit & harm','Behavior measures for self-revision, gains and regressions','/?view=measures&measure_family=revision'],
+  ['Integration guide','Capture from your training code','/integration-guide']];}
+ function title(path){const u=new URL(path,'http://workspace.local');if(['/','/dashboard'].includes(u.pathname))return sections.flatMap(s=>s.items).find(([id])=>id===routeKey(u.pathname,u.search))?.[1]||'Overview';return names[u.pathname]||'workspace';}
  function captureView(hash,views=[],recipe=false){
   const id=hash.replace(/^#/,''),routes={'model-section':'models','setup-section':'setup','snapshot-section':'import','capture-bundle-receive':'import','directory-section':'watch','worker-section':'workers','code-section':'code','telemetry-section':'code','execution-section':'code','training-setup':'config','question-section':'readiness','data-access-section':'outputs','analysis-code':'outputs','workspace-transfer':'outputs'};
   return routes[id]||views[0]||(recipe?'readiness':'setup');
@@ -61,6 +103,6 @@
   // Connections restores after revealing its destination panel.
   if(document.body.dataset.app!=='connections')window.addEventListener('load',restore,{once:true});
  }
- const api={internal,destination,title,captureView,install};
+ const api={internal,destination,title,captureView,routeKey,groups,shortcuts,install};
  if(typeof module!=='undefined')module.exports=api;else root.WorkspaceNavigation=api;
 })(typeof window==='undefined'?globalThis:window);

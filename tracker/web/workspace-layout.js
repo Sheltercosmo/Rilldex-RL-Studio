@@ -30,11 +30,20 @@
   document.body.classList.add('workspace-organized');
   const content=nav.querySelector('.nav-content'),links=nav.querySelector('.nav-links');
   content.querySelector(':scope > .nav-caption')?.remove();
-  const originals=[...links.children];
-  for(const [label,paths] of [['Analysis',['/','/semantic-map','/runs']],['Research',['/investigate','/monitors','/monitors?view=reward']],['Workspace',['/connections']]]){
-   const group=el('div',null,'nav-group');group.setAttribute('role','group');group.setAttribute('aria-label',label);group.append(el('span',label,'nav-caption'));
-   for(const path of paths){const a=originals.find(a=>{const u=new URL(a.href);return u.pathname+(u.searchParams.get('view')?'?view='+u.searchParams.get('view'):'')===path;});if(a)group.append(a);}links.append(group);
+  const originals=[...links.children];links.replaceChildren();
+  const extraIcons={signals:'M3 18h18 M5 14l4-5 4 3 6-8',behavior:'M4 18V9 M9 18V5 M14 18v-7 M19 18V3',execution:'M3 5h10v3H3z M8 11h13v3H8z M3 17h14v3H3z',samples:'M3 5h18v14H3z M3 10h18 M9 5v14',library:'M3 6h7l2 2h9v12H3z M3 6V4h7l2 2'};
+  for(const section of root.WorkspaceNavigation.groups(location.pathname,location.search)){
+   const group=el(section.fold?'details':'div',null,'nav-group'+(section.fold?' nav-disclosure':''));group.setAttribute('aria-label',section.label);
+   if(section.fold)group.open=section.active;else group.setAttribute('role','group');
+   const caption=el(section.fold?'summary':'span',section.label,'nav-caption');group.append(caption);
+   const items=el('div',null,'nav-group-items');
+   for(const item of section.items){const a=originals.find(a=>a.getAttribute('href')===item.href)||el('a',null,'nav-link');a.href=item.href;a.title=item.hint;a.dataset.navKey=item.id;a.removeAttribute('aria-current');
+    if(!a.firstChild)a.append(icon(extraIcons[item.id]||'M3 5h18v14H3z'),el('span',item.label));
+    else{const svg=a.querySelector('svg');a.replaceChildren(...(svg?[svg]:[]),el('span',item.label));}
+    if(item.active)a.setAttribute('aria-current','page');items.append(a);
+   }group.append(items);links.append(group);
   }
+  document.body.classList.add('workflow-navigation');
   const search=bar.querySelector('.workspace-search');if(search)content.prepend(search);
   document.addEventListener('pointerdown',event=>{if(nav.classList.contains('nav-open')&&!nav.contains(event.target)){nav.classList.remove('nav-open');const t=nav.querySelector('.nav-toggle');t.setAttribute('aria-expanded','false');t.textContent='Menu';}});
   const heading=[...bar.children].find(n=>n!==bar.querySelector('.bar-actions')&&n.tagName==='DIV');
@@ -185,7 +194,6 @@
   const position=()=>{const compact=matchMedia('(max-width:1100px)').matches;if(compact){if(context.parentNode!==bar)bar.append(context);}else if(context.parentNode!==anchor)anchor.append(context);};position();window.addEventListener('resize',position);
   const original=document.querySelector('.dashboard-scope');
   if(original){original.hidden=true;const refresh=original.querySelector('#refresh');if(refresh)bar.querySelector('.bar-actions').append(refresh);}
-  const workspace=document.querySelector('.nav-group[aria-label="Workspace"]');if(workspace){const a=el('a','Runs & projects','nav-link');a.href='/?view=experiments';a.insertAdjacentHTML('afterbegin','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3zM3 6V4h7l2 2"/></svg>');if(new URLSearchParams(location.search).get('view')==='experiments'){document.querySelector('.nav-link[aria-current=page]')?.removeAttribute('aria-current');a.setAttribute('aria-current','page');}workspace.querySelector('.nav-caption')?.after(a);}
   trigger.onclick=async()=>{
    if(chooser?.open)return;const prior=trigger;chooser=el('dialog',null,'training-run-dialog');chooser.setAttribute('aria-labelledby','training-run-title');
    const head=el('div',null,'dialog-head'),h=el('h2','Switch training run');h.id='training-run-title';const close=el('button','Close');close.type='button';close.onclick=()=>chooser.close();head.append(h,close);chooser.append(head);

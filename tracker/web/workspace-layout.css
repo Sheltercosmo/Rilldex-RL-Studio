@@ -59,6 +59,26 @@ body.workspace-organized{--sidebar:232px;--canvas:#f8f9fb;--workspace-bar-height
 .workspace-organized .workspace-search{width:100%;justify-content:space-between;border:1px solid var(--line);background:white;padding:8px 10px;margin:0 0 18px;gap:8px}
 .workspace-organized .nav-links{gap:20px}
 .workspace-organized .nav-group{display:grid;gap:3px}
+.workspace-organized .nav-group-items{display:grid;gap:3px}
+.workspace-organized details.nav-group{display:block;border:0;padding:0;margin:0;background:none}
+.workspace-organized .nav-disclosure>summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;padding:4px 0}
+.workspace-organized .nav-disclosure>summary::-webkit-details-marker{display:none}
+.workspace-organized .nav-disclosure>summary::after{content:'›';font-size:15px;line-height:12px;transform:rotate(0deg);transition:transform .15s}
+.workspace-organized .nav-disclosure[open]>summary::after{transform:rotate(90deg)}
+.workspace-organized .nav-disclosure:not([open])>.nav-group-items{display:none}
+.workflow-navigation #overview-tabs{display:none!important}
+.workflow-navigation .workspace-context-dock:has(#overview-subnav[hidden]){display:none}
+.workflow-navigation .bd-view-selector{display:flex;margin:16px 0;gap:12px;align-items:center}
+.workflow-navigation .bd-view-selector label{display:flex;align-items:center;gap:12px;margin:0;font-size:12px;color:#647189}
+.workflow-navigation .bd-view-selector select{width:min(300px,60vw);font-size:12px;margin:0}
+.workflow-navigation #measure-browser #axis-label{display:flex;flex-direction:row;align-items:center;gap:8px;margin:0;color:#647189;font-size:11px;white-space:nowrap}
+.workflow-navigation #measure-browser #axis-label[hidden]{display:none}
+.workflow-navigation #measure-browser #axis-label select{min-width:135px;flex:none}
+.workflow-navigation .measure-inputs{margin:0 0 18px;padding:12px 16px;border:1px solid var(--line);border-radius:9px;background:white}
+.workflow-navigation .measure-inputs>summary{font-size:12px;color:var(--muted);cursor:pointer}
+.workflow-navigation .measure-inputs #overview-context{border:0;border-radius:0;padding:18px 0 12px;margin:0;box-shadow:none}
+.workflow-navigation .measure-inputs #execution-context{margin:0}
+.workflow-navigation .measure-inputs #execution-context>details{margin:10px 0 0}
 .workspace-organized .nav-caption{font-size:10px;letter-spacing:.8px;text-transform:uppercase;margin:0 10px 6px;color:#727d8c}
 .workspace-organized .workspace-nav .nav-link{padding:8px 10px;font-size:12px;gap:10px;min-height:36px}
 .workspace-organized .workspace-nav .nav-link[aria-current=page]{background:#eaf0ff;color:#284fcf}

@@ -56,7 +56,9 @@ class IntervalHTTPTests(unittest.TestCase):
                      '/inspection-paths.js','/inspection-view.js','/inspection-paths.css','/case-behavior.js','/case-behavior.css','/measurement-case-links.js']:
             with urlopen(endpoint+path,timeout=10) as response:
                 self.assertEqual(response.status,200);self.assertGreater(len(response.read()),100)
-        self.assertEqual(len(call('/api/monitoring/questions')['questions']),5)
+        presets = {q['id']: q for q in call('/api/monitoring/questions')['questions']}
+        self.assertEqual(set(presets), {'self-revision', 'comparable-performance', 'selection-delay',
+                                      'recovery', 'reward-outcomes', 'compute-progress'})
         from tracker.graph_store import catalog
         gid=catalog(self.store)['graphs'][0]['id']
         foundation=call('/api/map-foundation?graph='+gid)

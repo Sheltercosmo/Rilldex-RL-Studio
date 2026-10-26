@@ -47,7 +47,7 @@ test('saved views never refresh live evidence and keep source links inspectable'
  assert.deepEqual(requests.map(r=>r.url),['/api/behavior-comparisons/saved-one']);
  assert.ok(find(root,'strong','Saved comparison'));assert.equal(root.querySelector('.bd-windows'),null);
  assert.equal(root.querySelector('.bd-settings').querySelectorAll('select').length,0);
- assert.equal(root.querySelector('.bd-lenses').hidden,true);
+ assert.equal(root.querySelector('.bd-view-selector').hidden,true);
  all(root,e=>e.attrs['aria-label']==='Inspect Continued')[0].onclick();
  assert.match(context.location.search,/distribution=saved-one/);
  assert.ok(all(root,e=>e.tag==='a'&&e.href?.startsWith('/semantic-map?run=r&graph=g')).length);
@@ -96,6 +96,19 @@ test('settings remain folded and a measured zero stays inspectable',async()=>{
  assert.match(all(root,e=>e.attrs['aria-label']==='Inspect Unknown')[0].textContent,/Unknown 0\.0% 0\.0% 0\.0 pp/);
  assert.equal(all(root,e=>e.tag==='select'&&['Trend category','Behavior to compare'].includes(e.attrs['aria-label'])).length,0);
  assert.equal(root.querySelectorAll('.bd-windows').length,1);
+});
+
+test('changing the behavior view retains training scope and clears incompatible comparison filters',async()=>{
+ const d=fixture();d.lenses.work_visits={label:'Work focus'};
+ const {root,requests,load}=boot(d,{search:'?view=strategies&lens=recurrence&observer=old&cohort_id=old-task&a_start=1&a_end=2&b_start=3&b_end=4'});
+ await load({experiment:'control',environment:'swe-agent'});
+ const view=root.querySelector('.bd-view-selector').querySelector('select');
+ assert.deepEqual(view.options.map(o=>o.value),['work_visits','recurrence']);
+ view.value='work_visits';view.onchange();
+ const query=new URL(requests.at(-1).url,'http://local').searchParams;
+ assert.equal(query.get('experiment'),'control');assert.equal(query.get('environment'),'swe-agent');
+ assert.equal(query.get('lens'),'work_visits');assert.equal(query.get('recurrence_order'),'bracketed-parallel/1');
+ for(const key of ['observer','cohort_id','a_start','a_end','b_start','b_end'])assert.equal(query.has(key),false,key);
 });
 test('category selection synchronizes evidence and trend without losing disclosure state',async()=>{
  const {root,load}=boot(fixture());await load();

@@ -5,7 +5,7 @@ state-sensitive rates retain all opportunities and exclude unresolved ones.
 """
 from .schema import InputError, digest
 from . import work_episodes, work_state, investigation_plans, graph_store, adaptation_patterns, history_evidence, feedback_opportunities
-from . import work_structure_metrics
+from . import work_structure_metrics, revision_impact
 from . import repeated_work
 from . import work_return_references, retry_outcomes, work_visits, declared_plans, work_order, work_consistency, feedback_timing
 
@@ -57,6 +57,9 @@ def catalog(*, legacy=False):
                  'unit':'fraction' if aggregation=='opportunity_ratio' else 'value',
                  'version':VERSION+'|'+({'work_episodes':work_episodes.VERSION,'work_state':work_state.VERSION,'adaptation_patterns':adaptation_patterns.VERSION,'feedback_opportunities':feedback_opportunities.VERSION,'feedback_timing':feedback_timing.VERSION,'work_visits':investigation_plans.OPS['work_visits']}[op]),
                  'description':DETAILS[key]} for key,(op,field,label,aggregation) in DEFINITIONS.items()}
+    for name, (scope,target,label) in revision_impact.MEASURES.items():
+        result[name] = dict(operation='revision_impact',key=name,label=label,aggregation='opportunity_ratio',unit='fraction',
+            version=VERSION+'|'+investigation_plans.OPS['revision_impact'],description=revision_impact.description(name))
     for name, (basis,label,description) in work_structure_metrics.MEASURES.items():
         result[name] = dict(operation='work_structure',key=name,label=label,aggregation='count',unit='value',
             version=VERSION+'|'+investigation_plans.OPS['work_structure'],description=description+' '+work_structure_metrics.LIMIT)
@@ -200,7 +203,8 @@ def measure(output,spec):
     if spec['operation'] in {'work_visits','work_return_references'} and output.get('scope_consistency')!=spec.get('scope_consistency'):
         raise InputError('Work-consistency policy differs from the saved measure definition')
     readers = {'declared_plans': declared_plans.measure, 'retry_outcomes': retry_outcomes.measure,
-               'work_structure': work_structure_metrics.measure, 'repeated_work': repeated_work.measure}
+               'work_structure': work_structure_metrics.measure, 'repeated_work': repeated_work.measure,
+               'revision_impact': revision_impact.measure}
     if spec['operation'] in readers:
         return readers[spec['operation']](output,key)
     if spec['operation']=='work_return_references':

@@ -226,7 +226,7 @@ const IntervalInvestigation=(()=>{
    const grid=el('div',null,'ii-question-grid');
    host.replaceChildren(el('p','Add a set of monitors to the selected experiment and environment. Existing definitions are reused.','field-note'),grid);
    for(const q of data.questions){
-    const key=scope+q.id,state=presetStates.get(key)||{open:false,observer:'',monitor:'',status:'',busy:false,inputs:false,attach:false};presetStates.set(key,state);
+    const key=scope+q.id,state=presetStates.get(key)||{open:new URLSearchParams(location.search).get('preset')===q.id,observer:'',monitor:'',status:'',busy:false,inputs:false,attach:false};presetStates.set(key,state);
     const card=el('details',null,'ii-question'),summary=el('summary'),name=el('span',null,'ii-preset-name');
     card.dataset.question=q.id;card.open=state.open;card.ontoggle=()=>{state.open=card.open;};
     name.append(el('strong',q.title),el('span',q.description||'Saved monitor definitions'));

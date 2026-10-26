@@ -24,12 +24,14 @@
   }
  }
  let request=0;
- window.PlanHierarchyView={clear(){request++;window.PlanAttemptPath?.clear();window.WorkOutline?.clear();},async render(host,graph,navigateUnit,through=null,onCutoff=()=>{},options={}){
+ let clearCompact=null;
+ window.PlanHierarchyView={clear(){request++;clearCompact?.();clearCompact=null;window.PlanAttemptPath?.clear();window.WorkOutline?.clear();},async render(host,graph,navigateUnit,through=null,onCutoff=()=>{},options={}){
+  clearCompact?.();clearCompact=null;
   window.PlanAttemptPath?.clear();
   window.WorkOutline?.clear();
   const context=options.context;
   if(context&&context.graph_id!==graph.id)throw Error('Measured plan context belongs to another saved graph.');
-  const preferredRoot=host.querySelector('[aria-label="Plan branch to inspect"]')?.value;
+  const preferredRoot=new URL(location.href).searchParams.get('plan_root')||host.querySelector('[aria-label="Plan branch to inspect"]')?.value;
   const ticket=++request;host.replaceChildren(el('p','Loading saved plan structure…','ph-note'));
   const url='/api/work-hierarchy?'+new URLSearchParams({graph:graph.id,...(through?{through}:{})});
   let data;try{const r=await fetch(url);data=await r.json();if(!r.ok)throw Error(data.error||'Plan map unavailable');}catch(e){if(ticket===request)host.replaceChildren(el('p',e.message,'ph-note'));return;}
@@ -55,11 +57,12 @@
    if(data.cutoff_event_index!==context.cutoff_event_index){const restore=el('button','Restore measurement cutoff');restore.onclick=()=>changeCutoff(context.cutoff_event_id);banner.append(restore);}
    host.append(banner);
   }
-  if(!data.available){host.append(el('p','No supported plan structure is available through this record. This does not mean the agent had no plan. Unit map and Rollout story retain the observed work.','ph-empty'));return;}
+  if(!data.available){host.append(el('p','No supported plan structure is available through this record. Unit map and Rollout story retain the observed work.','ph-empty'));if(!data.revision_episodes?.episodes.length)return;}
   const rootChoice=el('select');rootChoice.setAttribute('aria-label','Plan branch to inspect');const all=el('option','All recorded plans');all.value='all';rootChoice.append(all);for(const id of data.roots){const n=byId.get(id),o=el('option',n.label);o.value=id;rootChoice.append(o);}const rootControl=el('label');rootControl.append(el('span',data.work_outline?'Work branch':'Plan or task list'),rootChoice);controls.insertBefore(rootControl,controls.children[1]);
-  workMeasures(host,data,graph);
+  const measureHost=el('div');workMeasures(measureHost,data,graph);
   const frame=el('div',null,'ph-canvas');frame.setAttribute('aria-label','Plan branch map');const forest=el('div',null,'ph-forest');frame.append(forest);host.append(frame);
-  const lineFrame=el('section',null,'ph-line-frame');lineFrame.hidden=true;frame.after(lineFrame);const layoutLabel=el('label'),layoutChoice=el('select');layoutChoice.setAttribute('aria-label','Plan map representation');for(const [value,label]of [['cards','Detailed map'],['lines','Structure lines']]){const o=el('option',label);o.value=value;layoutChoice.append(o);}layoutLabel.append(el('span','View'),layoutChoice);controls.append(layoutLabel);layoutChoice.value=new URL(location.href).searchParams.get('plan_view')==='lines'?'lines':'cards';
+  const lineFrame=el('section',null,'ph-line-frame'),compactFrame=el('section');lineFrame.hidden=true;compactFrame.hidden=true;frame.after(lineFrame,compactFrame);const layoutLabel=el('label'),layoutChoice=el('select');layoutChoice.setAttribute('aria-label','Plan map representation');for(const [value,label]of [['cards','Detailed map'],['lines','Structure lines'],['compact','Structure & flow']]){const o=el('option',label);o.value=value;layoutChoice.append(o);}layoutLabel.append(el('span','View'),layoutChoice);controls.append(layoutLabel);const requestedView=new URL(location.href).searchParams.get('plan_view');layoutChoice.value=['lines','compact'].includes(requestedView)?requestedView:'cards';
+  host.append(measureHost);if(!data.available)layoutChoice.value='compact';
   const detail=el('dialog',null,'ph-detail ph-dialog');detail.hidden=true;detail.setAttribute('aria-label','Plan branch evidence');host.append(detail);
   let detailOrigin=null;
   function closeDetail(){if(detail.open)detail.close();detail.hidden=true;if(detailOrigin?.isConnected)detailOrigin.focus({preventScroll:true});}
@@ -74,6 +77,8 @@
    return null;
   }
   function inspect(n){if(!detail.open)detailOrigin=document.activeElement;detail.replaceChildren();detail.hidden=false;const top=el('div',null,'ph-detail-title'),close=el('button','Close evidence');close.onclick=closeDetail;top.append(el('h3',n.label),close);detail.append(top,el('span',n.state||'State not established','ph-state'));
+   if(n.revision_episode)CompactStructure.appendEpisode(detail,n.revision_episode,byId,child=>inspect({...child,comparison_parent:n}));
+   else{const episodes=(data.revision_episodes?.episodes||[]).filter(e=>e.node_ids.includes(n.id));for(const episode of episodes){const change=byId.get(episode.declaration_id),b=el('button','Inspect revision'+(change?' · record '+(change.event_index+1):''),'ph-source');b.onclick=()=>inspect({id:episode.id,label:'Revision episode',state:episode.status.replaceAll('_',' '),revision_episode:episode,comparison_parent:n});detail.append(b);}}
    if(n.canvas_focus||n.canvas_plan){const actions=el('div',null,'ph-dialog-actions');for(const [label,fn] of [['Focus this branch',n.canvas_focus],['Open linked plan attempts',n.canvas_plan]])if(fn){const b=el('button',label);b.onclick=()=>{closeDetail();fn();};actions.append(b);}detail.append(actions);}
    if(n.kind==='outline_item'){
     const observed=n.execution_summary,panel=el('section',null,'ph-execution');panel.setAttribute('aria-label','Linked execution evidence');panel.append(el('h4','Linked actions'));
@@ -137,7 +142,7 @@
    for(const evidence of n.evidence||[])if(evidence.text&&evidence.text!==n.source_text)detail.append(el('pre',evidence.text));
    const outgoing=related(n.id),incoming=viewLinks.filter(e=>e.target===n.id);
    if(outgoing.length||incoming.length){detail.append(el('h4','Saved connections'));for(const e of [...incoming,...outgoing]){const outgoing=e.source===n.id,target=byId.get(outgoing?e.target:e.source),relation=!outgoing?({part_of:'Contains',depends_on:'Required by',replaces:'Replaced by'}[e.type]||e.label):e.label,p=el('button',relation+' · '+(e.type==='response'?'Record '+(target.event_index+1)+' · '+short(target.source_text||target.label,100):target.label),'ph-connection');p.onclick=()=>n.canvas_inspect&&target.work_kind?n.canvas_inspect(target):inspect(target);detail.append(p);if(e.evidence?.length){const witness=el('details',null,'ph-witness');witness.append(el('summary','Connection evidence'));for(const v of e.evidence)if(v.text)witness.append(el('pre',v.text));detail.append(witness);}}}
-   const units=[...new Set((n.source_node_ids||[]).map(unitOrigin).filter(Boolean))];for(const id of units){const record=source.get(id)?.event_index,label=id.startsWith('event:')?'Open record':'Open unit at record';const b=el('button',`${label} ${record==null?'':record+1} ↗`,'ph-source');b.onclick=()=>openUnit(id);detail.append(b);}
+   const units=[...new Set((n.revision_episode?[]:n.source_node_ids||[]).map(unitOrigin).filter(Boolean))];for(const id of units){const record=source.get(id)?.event_index,label=id.startsWith('event:')?'Open record':'Open unit at record';const b=el('button',`${label} ${record==null?'':record+1} ↗`,'ph-source');b.onclick=()=>openUnit(id);detail.append(b);}
    if(!detail.open)detail.showModal();detail.scrollTop=0;close.focus({preventScroll:true});
   }
   function chip(state){const suffix={'Reported complete':' reported-complete','Reported in progress':' reported-active','Reported pending':' reported-pending'}[state]||'';return el('span',state||'State not established','ph-state'+suffix);}
@@ -164,10 +169,10 @@
   }
   let surroundings=null;
   if(context?.item_ids.length&&data.nodes.some(n=>PlanCaseContext.matches(n,context))){const scope=el('label',null,'ph-case-scope');surroundings=el('input');surroundings.type='checkbox';surroundings.setAttribute('aria-label','Show surrounding plan items');scope.append(surroundings,el('span','Show surrounding plan items'));frame.before(scope);surroundings.onchange=()=>rootChoice.onchange();}
-  function drawLines(){frame.hidden=layoutChoice.value==='lines';lineFrame.hidden=!frame.hidden;if(!lineFrame.hidden)StructureLines.render(lineFrame,data,rootChoice.value,inspect);}
-  layoutChoice.onchange=()=>{const u=new URL(location.href);if(layoutChoice.value==='lines')u.searchParams.set('plan_view','lines');else u.searchParams.delete('plan_view');history.replaceState(null,'',u);drawLines();};
-  rootChoice.onchange=()=>{drawLines();const caseRoot=PlanCaseContext.rootFor(data,context),focusOnly=surroundings&&!surroundings.checked&&['all',caseRoot].includes(rootChoice.value);for(const row of forest.children){row.hidden=rootChoice.value!=='all'&&row.dataset.root!==rootChoice.value;for(const branch of row.querySelectorAll('.ph-branch'))branch.hidden=focusOnly&&!branch.querySelector('.ph-measured');}};
-  const weight=id=>related(id,'contains').reduce((n,e)=>n+related(e.target).length,0)+(byId.get(id)?.kind==='outline_item'?1000:0);rootChoice.value=PlanCaseContext.rootFor(data,context)||data.links.find(e=>e.type==='contains'&&e.target===new URL(location.href).searchParams.get('plan_step'))?.source||(preferredRoot==='all'||data.roots.includes(preferredRoot)?preferredRoot:[...data.roots].sort((a,b)=>weight(b)-weight(a))[0]);rootChoice.onchange();
+  function drawLines(){clearCompact?.();clearCompact=null;frame.hidden=layoutChoice.value!=='cards';lineFrame.hidden=layoutChoice.value!=='lines';compactFrame.hidden=layoutChoice.value!=='compact';if(!lineFrame.hidden)StructureLines.render(lineFrame,data,rootChoice.value,inspect);if(!compactFrame.hidden)clearCompact=CompactStructure.render(compactFrame,data,rootChoice.value,inspect);}
+  layoutChoice.onchange=()=>{const u=new URL(location.href);if(layoutChoice.value!=='cards')u.searchParams.set('plan_view',layoutChoice.value);else u.searchParams.delete('plan_view');history.replaceState(null,'',u);drawLines();};
+  rootChoice.onchange=()=>{const u=new URL(location.href);u.searchParams.set('plan_root',rootChoice.value);history.replaceState(null,'',u);drawLines();const caseRoot=PlanCaseContext.rootFor(data,context),focusOnly=surroundings&&!surroundings.checked&&['all',caseRoot].includes(rootChoice.value);for(const row of forest.children){row.hidden=rootChoice.value!=='all'&&row.dataset.root!==rootChoice.value;for(const branch of row.querySelectorAll('.ph-branch'))branch.hidden=focusOnly&&!branch.querySelector('.ph-measured');}};
+  const weight=id=>related(id,'contains').reduce((n,e)=>n+related(e.target).length,0)+(byId.get(id)?.kind==='outline_item'?1000:0);rootChoice.value=PlanCaseContext.rootFor(data,context)||data.links.find(e=>e.type==='contains'&&e.target===new URL(location.href).searchParams.get('plan_step'))?.source||(preferredRoot==='all'||data.roots.includes(preferredRoot)?preferredRoot:[...data.roots].sort((a,b)=>weight(b)-weight(a))[0])||'all';rootChoice.onchange();
   const unplaced=el('details',null,'ph-unplaced');unplaced.append(el('summary',`${data.counts.unassigned_actions} actions without a saved plan-step link`),el('p','These actions may be necessary work, unplanned work or missing annotations. They are not classified as deviation.','ph-note'));
   for(const id of data.unassigned_action_ids){const n=source.get(id),p=n.properties,c=p.content||{},b=el('button','Record '+(n.event_index+1)+' · '+short(c.operation?.text||c.target?.text||c.summary?.text||p.text,150));b.onclick=()=>openUnit(id);unplaced.append(b);}if(!data.declared_tree||data.counts.unassigned_actions)host.append(unplaced);
   const note=el('details',null,'ph-limits');note.append(el('summary','Evidence and limits'),el('p',data.limits),el('p','Projection '+data.id));if(data.issues.length)note.append(el('pre',JSON.stringify(data.issues,null,2)));host.append(note);

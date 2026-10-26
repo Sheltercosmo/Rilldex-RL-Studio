@@ -92,6 +92,10 @@ def build(run, bundle=None, *, include_requested=True):
             'identity_reviews':d.get('action_target_review',[]),
             'method_schema':d.get('method_comparison',{}).get('schema'),
             'method_observations':d.get('method_comparison',{}).get('observations',[])}
+        if d.get('operation_outcomes'):
+            from .operation_outcomes import action_outcomes, VERSION as OUTCOME_VERSION
+            if d['operation_outcomes'].get('schema') == OUTCOME_VERSION:
+                semantic_context['operation_results'] = deepcopy(action_outcomes(run, d['operation_outcomes']))
         if d.get('execution_reports'):
             from .execution_reports import validate, VERSION as REPORT_VERSION
             if d['execution_reports'].get('schema')==REPORT_VERSION:validate(run,d['execution_reports'])
@@ -138,6 +142,10 @@ def build(run, bundle=None, *, include_requested=True):
                      'note': 'Stored edges are observations. Missing semantic edges do not establish absence; temporal order does not establish causality.'},
         'counts': {'nodes': len(nodes), 'edges': len(edges),
                    'unresolved_endpoints': sum(n['kind']=='unresolved_reference' for n in nodes.values())}}
+    from .work_state import capture
+    captured_state = capture(run)
+    if captured_state is not None:
+        header['work_state_capture'] = deepcopy(captured_state)
     if bundle is not None:
         from .measurement_lineage import semantic_input_hash
         header['metric_input_hash']=semantic_input_hash(bundle['document'])

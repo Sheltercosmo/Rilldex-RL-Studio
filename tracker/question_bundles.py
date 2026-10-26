@@ -4,6 +4,11 @@ from .schema import InputError
 from . import monitoring
 
 QUESTIONS = [
+    dict(id='self-revision', title='Self-revision',
+         description='Benefits, regressions and unresolved results after a linked change.',
+         needs=['Saved change declarations and implementing actions', 'Same-work operation outcomes', 'For check impact: versioned checks and captured before/after state'],
+         metrics=[], measures=['revision_operation_gain','revision_operation_regression','revision_check_gain','revision_check_regression','revision_followup_unresolved'],
+         reading='Operations and criterion checks have separate charts. Open a value to compare the change, its first follow-up and any later results. Gains and regressions can occur together.'),
     dict(id='comparable-performance', title='Outcomes',
          description='Recorded reward and success, with task and population coverage.',
          needs=['Task IDs, train/eval split and generation coordinates', 'Stable task, environment, reward and sampling definitions', 'Explicit outcomes; completed and pending population counts'],

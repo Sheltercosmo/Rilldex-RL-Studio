@@ -8,7 +8,7 @@
 
 ## Highlights
 
-- **See what an agent did.** Connected maps of units, actions, feedback, expressed plans, branches and repeated attempts.
+- **See how an agent works.** Follow actions, feedback, plans and branches. Compare rollout structures and inspect what changed after a revision.
 - **Compare training runs.** Align reward, policy mismatch, loss, entropy, KL, clipping, tokens and throughput; select one interval across the charts.
 - **Connect training to behavior.** Follow worker activity, learner updates and their linked rollouts; inspect recovery, verification and unresolved work.
 - **Keep evidence within reach.** Chart values and saved investigations link to source records, relationships, coverage and definitions.
@@ -31,9 +31,10 @@ The film uses labeled simulations and a [public OpenHands trace](https://github.
 
 | Capability | What you can do |
 | --- | --- |
-| Behavior maps | Inspect failed checks, retry paths and paired attempts. Switch between detailed cards and compact, colored structure lines; follow branches back to source evidence. |
-| Training overview | Start with a combined summary, then open focused Training, Behavior, Execution or Training data views. |
-| Shared workspace | Switch the training run once across views. Search, pin investigations, and organize runs and projects separately from the live overview. |
+| Behavior maps | Inspect actions, failed checks and retries. Switch between cards, structure lines and a compact hierarchy with branch flow; compare rollouts and open their source evidence. |
+| Revision analysis | Inspect the trigger, changed work, implementation and follow-up. Measure gains and regressions together, with operation results separate from task checks. |
+| Training overview | See current training signals and rollout behavior, then open signals, behavior, execution or training data from the sidebar. |
+| Shared workspace | Select the training run once. Use grouped navigation, search and pinned views; keep setup and project management separate from analysis. |
 | Run comparisons | Align up to three runs and inspect matching task rollouts. Compare behavior across all selected rollouts or equally weighted shared tasks, with saved measurements and maps attached. |
 | Behavior comparisons | Compare activities, procedures and follow-up between intervals. Save exact membership and observations; capture later evidence without changing the original. |
 | Run capture | Collect console logs, configuration, Python/Git context and available hardware signals; retain versioned file snapshots. |
@@ -122,15 +123,17 @@ For verl, choose `framework="verl"` and call `metrics.log(native_metrics, step=g
 
 ### Inspect a run
 
-Use the **Training run** switcher in the sidebar; the selection follows you across views. **Summary** previews training signals and rollout measures; **Training** compares full runs. Select an interval, then **Inspect updates** to open original logs and linked rollouts. **Browse metrics** finds additional signals; **Export comparison** downloads raw records or the plotted view. Ordinary trainer logs are enough to start.
+Select a **Training run** in the sidebar. **Overview** summarizes current signals and rollout behavior. **Signals & comparison** aligns runs; select an interval, then **Inspect updates** to open logs and linked rollouts. **Browse metrics** adds signals; **Export comparison** downloads raw records or the plotted view.
 
-**Behavior** contains measures, distributions and strategy profiles. **Execution** shows timing recorded with `ExecutionRecorder`; **Training data** follows generation, scoring, selection and learner use. Each view keeps the selected experiment and environment. [Execution capture and probability comparisons →](docs/TRAINER_TELEMETRY.md#execution-and-training-signals)
+**Behavior** contains measures, distributions and strategy profiles. **Execution timeline** shows worker timing recorded with `ExecutionRecorder`; **Training data** follows generation through scoring, selection and learner use. These views retain the selected run and environment. [Capture guide →](docs/TRAINER_TELEMETRY.md#execution-and-training-signals)
 
 Select an agent step in the map and choose **Scan context** to inspect its input mixture, repeated blocks and captured instruction changes. [Context scan →](docs/CONTEXT_SCAN.md)
 
-In the behavior map, open **Plans → Structure lines** to inspect larger hierarchies and fold branches. Add depth, repeated-work or declared-order measures in **Monitors**, then set a notification threshold. [Structure measures →](docs/WORK_STRUCTURE_MEASURES.md)
+Open a rollout, then **Plans & attempts → Structure & flow** to compare branch structure and event flow. Select a revision to inspect its trigger, target, implementation and follow-up, with gains and regressions together. Add measures and alerts there. Missing follow-up stays unknown; recorded changes do not establish causality. **Structure lines** provides the larger foldable map. [Structure and revision guide →](docs/WORK_STRUCTURE_MEASURES.md)
 
-In **Behavior → Distributions**, select two windows and an activity or procedure category to inspect matching cases. **Save latest comparison** retains its observations and membership. **Capture latest evidence** revisits the same windows while preserving the original.
+In **Behavior → Distributions**, choose a behavior view and two windows. Select a category to inspect matching cases. **Save latest comparison** retains observations and membership; **Capture latest evidence** revisits those windows without changing the original.
+
+Use **Search workspace** (`Ctrl K`) to open nested tools directly and **Pin view** to keep a selection. **Measurement inputs** and advanced settings expand when needed. [Navigation guide →](docs/WORKSPACE_NAVIGATION.md)
 
 Comparisons retain recorded clocks, populations and metric definitions. Training steps do not imply equal compute; sampled probability gaps are not full-distribution KL. Replayed exclusion rules describe supplied tokens, not predicted training outcomes.
 

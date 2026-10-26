@@ -4,7 +4,7 @@ from . import graph_store, behavior_sequences, work_state, work_episodes, repair
 from . import work_navigation, adaptation_patterns, history_evidence, feedback_opportunities, feedback_timing, work_order
 from . import recovery_windows, retry_outcomes, graph_queries, work_visits, work_subjects, work_return_references
 from . import declared_plans, work_consistency, work_structure_metrics, work_hierarchy
-from . import repeated_work
+from . import repeated_work, revision_impact
 from . import source_evidence, requested_evidence
 from .capabilities import CAPABILITY_VERSION
 from .analysis_contracts import CONTRACTS
@@ -123,6 +123,7 @@ def add(name, version, execute, *, parameters=SOURCE_GRAPH,
 
 
 add('work_structure', work_structure_metrics.VERSION+'|'+work_hierarchy.VERSION, lambda c: work_structure_metrics.project(c.graph))
+add('revision_impact', revision_impact.VERSION+'|'+work_hierarchy.VERSION, lambda c: revision_impact.project(c.graph))
 add('sequence', behavior_sequences.VERSION, lambda c: behavior_sequences.project(c.graph))
 add('work_state', work_state.VERSION, recorded_state)
 add('evidence_search', source_evidence.VERSION, lambda c: source_evidence.search(c.run, c.params['query']),

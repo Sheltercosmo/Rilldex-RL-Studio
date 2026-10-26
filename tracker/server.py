@@ -671,6 +671,8 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                                  "/hardware-history.js":"hardware-history.js",
                                  "/unit-reading.js":"unit-reading.js","/source-evidence.js":"source-evidence.js","/request-evidence.js":"request-evidence.js","/rollout-story.js":"rollout-story.js","/rollout-story.css":"rollout-story.css",
                                  "/plan-hierarchy.js":"plan-hierarchy.js","/plan-hierarchy.css":"plan-hierarchy.css","/plan-case-context.js":"plan-case-context.js","/structure-lines.js":"structure-lines.js",
+                                 "/compact-structure.js":"compact-structure.js","/compact-structure.css":"compact-structure.css",
+                                 "/revision-impact.js":"revision-impact.js","/revision-impact.css":"revision-impact.css",
                                  "/nested-work-tree.js":"nested-work-tree.js","/nested-work-tree.css":"nested-work-tree.css",
                                  "/work-outline.js":"work-outline.js","/work-outline.css":"work-outline.css",
                                  "/work-canvas.js":"work-canvas.js","/work-canvas.css":"work-canvas.css",

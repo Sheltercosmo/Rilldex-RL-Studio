@@ -11,7 +11,7 @@ from .schema import InputError, digest
 from .graph_store import validate
 from . import work_dispatches
 
-VERSION = 'work-hierarchy/13'
+VERSION = 'work-hierarchy/18'
 ROLES = {'prepares_plan_step': 'Preparation', 'attempts_plan_step': 'Attempt',
          'checks_plan_step': 'Check'}
 RELATIONS = {'assesses': 'Assesses feedback', 'uses_evidence': 'Uses evidence',
@@ -80,10 +80,10 @@ def build(graph, cutoff_event_id=None):
                 label=label or text(content.get('operation')) or text(content.get('target')) or text(content.get('summary')) or text(p.get('text')) or text(p.get('label')) or n['id'],
                 state=state, actor=p.get('actor'), trajectory_id=n.get('trajectory_id'),
                 context_id=context(n),
-                activity=n.get('activity'), target=text(content.get('target')),
+                activity=n.get('activity'), source_kind=p.get('kind'), target=text(content.get('target')),
                 summary=text(content.get('summary')),
                 operation=text(content.get('operation')) or text(content.get('change')),
-                event_index=n.get('event_index'), source_node_ids=[n['id']],
+                event_index=n.get('event_index'), source_start=p.get('source', {}).get('start'), source_node_ids=[n['id']],
                 evidence=deepcopy(p.get('evidence') or ([p['source']] if p.get('source') else [])),
                 source_text=text(p.get('source', {}).get('text')) or text(p.get('text')),
                 history=[])
@@ -169,6 +169,7 @@ def build(graph, cutoff_event_id=None):
     assigned_dispatches = {dispatch_ids[aid] for aid in assigned}
     unassigned = [n['id'] for n in all_actions if dispatch_ids[n['id']] not in assigned_dispatches]
     result = dict(schema=VERSION, graph_id=graph['id'], run_id=graph['run_id'], source_hash=graph['source_hash'],
+        metadata=deepcopy(graph.get('metadata', {})), observer=graph.get('observer'), observer_label=graph.get('observer_label'),
         cutoff_event_id=cutoff_event_id, cutoff_event_index=cutoff, roots=roots,
         nodes=sorted(items.values(), key=lambda n: (n.get('event_index') or 0, n['id'])), links=links,
         unassigned_action_ids=unassigned, issues=issues,
@@ -192,6 +193,15 @@ def build(graph, cutoff_event_id=None):
         result['roots'].extend(result['work_outline']['roots'])
         result['counts']['roots'] += len(result['work_outline']['roots'])
         result['available'] = bool(result['roots'])
+    from .revision_episodes import project as revision_episodes
+    result['revision_episodes'] = revision_episodes(graph, visible, eligible, result)
+    # Episode evidence uses the same inspector as plans and actions, even when
+    # a declaration has no plan-step membership of its own.
+    retained = {n['id'] for n in result['nodes']}
+    for episode in result['revision_episodes']['episodes']:
+        for uid in episode['node_ids']:
+            if uid in visible and uid not in retained:
+                result['nodes'].append(add(visible[uid])); retained.add(uid)
     from .work_structure_metrics import summarize
     result['work_measures'] = summarize(graph, result)
     return {'id': 'work-hierarchy-' + digest(result), **result}

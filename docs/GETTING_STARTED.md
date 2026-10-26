@@ -4,13 +4,17 @@
 Python/SQL analysis and resumable result feeds](DATA_ACCESS.md). In the app, open
 **Data & workflows → Analyze** to query, preview and export saved research tables.
 
-**Choose your environment first:** [Ubuntu/Windows/macOS, Docker, remote GPU hosts, S3/GCS and Colab/notebooks](DEPLOYMENT.md). That guide covers existing + future output, stop/restart, persistent storage and recovery after runtime loss. The in-app **Connections** page links directly to each setup.
+**Choose your environment first:** [Ubuntu/Windows/macOS, Docker, remote GPU hosts, S3/GCS and Colab/notebooks](DEPLOYMENT.md). That guide covers existing + future output, stop/restart, persistent storage and recovery after runtime loss. The in-app **Data & workflows** page links directly to each setup.
 
 Use a separate collector environment with Python 3.11+. The package has no mandatory trainer, GPU, Node, model-provider or external-database dependency. Install this checkout with `python -m pip install .`, or build a wheel with `python -m pip wheel --no-deps --wheel-dir dist .` and install that wheel on the collector machine. An already-built wheel can be installed with `pip install --no-index --no-deps path/to/rilldex-0.1.0-py3-none-any.whl` in an offline environment.
 
 The same CLI is intended for Windows, Linux and macOS. The current installed-wheel audit ran on Windows/Python 3.12; the added CI matrix covers all three operating systems and Python 3.11–3.13, but is not evidence of a completed remote CI run.
 
 ## First launch
+
+Select a **Training run** once in the sidebar. Start with **Overview**, then open
+signals, behavior or execution; inspect a rollout for maps and revision evidence.
+Use search and pinned views for direct access. [Navigation guide](WORKSPACE_NAVIGATION.md).
 
 After launching, use **Data & workflows → Setup** to generate commands for your
 environment and training stage. For a headless machine, `python -m rilldex setup
@@ -41,7 +45,7 @@ The database defaults to `.tracker/tracker.sqlite` relative to the working direc
 rilldex --db /local-disk/rilldex/tracker.sqlite start
 ```
 
-Quote paths containing spaces. Keep the database and outbox on a local disk with working SQLite locking, not an object-store or network mount. A source output directory may be mounted read-only. Stop the foreground process with Ctrl+C; saved directory connections restart with the next `start` or `serve` invocation. To stop collection while keeping the UI running, use **Connections → Watch a job → Pause**.
+Quote paths containing spaces. Keep the database and outbox on a local disk with working SQLite locking, not an object-store or network mount. A source output directory may be mounted read-only. Stop the foreground process with Ctrl+C; saved directory connections restart with the next `start` or `serve` invocation. To stop collection while keeping the UI running, use **Data & workflows → Watch a job → Pause**.
 
 ## Choose by available evidence, not RL algorithm
 
@@ -57,7 +61,7 @@ PPO, GRPO, async/off-policy and other methods use the same intake contracts. The
 
 ## Before, during and after training
 
-**Before:** create the output directory, then use **Connections → Watch a job**. The directory may be empty. Set a stable experiment and a unique producer per worker/export stream.
+**Before:** create the output directory, then use **Data & workflows → Watch a job**. The directory may be empty. Set a stable experiment and a unique producer per worker/export stream.
 
 **During:** point the same form at existing outputs. No trainer restart is needed for file collection. Native Harbor/SWE-agent readers follow saved snapshots and result sidecars. For newline-terminated JSONL, choose **JSONL exports**, an experiment and an optional filename pattern. Records already present replay before newly appended records.
 
@@ -90,7 +94,7 @@ Use `--mode snapshots --once --snapshot-state complete` for a directory of compl
 
 This drains existing rows in bounded passes without requiring a server. A subsequent live connection uses the same receipts and cursors. Preserve producer, experiment, relative filenames and database. If you copy output to another machine, preserve the relative tree and move the stopped collector database too, or replay into a fresh database. Use SQLite's backup tooling for an online database; copying just the active `.sqlite` file can omit WAL data.
 
-For portable inspection, use a workspace snapshot instead of copying an active SQLite file. **Connections → Import files → Move or back up this workspace** downloads one, or use:
+For portable inspection, use a workspace snapshot instead of copying an active SQLite file. **Data & workflows → Import files → Move or back up this workspace** downloads one, or use:
 
 ```sh
 rilldex --db ./current.sqlite workspace snapshot experiment.rilldex.zip

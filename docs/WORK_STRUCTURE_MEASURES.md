@@ -2,7 +2,7 @@
 
 ## Compare repeated attempts
 
-Open **Overview → Behavior → Distributions → Revisit patterns** to compare
+Open **Behavior → Distributions**, then choose **Revisit patterns** to compare
 changed inputs, changed feedback and repeated records across rollout windows.
 Select a category, then a case, to open both attempts and their recorded input
 differences. **Compare attempts** reopens the evidence; the back link restores
@@ -112,7 +112,7 @@ remain visible. Plan measures exclude cross-session bindings and unknown order.
 Saved counts refresh offline from the same evidence, retaining earlier receipts.
 
 Definition: `work-structure-measures/2`, projection dependency
-`work-hierarchy/13`. The registered `work_structure` operation and seven count
+`work-hierarchy/18`. The registered `work_structure` operation and seven count
 measures share the projection used by the map. They do not estimate exploration
 quality, exploitation, causal efficiency, ignored plans or verified success.
 Independent semantic accuracy and RL training benefit remain unestablished.
@@ -169,7 +169,7 @@ custom investigation possible without exporting the database or re-tagging.
 This is an inspectable deterministic join over reviewed evidence, not a newly
 validated semantic classifier or a universal exploration/exploitation measure.
 
-In **Overview → Behavior → Distributions → Approach changes**, **After an error** compares
+In **Behavior → Distributions**, choose **Approach changes**. **After an error** compares
 the response following each approach in the selected windows. Select a segment
 to inspect or export its exact attempt pairs. Unresolved follow-up stays visible;
 an inspected response with no reported error does not establish task success.
@@ -185,3 +185,22 @@ model reading. Neither comparison establishes competitive superiority.
 In **Plans & attempts**, select **Structure lines** to fold branches and open their evidence. **Track across rollouts** creates a monitor in the same population. Depth starts at 0; declared goals and reviewed outlines are separate measures.
 
 In **Add/Edit monitor → Notification**, choose a threshold for Findings and browser popups. **Declared-order departures** compares the first linked attempts with explicit `precedes` links. It flags reversed recorded order, not unjustified behavior; missing or parallel attempts remain unresolved. Python monitors accept `alert={"operator": "gt", "threshold": 2, "severity": "warning"}`.
+
+## Compare structures and revisions
+
+Open a rollout's **Plans & attempts → Structure & flow**. The compact hierarchy
+shows branch width and depth; select a branch to inspect its recorded event flow.
+Choose another rollout to compare. Shared identities or confirmed branch pairs
+align the layouts. Hatched work is unmatched, not necessarily absent. Event
+columns show each rollout's own order, not equal time or equivalent actions.
+
+Select an **R** event to inspect its trigger, target, implementation and follow-up.
+Before/after results show benefits and regressions together. Operation completion
+and versioned task checks stay separate; missing or incompatible results remain
+unknown. The first comparable follow-up determines the result, so later success
+does not erase an earlier failure.
+
+Add paired measures and alerts from the revision details. **Behavior → Measures**
+shows their trends; open a value to return to the exact revision evidence.
+These views reuse saved observations without new model calls. They show recorded
+associations, not causal effects. [Validation scope](REVISION_FLOW_REVIEW.md).

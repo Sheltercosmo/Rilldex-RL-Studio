@@ -1,0 +1,42 @@
+{
+  "schema": "revision-flow-source-review/1",
+  "reviewer": "Implementation assistant, 2026-10-26; not independent or held out",
+  "population": "Every nonempty agent prose record in three saved public trajectories; excludes action-only revisions, empty messages and one ambiguous diagnostic proposal. New material changes and concrete change proposals count; repeated confirmations and routine next steps do not.",
+  "sources": {
+    "software": {
+      "run_hash": "aad3fbc5ebefebfeda5f18ec2b12f3568a7d9eea989276cf798bf65c4543ef9e",
+      "positive": ["e29", "e32", "e38", "e41", "e44", "e47", "e50", "e74", "e80", "e92"],
+      "negative": ["e2", "e5", "e8", "e11", "e14", "e17", "e20", "e23", "e26", "e35", "e53", "e56", "e59", "e62", "e65", "e68", "e71", "e77", "e83", "e89", "e95", "e98", "e101"],
+      "ambiguous": {"e86": "Diagnostic inspection before retry; no concrete input change yet. Whether a diagnostic-method change qualifies needs adjudication."},
+      "miss_notes": {"e74": "Missing dependency prompts installation before first conversion. The retry-pair sampler does not cover this planned-work adjustment."},
+      "chains": [
+        {"declaration":"e29","previous":"e27","implementation":"e30","retry":"e36","outcome":"failed"},
+        {"declaration":"e32","previous":"e27","implementation":"e33","retry":"e36","outcome":"failed"},
+        {"declaration":"e38","previous":"e36","implementation":"e39","retry":"e54","outcome":"not_established"},
+        {"declaration":"e41","previous":"e39","implementation":"e42","retry":"e42","outcome":"failed"},
+        {"declaration":"e44","previous":"e42","implementation":"e45","retry":"e45","outcome":"failed"},
+        {"declaration":"e47","previous":"e45","implementation":"e48","retry":"e48","outcome":"failed"},
+        {"declaration":"e50","previous":"e48","implementation":"e51","retry":"e51","outcome":"completed"},
+        {"declaration":"e50","previous":"e36","implementation":"e51","retry":"e54","outcome":"not_established"},
+        {"declaration":"e80","previous":"e78","implementation":"e81","retry":"e84","outcome":"not_established"},
+        {"declaration":"e92","previous":"e90","implementation":"e93","retry":"e96","outcome":"not_established"}
+      ]
+    },
+    "airline": {
+      "run_hash":"10110b0d416114e1bc7e49793c19a18c35b0b64c4c6de25a878130ee8efcb830",
+      "positive":["e28"],
+      "negative":["e2","e4","e21","e26","e66"],
+      "ambiguous":{},
+      "miss_notes":{"e28":"User challenges certificate handling; agent proposes separate bookings and seeks approval. Plan revision is outside retry-only sampling."},
+      "chains":[]
+    },
+    "retail": {
+      "run_hash":"6fbb1f5f8b1e5dfe4247aecc33cf1ba4a4a9c23af1d82da4aa0b50e99df22ca4",
+      "positive":["e19"],
+      "negative":["e2","e13","e15","e17","e21","e32"],
+      "ambiguous":{},
+      "miss_notes":{"e19":"Agent adopts the user's reduced exchange scope and deferred payment. A later confirmation at e21 repeats this decision."},
+      "chains":[]
+    }
+  }
+}
