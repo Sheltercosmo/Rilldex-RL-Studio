@@ -20,12 +20,19 @@
 
 https://github.com/user-attachments/assets/398d7ddc-190f-49c3-b8be-8406af7e9bad
 
-- **Training & comparisons:** align outcomes and trainer signals; select an interval to inspect its updates and rollouts.
-- **Unit & structure maps:** follow actions, feedback and retries, then zoom out to branches, nested work and repeated attempts.
-- **Execution:** see parallel workers, timeouts, retries and learner updates on a shared timeline.
-- **Behavior & monitors:** track recovery, unresolved follow-up, depth and declared-order departures; open the evidence behind a change.
+**Follow the agent's work.** Inspect actions, feedback and retries with links to the original rollout.
 
-The film uses labeled simulations and a [public OpenHands trace](https://github.com/metauto-ai/agent-as-a-judge/blob/43c2fa7b84ef0c1522e8250576e6798bace29dd0/benchmark/trajectories/OpenHands/39_Drug_Response_Prediction_SVM_GDSC_ML.json).
+![Behavior map connecting an agent's assessment, attempted commands and returned errors in a public OpenHands rollout](docs/assets/demo/unit-map.svg)
+
+**Find where runs diverge.** Compare outcomes and trainer signals, then inspect the updates and rollouts behind a change.
+
+![Three training runs compared through task success and trainer-sampler probability gap on a shared step axis](docs/assets/demo/run-comparison.svg)
+
+**See how behavior changes.** Compare approaches and their follow-up across training windows; open the supporting attempts.
+
+![Behavior comparison showing repeated errors, no reported error and unresolved follow-up for different approaches across two windows](docs/assets/demo/behavior-comparison.svg)
+
+The tour and panels use labeled simulations and a [public OpenHands trace](https://github.com/metauto-ai/agent-as-a-judge/blob/43c2fa7b84ef0c1522e8250576e6798bace29dd0/benchmark/trajectories/OpenHands/39_Drug_Response_Prediction_SVM_GDSC_ML.json).
 
 ## Core features
 
