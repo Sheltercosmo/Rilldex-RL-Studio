@@ -6,10 +6,10 @@ unresolved. Method comparison is independent of target correspondence.
 """
 from collections import Counter,defaultdict
 from .schema import digest
-from .capabilities import recorded_scope
+from .capabilities import recorded_scope, visible_to_agent
 from .work_order import Evidence as OrderEvidence
 
-VERSION='work-episodes/5'
+VERSION='work-episodes/6'
 LABELS={'continued':'Consecutive same-work recurrence','returned':'Return after intervening operations',
         'interrupted':'Same-work recurrence across an observation gap'}
 METHODS={'same_procedure':'Same dispatched procedure','reconfigured_procedure':'Reconfigured procedure',
@@ -34,7 +34,7 @@ def project(graph):
         s=source(uid);return (events[s['event_id']]['index'],s['start'],s['end'])
     def valid(uid):
         s=source(uid);e=events.get(s.get('event_id'))
-        return bool(e and not e.get('copied_context') and e.get('agent_visibility')!='not_established' and type(s.get('start')) is int and type(s.get('end')) is int and 0<=s['start']<s['end']<=len(e['text']) and e['text'][s['start']:s['end']]==s.get('text'))
+        return bool(e and not e.get('copied_context') and visible_to_agent(e) and type(s.get('start')) is int and type(s.get('end')) is int and 0<=s['start']<s['end']<=len(e['text']) and e['text'][s['start']:s['end']]==s.get('text'))
     valid_units={uid for uid in units if valid(uid)}
     actions={uid for uid in valid_units if units[uid].get('kind')=='action' and units[uid].get('actor')=='agent'}
     def lane(uid):
@@ -51,7 +51,7 @@ def project(graph):
             if not isinstance(ref,dict) or 'event_id' not in ref:continue
             event=events.get(ref['event_id']);start=ref.get('start',0) if ref is p.get('cutoff') else ref.get('start');end=ref.get('end')
             if (not event or event.get('copied_context') or event.get('order_known') is False or
-                event.get('agent_visibility')=='not_established' or recorded_scope(event)!=lane(at)[1:]):return False
+                not visible_to_agent(event) or recorded_scope(event)!=lane(at)[1:]):return False
             if type(start) is not int or type(end) is not int or not 0<=start<end<=len(event['text']):return False
             if 'text' in ref and event['text'][start:end]!=ref['text']:return False
             if (event['index'],end)>(position(at)[0],position(at)[2]):return False

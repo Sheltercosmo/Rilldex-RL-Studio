@@ -8,8 +8,9 @@ import re
 
 from . import action_comparison, work_episodes
 from .schema import digest
+from .capabilities import visible_to_agent
 
-VERSION = 'repeated-work-comparisons/1'
+VERSION = 'repeated-work-comparisons/2'
 RECIPE = VERSION + '|' + work_episodes.VERSION + '|' + action_comparison.VERSION
 LIMIT = ('Recorded same-work pairs only; unlinked actions are outside this population. '
          'Unchanged calls may follow changed files, state or prerequisites. Matching captured '
@@ -48,21 +49,26 @@ def project(graph, *, _episodes=None):
     def feedback(action, before=None):
         bindings = responses.get(action['node_id'], {})
         ids = sorted(bindings, key=lambda k: (nodes[k]['event_index'], k))
-        reasons = []
+        reasons = []; excluded = []
         if not ids: reasons.append('No source-bound feedback recorded')
         for nid in ids:
             n = nodes[nid]; p = n['properties']
             if len(targets[nid]) != 1: reasons.append('Feedback is shared between dispatches')
             if (n['trajectory_id'] != action['trajectory_id'] or p.get('context_id') != action.get('context_id')
-                    or p.get('copied_context') or p.get('agent_visibility') == 'not_established'):
+                    or p.get('copied_context') or not visible_to_agent(p)):
                 reasons.append('Feedback scope or visibility is unresolved')
+                excluded.append(nid)
+                continue
             if (n['event_index'] <= action['index'] or p.get('order_known') is False
                     or before is not None and n['event_index'] >= before):
                 reasons.append('Earlier feedback was not recorded before the revisit' if before is not None else 'Feedback order is unresolved')
             if not isinstance(p.get('text'), str) or not _has_content(p['text']):
                 reasons.append('Feedback is empty or contains only environment metadata')
-        return dict(node_ids=ids, edge_ids=[bindings[k] for k in ids], reasons=list(dict.fromkeys(reasons)),
-                    hashes=[digest(nodes[k]['properties'].get('text')) for k in ids])
+        visible_ids = [nid for nid in ids if nid not in excluded]
+        result = dict(node_ids=visible_ids, edge_ids=[bindings[k] for k in ids], reasons=list(dict.fromkeys(reasons)),
+                      hashes=[digest(nodes[k]['properties'].get('text')) for k in visible_ids])
+        if excluded: result['excluded_node_ids'] = excluded
+        return result
 
     rows = []
     for episode in episodes['episodes']:

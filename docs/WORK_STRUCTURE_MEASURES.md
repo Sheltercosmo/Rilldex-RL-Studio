@@ -31,6 +31,10 @@ responses without an error are excluded. No reported error is not verified
 success. Continuous workers with work links and execution inspection add this
 monitor automatically; saved graphs without the report observations remain unknown.
 
+Comparisons use evidence available to the agent. Feedback marked as hidden or
+with unestablished visibility stays unresolved; an unseen result cannot count as
+a clean follow-up. Hidden intervening actions remain observation gaps.
+
 In **Review repeated work**, select **Errors on both attempts** to find affected
 targets. **Work timeline → Procedure changes** shows approach and response status
 together; select a mark to open its exact pair. Counts follow the visible window.

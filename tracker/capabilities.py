@@ -9,6 +9,11 @@ from .work_order import Evidence as OrderEvidence
 CAPABILITY_VERSION = "measurement-evidence/3"
 
 
+def visible_to_agent(event):
+    """Respect both recorded visibility forms; absent flags keep legacy meaning."""
+    return event.get("agent_visible") is not False and event.get("agent_visibility") != "not_established"
+
+
 def recorded_scope(event):
     """A missing session remains unspecified; distinct recorded sessions never join."""
     return event["trajectory_id"], event.get("context_id")

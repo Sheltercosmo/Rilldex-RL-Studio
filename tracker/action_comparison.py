@@ -5,8 +5,9 @@ these records never implies equality of files, environment, state or effects.
 """
 from .schema import digest, dumps
 from .work_order import Evidence
+from .capabilities import visible_to_agent
 
-VERSION = 'recorded-action-comparison/1'
+VERSION = 'recorded-action-comparison/2'
 MAX_BYTES = 524288
 MAX_CHANGES = 64
 MAX_DEPTH = 32
@@ -46,7 +47,7 @@ def _source(nodes, grounded, node_id):
         node = parent
     if node['kind']!='event' or node['properties'].get('kind')!='action': return None
     p = node['properties']
-    if p.get('copied_context'): return None
+    if p.get('copied_context') or not visible_to_agent(p): return None
     return {**p,'index':node['event_index'],'trajectory_id':node['trajectory_id'],'node_id':node['id']}
 
 

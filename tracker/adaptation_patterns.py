@@ -8,9 +8,10 @@ from copy import deepcopy
 
 from . import work_episodes, repeated_work, approach_feedback
 from .schema import digest
+from .capabilities import visible_to_agent
 
 DEPENDENCY = work_episodes.VERSION
-VERSION = 'adaptation-patterns/4+' + repeated_work.RECIPE.replace('|','+')+'+'+approach_feedback.VERSION
+VERSION = 'adaptation-patterns/5+' + repeated_work.RECIPE.replace('|','+')+'+'+approach_feedback.VERSION
 PROCEDURES = {
     'same_procedure': 'Same dispatched procedure',
     'reconfigured_procedure': 'Changed settings or inputs',
@@ -54,7 +55,7 @@ def _reason_resolver(graph):
         if not event or (choice,event['id']) not in grounded or p.get('kind')!='semantic':return empty
         e=event['properties'];a,b=ref.get('start'),ref.get('end');text=e.get('text','')
         if (type(a) is not int or type(b) is not int or not 0<=a<b<=len(text) or text[a:b]!=ref.get('text')
-                or e.get('copied_context') or e.get('agent_visibility')=='not_established' or e.get('order_known') is False):return empty
+                or e.get('copied_context') or not visible_to_agent(e) or e.get('order_known') is False):return empty
         references=method.get('inspector_context',{}).get('source_ranges',[])
         if not any(r.get('event_id')==ref['event_id'] and type(r.get('start')) is int and type(r.get('end')) is int
                    and r['start']<=a<b<=r['end'] for r in references):return empty
