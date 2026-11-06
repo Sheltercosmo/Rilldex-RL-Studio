@@ -26,11 +26,12 @@ def now():
 
 def behavior_options():
     """The installed pilot's relationship stages, pinned for a new worker."""
-    from .action_targets import PAGED_VERSION as TARGET
-    from .plan_relations import DIRECT_VERSION as PLAN
+    from .action_targets import INTERVAL_VERSION as TARGET
+    from .plan_relations import FOCUSED_VERSION as PLAN
     from .execution_reports import VERSION as REPORT
-    from .method_comparison import NATIVE_VERSION as METHOD
-    return dict(action_target_version=TARGET,plan_relation_version=PLAN,execution_report_version=REPORT,method_comparison_version=METHOD)
+    from .method_comparison import RELATED_VERSION as METHOD
+    from .semantic_extraction import PURPOSE_ACTIVITY_ROUTING
+    return dict(activity_routing=PURPOSE_ACTIVITY_ROUTING,action_target_version=TARGET,plan_relation_version=PLAN,execution_report_version=REPORT,method_comparison_version=METHOD)
 
 
 def initialize_tables(c):
@@ -52,16 +53,23 @@ def fingerprint(options=None):
     # Prevent unnoticed code changes from mixing protocols under one observer.
     names = ('semantic_extraction.py', 'base_standard.py', 'contribution_readings.py',
              'readable_context.py', 'candidate_worker.py', 'candidate_process.py', 'semantic_workspace.py',
-             'candidate_cache.py', 'decision_cache.py', 'semantic_watch.py')
+             'candidate_cache.py', 'decision_cache.py', 'semantic_watch.py','environment_contracts.py')
+    from .readable_context import RETRIEVED_VERSION
+    if (options or {}).get('context_policy',workspace.DEFAULT_CONTEXT).get('schema')==RETRIEVED_VERSION:
+        names+=('source_retrieval.py',)
     if (options or {}).get('feedback_profile'):
         names+=('semantic_layers.py','feedback_assessments.py','feedback_retrieval.py')
     if (options or {}).get('requested_profile'):
         names+=('semantic_layers.py','requested_work.py','requested_graph.py','request_dispatch.py')
     if (options or {}).get('action_target_version'):
         names+=('action_targets.py','action_scope_pairs.py','action_scope_pages.py','semantic_pages.py','work_order.py')
+        from .action_targets import INTERVAL_VERSION
+        if options['action_target_version']==INTERVAL_VERSION:
+            names+=('action_target_intervals.py','method_comparison.py','recurrence_context.py','work_correspondence.py',
+                    'feedback_assessments.py','environment_contracts.py','capabilities.py')
     if (options or {}).get('plan_relation_version'):
         names+=('plan_relations.py','plan_scope_pages.py','semantic_pages.py')
-        if options['plan_relation_version']=='plan-stage-correspondence/4':names+=('plan_scope_roles.py',)
+        if options['plan_relation_version'] in {'plan-stage-correspondence/4','plan-stage-correspondence/5'}:names+=('plan_scope_roles.py',)
     if (options or {}).get('execution_report_version'):
         names+=('execution_reports.py',)
     if (options or {}).get('method_comparison_version'):
@@ -84,12 +92,14 @@ def initialize(store, directory, *, experiment, label, allowance=None,
         raise InputError('Workspace options must be a JSON object')
     if set(options) - {'include_user', 'context_policy', 'activity_routing', 'reading_protocol', 'partition_standard','feedback_profile','requested_profile','action_target_version','plan_relation_version','execution_report_version','method_comparison_version'}:
         raise InputError('Unknown semantic workspace option')
-    from .action_targets import PAGED_VERSION as TARGET_VERSION
+    from .action_targets import PAGED_VERSION,INTERVAL_VERSION
     from .plan_relations import PAGED_VERSIONS
     from .execution_reports import VERSION as REPORT_VERSION
-    from .method_comparison import NATIVE_VERSION as METHOD_VERSION
-    for name,version in [('action_target_version',TARGET_VERSION),('execution_report_version',REPORT_VERSION),('method_comparison_version',METHOD_VERSION)]:
+    from .method_comparison import WORKSPACE_VERSIONS as METHOD_VERSIONS
+    if options.get('action_target_version') not in {None,PAGED_VERSION,INTERVAL_VERSION}:raise InputError('Unsupported action_target_version')
+    for name,version in [('execution_report_version',REPORT_VERSION)]:
         if options.get(name) not in (None,version):raise InputError('Unsupported '+name)
+    if options.get('method_comparison_version') not in {None,*METHOD_VERSIONS}:raise InputError('Unsupported method_comparison_version')
     if options.get('method_comparison_version') and not options.get('action_target_version'):
         raise InputError('Approach comparison requires work-target links')
     if options.get('plan_relation_version') not in {None,*PAGED_VERSIONS}:raise InputError('Unsupported plan_relation_version')

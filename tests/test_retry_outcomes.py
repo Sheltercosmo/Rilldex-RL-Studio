@@ -159,8 +159,17 @@ class NextCheckTests(unittest.TestCase):
             # content by endpoints, not hashes derived from the former /6 label.
             self.assertEqual(a['nodes'],b['nodes'])
             def content(edges):
+                # Opportunity IDs include the input graph hash. Verify their
+                # grouping before comparing their stable failed-check identity.
+                opportunities={}
+                for edge in edges:
+                    key=edge['properties'].get('recovery_opportunity_id')
+                    if key:
+                        self.assertEqual(opportunities.setdefault(key,edge['target']),edge['target'])
+                self.assertEqual(len(opportunities),len(set(opportunities.values())))
                 return sorted((e['source'],e['target'],e['type'],
-                    json.dumps({k:v for k,v in e['properties'].items() if k!='version'},sort_keys=True)) for e in edges)
+                    json.dumps({k:e['target'] if k=='recovery_opportunity_id' else v
+                                for k,v in e['properties'].items() if k!='version'},sort_keys=True)) for e in edges)
             self.assertEqual(content(a['edges']),content(b['edges']))
             self.assertEqual({e['properties']['version'] for e in a['edges'] if 'version' in e['properties']},{work_state.VERSION})
             if work_state.VERSION!='work-state/6':self.assertNotEqual(a['id'],b['id'])

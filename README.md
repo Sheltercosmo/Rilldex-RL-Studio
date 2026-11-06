@@ -12,6 +12,7 @@
 - **Compare training runs.** Align reward, policy mismatch, loss, entropy, KL, clipping, tokens and throughput; select one interval across the charts.
 - **Connect training to behavior.** Follow worker activity, learner updates and their linked rollouts; inspect recovery, verification and unresolved work.
 - **Keep evidence within reach.** Chart values and saved investigations link to source records, relationships, coverage and definitions.
+- **Read across agent stacks.** Bring conversations, native tool histories and environment episodes into the same workspace, with recorded tool meanings and separate agent contexts.
 - **Keep your own workflow.** Files, Python and HTTP input; a live SQLite workspace; code-defined monitors with optional UI.
 
 ## Product tour
@@ -78,6 +79,8 @@ rilldex --db study.sqlite start --watch ./outputs --mode exports --experiment ru
 Imports existing JSONL output and follows new records. For a staged batch, replace `start` with `watch` and add `--once`. Native Harbor/SWE-agent directories use `--mode native`. See the [input guide](docs/LIVE_INGESTION.md) for portable conversations, generations and environment episodes.
 
 Already using Weave? [Import a saved calls export](docs/WEAVE_IMPORT.md) to retain call nesting, recorded model outputs, source links and available W&B run/step context.
+
+Chat records can retain OpenAI-style and Anthropic tool calls, results and definitions. Capture accumulated Responses histories with `responses_document()` and separate agents or context resets with `chat_sessions_document()`. For encoded environment actions, include their recorded meanings. [Input formats and capture examples →](docs/INPUT_GENERALIZATION.md)
 
 For reusable configuration: `rilldex setup --case local --save-launch job.rilldex.json`, then `rilldex launch job.rilldex.json`. Keep the workspace and producer outboxes on persistent local storage.
 
@@ -156,6 +159,8 @@ Collection, conventional telemetry, source maps and analysis need **no LLM**. Se
 
 Set `RILLDEX_LLM_PRESET=local` (or `ollama`), `RILLDEX_LLM_MODEL`, and `JEV_API_KEY`. Hosted endpoints use `RILLDEX_LLM_URL` and, when required, `RILLDEX_LLM_API_KEY`.
 
+If your endpoint does not support JSON mode, set `RILLDEX_LLM_JSON_MODE=prompt`. Other API formats and in-process models can use the JSON worker or Python transport interface.
+
 ```sh
 python -m rilldex.models check
 python -m rilldex.models pilot ./pilot --db study.sqlite --run-id ROLLOUT_ID --candidate-calls 20 --decision-calls 20 --input-bytes 1000000
@@ -183,6 +188,8 @@ rilldex --db study.sqlite monitor-rollouts run reward-checks --experiment run-a 
 ```
 
 Select saved observations to add charts. Scan progress shows inspected pages, pending rollouts and resume commands. Rerun with the same workspace to reuse cached decisions, or replace `run` with `watch` and omit `--all-latest` to follow completed rollouts. Recorded reward and artifact checks need no model calls.
+
+Checks use recorded instructions, operation definitions and linked results. Requirement checks distinguish incompatible work from an unfinished step or an unverified completion claim. Findings retain their source evidence; incomplete and unscanned work remain visible in coverage.
 
 **Customize:** choose **Custom reward detector**, or use `Workspace.reward_detector()`. Bind your reward definition and inputs, then implement `detect(ctx)` with Python rules, libraries, a local model or an API. Return a status, summary and evidence. The worker processes existing and new rollouts; results share the built-in charts, alerts, evidence views and Python/SQL access. [Custom detectors and artifact checks →](docs/custom-monitors.md#custom-reward-checks)
 

@@ -49,8 +49,10 @@ function materialObservation(doc,owner,check,facet,action,feedback){
 }
 const materialFormLabels={contents:'Requested information recorded',partial_contents:'Some requested information recorded',reference_only:'Reference only · contents not supplied',recorded_uninspected:'Recorded payload not inspected',absent:'Requested material absent',unresolved:'Material scope unresolved'};
 const deliveryLabels={read:'Read or lookup operation',compute:'Computation or test operation',change:'Attempted artifact or environment change',relay:'Statement relay',mixed:'Combined operations',unresolved:'Delivery mechanism unresolved'};
-const methodLabels={same_procedure:'Same procedure',reconfigured_procedure:'Reconfigured procedure',alternative_procedure:'Alternative procedure',different_work:'Different work · grouping disputed',unresolved:'Procedure unresolved'};
+const methodLabels={same_procedure:'Same procedure',reconfigured_procedure:'Reconfigured procedure',alternative_procedure:'Alternative procedure',different_work:'Different work',unresolved:'Procedure unresolved'};
 function methodObservation(doc,recurrence){return doc.method_comparison?.observations?.find(r=>r.previous_unit_id===recurrence.previous_group_unit_id&&r.current_unit_id===recurrence.unit_id&&r.group_id===recurrence.group_id)||null;}
+function relatedMethodObservations(doc,id){return (doc.method_comparison?.observations||[]).filter(r=>r.group_id==null&&r.current_unit_id===id);}
+function methodPairLabel(row){return row.status!=='selected'?'Comparison not inspected':methodLabels[row.comparison]+(row.comparison==='different_work'&&row.group_id!=null?' · grouping disputed':'');}
 function methodGroupSummary(doc,groupId){
  const rows=doc.method_comparison?.observations?.filter(r=>r.group_id===groupId)||[],counts={};
  for(const row of rows)if(row.status==='selected')counts[row.comparison]=(counts[row.comparison]||0)+1;
@@ -80,7 +82,7 @@ function renderWorkHistory(){
  const lanes=$('#work-history-lanes');lanes.replaceChildren();
  for(const stream of history.streams){
   const section=el('section',undefined,'history-stream');
-  if(history.streams.length>1)section.append(el('h3',label(stream.actor)+' · '+stream.trajectory_id));
+  if(history.streams.length>1)section.append(el('h3',label(stream.actor)+' · '+stream.trajectory_id+(stream.context_id!=null?' · '+stream.context_id:'')));
   if(stream.unrepresented_action_event_ids.length){
    const missing=el('details',undefined,'review-flag');missing.append(el('summary','Recorded operations without selected units'));
    for(const id of stream.unrepresented_action_event_ids){const event=state.run.events.find(e=>e.id===id);if(event.text.length)missing.append(cite({event_id:id,source_pointer:event.source_pointer,start:0,end:event.text.length,text:event.text}));else missing.append(el('p',id+' · No recorded action text is available.'));}
@@ -266,7 +268,7 @@ function renderWorkSequences(){
  }
  renderReturningSequences(data,host);
  const disclosure=el('details');disclosure.append(el('summary','Pattern basis and coverage'),el('p',data.basis),el('p',data.limits));
- for(const stream of data.streams)disclosure.append(el('p',`${stream.actor} · ${stream.trajectory_id}: periods through ${stream.scan.considered_period}; ${stream.scan.missing_positions.length} missing or disputed positions break matching.`));host.append(disclosure);
+ for(const stream of data.streams)disclosure.append(el('p',`${stream.actor} · ${stream.trajectory_id}${stream.context_id!=null?' · '+stream.context_id:''}: periods through ${stream.scan.considered_period}; ${stream.scan.missing_positions.length} missing or disputed positions break matching.`));host.append(disclosure);
 }
 function returnById(doc,id){return doc.sequence_patterns?.returns?.find(r=>r.id===id)||null;}
 function returnTitle(row){return row.pattern_targets.join(' → ');}
@@ -289,7 +291,7 @@ function renderReturningSequences(data,host){
   host.append(box);
  }
  const scope=el('details');scope.append(el('summary','Return matching scope'),el('p','Exact sequences of selected immediate targets, with at least two distinct targets and intervening operations. Each later occurrence uses its nearest earlier disjoint match. Continuous periodic regions appear above; all original positions remain.','muted'));
- for(const stream of data.streams){const scan=stream.return_scan;if(scan)scope.append(el('p',`${label(stream.actor)} · ${stream.trajectory_id}: ${scan.positions} positions; maximum pattern length ${scan.max_length}; position limit ${scan.position_limit}; ${label(scan.status)}.`,'muted'));}
+ for(const stream of data.streams){const scan=stream.return_scan;if(scan)scope.append(el('p',`${label(stream.actor)} · ${stream.trajectory_id}${stream.context_id!=null?' · '+stream.context_id:''}: ${scan.positions} positions; maximum pattern length ${scan.max_length}; position limit ${scan.position_limit}; ${label(scan.status)}.`,'muted'));}
  if(data.returning_patterns.some(p=>p.at_length_limit))scope.append(el('p','Some patterns reach the configured length limit; longer extensions were not inspected.','missing'));
  host.append(scope);
 }
@@ -382,9 +384,12 @@ function renderLineageFocus(){
 }
 function inspectWorkHistory(u,host){
  const history=state.doc.work_history,recurrence=history?.recurrences.find(r=>r.unit_id===u.id);
- if(!recurrence)return;
+ const related=relatedMethodObservations(state.doc,u.id);
+ if(!recurrence&&!related.length)return;
+ const details=el('details',undefined,'dispatch-scope');details.append(el('summary',recurrence?'Earlier work on this target':'Compare with earlier work'));
+ if(recurrence){
  const group=history.streams.flatMap(s=>s.groups).find(g=>g.id===recurrence.group_id);
- const details=el('details',undefined,'dispatch-scope');details.append(el('summary','Earlier work on this target'),el('p',group.target));
+ details.append(el('p',group.target));
  const gapCount=recurrence.intervening_action_unit_ids.length+recurrence.intervening_unrepresented_action_event_ids.length;
  details.append(el('p',gapCount?`${quantity(gapCount,'intervening operation')} by this actor since the previous occurrence in this selected group.`:'The previous dispatch by this actor belongs to the same selected target group.'));
  if(recurrence.intervening_unrepresented_action_event_ids.length)details.append(el('p',`${quantity(recurrence.intervening_unrepresented_action_event_ids.length,'recorded intervening operation')} has no selected unit. Its target correspondence is not established.`,'review-flag'));
@@ -398,7 +403,16 @@ function inspectWorkHistory(u,host){
   proof.append(el('p',unitName(ref.from)+' → same selected target → '+unitName(ref.to)));
   if(edge)relationEvidence(edge,proof);
  }
- details.append(proof,el('p','Only positive identity selections establish this grouping. Intervening operations are shown as context; no failed retry, strategy, causation or progress is inferred.','muted'));host.append(details);
+ details.append(proof,el('p','Only positive identity selections establish this grouping. Intervening operations are shown as context; no failed retry, strategy, causation or progress is inferred.','muted'));
+ }
+ for(const row of related){
+  const comparison=el('details',undefined,'recurrence-comparison');
+  comparison.append(el('summary',unitName(row.previous_unit_id)+' → '+unitName(row.current_unit_id)+' · '+methodPairLabel(row)),
+   button('Open earlier operation · '+unitName(row.previous_unit_id),()=>inspect(row.previous_unit_id),'source-button'));
+  inspectMethodComparison({group_id:null,previous_group_unit_id:row.previous_unit_id,unit_id:row.current_unit_id},comparison);
+  details.append(comparison);
+ }
+ host.append(details);
 }
 function inspectRecurrenceComparison(recurrence,host,focusValue='episode:'+recurrence.unit_id){
  const context=recurrence.context,box=el('details',undefined,'recurrence-comparison');
@@ -458,10 +472,11 @@ function inspectRecurrenceComparison(recurrence,host,focusValue='episode:'+recur
 }
 function inspectMethodComparison(recurrence,host){
  const row=methodObservation(state.doc,recurrence);if(!row)return;
- const box=el('section',undefined,'method-comparison');box.append(el('h4','Procedure across these occurrences'));
+ const box=el('section',undefined,'method-comparison');box.append(el('h4',row.group_id==null?'Earlier operation comparison':'Procedure across these occurrences'));
  if(row.status!=='selected'){box.append(el('p','Not inspected: '+label(row.status)+'. This is not evidence of an unchanged procedure.','missing'));host.append(box);return;}
- box.append(el('p',methodLabels[row.comparison],'comparison-summary'));
- if(row.comparison==='different_work')box.append(el('p','This selection disputes the shared work grouping. The earlier target-identity decision is retained for review.','review-flag'));
+ box.append(el('p',methodPairLabel(row),'comparison-summary'));
+ if(row.comparison==='different_work'&&row.group_id!=null)box.append(el('p','This selection disputes the shared work grouping. The earlier target-identity decision is retained for review.','review-flag'));
+ else if(row.group_id==null)box.append(el('p',row.work_instance==='same_work_instance'?'Same immediate work, compared independently of the target groups.':row.work_instance==='different_work'?'Different immediate work; no procedure comparison is assigned.':'Work-instance comparability is unresolved.','muted'));
  if(row.upstream_identity_disputed)box.append(el('p','The upstream target grouping already has a review disagreement.','review-flag'));
  const basis=unit(row.stated_basis);
  if(basis){box.append(el('p','Agent’s stated basis · '+basis.source.event_id,'eyebrow'),el('p',basis.content.summary.text),button('Open stated basis · '+unitName(basis.id),()=>inspect(basis.id),'connection-jump'),cite(basis.source));}
@@ -1093,4 +1108,4 @@ if(typeof document!=='undefined'){
   a.download='semantic-map-'+state.doc.run_id+'-'+state.observer.id+'.json';document.body.append(a);a.click();a.remove();
  };initialize();
 }
-if(typeof module!=='undefined')module.exports={orderedUnits,scopeThroughUnit,recordFocus,focusUnitIds,visibleUnitIds,unitConnections,visibleSequence,checkingObservations,materialObservation,relationReviewMatches,lineagesForUnit,lineageFocus,methodObservation,methodGroupSummary,declaredEvidenceUnits,declaredActionLinks};
+if(typeof module!=='undefined')module.exports={orderedUnits,scopeThroughUnit,recordFocus,focusUnitIds,visibleUnitIds,unitConnections,visibleSequence,checkingObservations,materialObservation,relationReviewMatches,lineagesForUnit,lineageFocus,methodObservation,methodGroupSummary,relatedMethodObservations,methodPairLabel,declaredEvidenceUnits,declaredActionLinks};

@@ -12,9 +12,10 @@ from .activity import units
 from .activity_context import audit, visible_prefix, TEXT_PACKET_SCHEMA
 from .jev import SELECTION_POLICY, validate_answers
 from .schema import InputError, digest, dumps
+from .environment_contracts import READING_RULE, reading_context, excerpt_contracts
 
 VERSION = "activity-components/1"
-PACKET_HARNESSES = {"semantic-activity/1.4", "semantic-activity/1.5", "activity-verify/0.1-experimental"}
+PACKET_HARNESSES = {"semantic-activity/1.4", "semantic-activity/1.5", "semantic-activity/1.6", "semantic-activity/1.7", "activity-verify/0.1-experimental"}
 STATE_FIELDS = {"harness", "taxonomy_version", "unit_version", "subject", "activity_definitions",
                 "annotation_boundaries", "authorized_instructions", "earlier_units",
                 "prior_environment_or_harness_context", "cutoff_event_id", "cutoff_codepoint", "missingness", "scope"}
@@ -80,8 +81,20 @@ def _prepare_import(directory, run_reader, name):
         for variant in variants:
             request, row = case["requests"][variant], journals[variant][case["case_id"]]
             state, questions = request["state"], request["questions"]
-            if state.get("harness") not in PACKET_HARNESSES or set(state) != STATE_FIELDS:
+            extra = set(state) - STATE_FIELDS
+            if (state.get("harness") not in PACKET_HARNESSES or not STATE_FIELDS <= set(state)
+                    or not extra <= {'interpretation_rule', 'environment_encoding', 'tool_catalog', 'earlier_unit_retrieval'}):
                 raise InputError("Unsupported component packet schema")
+            if 'interpretation_rule' in state and state['interpretation_rule'] != READING_RULE:
+                raise InputError('Component interpretation rule differs')
+            source_event = next(e for e in run['events'] if e['id'] == subject['event_id'])
+            expected_context = reading_context(run, source_event)
+            if state.get('environment_encoding') != expected_context.get('environment_encoding'):
+                raise InputError('Component environment encoding differs from source')
+            if ('tool_catalog' in state or state['harness'] in {'semantic-activity/1.6','semantic-activity/1.7'}) and state.get('tool_catalog') != expected_context.get('tool_catalog'):
+                raise InputError('Component tool catalog differs from source context')
+            if state['harness'] in {'semantic-activity/1.6','semantic-activity/1.7'} and 'interpretation_rule' not in state:
+                raise InputError('Component interpretation rule is missing')
             if (any(state['subject'].get(k)!=subject.get(k) for k in ('id','event_id','kind','trajectory_id','source_pointer','start','end'))
                     or state['subject'].get('text')!=subject['text'][:5000]):
                 raise InputError('Component request does not target its declared source subject')
@@ -96,8 +109,10 @@ def _prepare_import(directory, run_reader, name):
             source_contract = subject.get("tool_contract")
             if bool(contract)!=bool(source_contract):raise InputError('Component subject tool contract is missing or unsupported')
             if contract:
-                if not source_contract or contract != {"source_pointer": source_contract["source_pointer"],
-                    "definition_text": dumps(source_contract["definition"])[:8000], "source_characters": len(dumps(source_contract["definition"]))}:
+                legacy = {"source_pointer": source_contract["source_pointer"],
+                    "definition_text": dumps(source_contract["definition"])[:8000], "source_characters": len(dumps(source_contract["definition"]))}
+                current_contract = excerpt_contracts(subject, limit=8000, truncated=[])['tool_contract']
+                if contract not in (legacy, current_contract):
                     raise InputError("Component tool contract differs from the source")
             required=([subject['id']] if len(subject['text'])>5000 else [])
             if source_contract and len(dumps(source_contract['definition']))>8000:

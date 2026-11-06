@@ -8,8 +8,11 @@ import math
 
 from .schema import InputError, content_text, dumps, event, metadata
 from . import environment_turns
+from .environment_contracts import contracts, capture_schema
+from .chat_sessions import document as chat_sessions_document
+from .responses_items import document as responses_document
 
-FORMATS={'chat-messages':'chat-messages/1','environment-episode':'environment-episode/1','generation':'generation/1'}
+FORMATS={'chat-messages':'chat-messages/1','environment-episode':'environment-episode/1','generation':'generation/1','responses-items':'responses-items/1'}
 
 
 def detect_record(doc):
@@ -57,8 +60,9 @@ def observation(value):
 
 def append_events(doc,fmt,events,warnings,meta):
     turns = fmt == 'environment-episode' and doc.get('trajectory_format') == environment_turns.VERSION
+    sessions = fmt == 'chat-messages' and doc.get('trajectory_format') == 'chat-messages/2'
     unmarked=fmt in {'chat-messages','generation'} and 'trajectory_format' not in doc
-    if not turns and not unmarked and doc.get('trajectory_format')!=FORMATS[fmt]:raise InputError('Supply explicit trajectory_format '+FORMATS[fmt])
+    if not turns and not sessions and not unmarked and doc.get('trajectory_format')!=FORMATS[fmt]:raise InputError('Supply explicit trajectory_format '+FORMATS[fmt])
     if unmarked:
         warnings.append('Record shape decoded without a framework marker. This does not identify a trainer or establish that the captured history is complete. Reward and success use the explicit outcome object; other top-level fields remain in raw source.')
     declared=doc.get('metadata',{})
@@ -69,6 +73,11 @@ def append_events(doc,fmt,events,warnings,meta):
     for key in ('generation_step','learner_step','rollout_n'):
         if key in meta and (type(meta[key]) is not int or meta[key]<0):raise InputError(key+' must be a nonnegative integer')
     result=outcome(doc)
+    if fmt=='responses-items':
+        from .responses_items import append_items
+        append_items(doc,events,warnings)
+        meta.setdefault('environment','recorded-responses-history')
+        return result
     if fmt=='generation':
         for key,kind,actor in [('prompt','context','context'),('completion','message','agent')]:
             if not isinstance(doc.get(key),str):raise InputError(key+' must be recorded text; token IDs require the matching tokenizer outside this adapter')
@@ -77,6 +86,11 @@ def append_events(doc,fmt,events,warnings,meta):
         warnings.append('Flat generation: internal turns and actions are unobserved. Text that looks like a tool call is not parsed into an execution. No training clock or task identity is inferred.')
         return result
     if fmt=='chat-messages':
+        if sessions:
+            from .chat_sessions import append_sessions
+            append_sessions(doc, events, warnings)
+            meta.setdefault('environment','recorded-agent-sessions')
+            return result
         from .chat_messages import append_messages
         if 'system' in doc:
             text, media = content_text(doc['system'])
@@ -87,6 +101,9 @@ def append_events(doc,fmt,events,warnings,meta):
         warnings.append('A supplied model conversation is not a complete simulator log. Additional agent histories must remain separate trajectories. Recorded tool results without native call IDs remain unlinked.')
         return result
     meta.setdefault('environment','recorded-environment')
+    descriptions = contracts(doc)
+    action_description = {k:v for k,v in descriptions.items() if k == 'tool_contract'}
+    observation_description = {k:v for k,v in descriptions.items() if k == 'observation_contract'}
     steps=doc.get('steps')
     if not isinstance(steps,list) or any(not isinstance(s,dict) for s in steps):raise InputError('steps must be a list of transition objects')
     if turns:
@@ -104,7 +121,7 @@ def append_events(doc,fmt,events,warnings,meta):
         event(events,kind='context',actor='context',text=text,media=media,pointer='/visible_context',context_kind='producer_declared_agent_visible')
     if initial is not None:
         text,media=observation(initial['observation'])
-        event(events,kind='context',actor='environment',text=text,media=media,pointer='/initial/observation')
+        event(events,kind='context',actor='environment',text=text,media=media,pointer='/initial/observation',**observation_description)
     ended=False
     for i,step in enumerate(steps):
         if ended:raise InputError('An episode cannot contain a step after an explicit ending; start a new episode')
@@ -123,10 +140,10 @@ def append_events(doc,fmt,events,warnings,meta):
             cid = 'env-turn:' + step['turn_id']
         # This linkage comes from the recorded transition, not textual proximity.
         event(events,kind='action',actor='agent',text=dumps(step['action']),pointer=pointer+'/action',
-            tool='environment.step',arguments={'action':step['action']},call_id=cid,**({'step_id':i}|action_fields))
+            tool='environment.step',arguments={'action':step['action']},call_id=cid,**action_description,**({'step_id':i}|action_fields))
         text,media=observation(step['observation'])
         event(events,kind='feedback',actor='environment',text=text,pointer=pointer+'/observation',media=media,
-            source_call_id=cid,feedback_origin='environment',link_basis='recorded environment transition',**({'step_id':i}|turn_fields))
+            source_call_id=cid,feedback_origin='environment',link_basis='recorded environment transition',**observation_description,**({'step_id':i}|turn_fields))
     if turns:
         warnings.append('Model responses are linked to their recorded dispatch, not to inferred intentions. Missing or empty responses remain unobserved semantic content; response text is never executed or parsed into an extra action.')
     warnings.append('Environment rewards, termination flags and info are retained separately from visible observations. An ended or truncated episode does not establish task success. Numeric state is recorded data, not inferred semantic activity.')
@@ -147,11 +164,13 @@ def generation_document(prompt,completion,*,metadata=None,reward=None):
 
 class Episode:
     """Record one environment instance/episode. Never intercept or execute steps."""
-    def __init__(self,*,metadata=None,goal=None,visible_context=None,episode_id=None):
+    def __init__(self,*,metadata=None,goal=None,visible_context=None,episode_id=None,action_schema=None,observation_schema=None):
         self.document={'trajectory_format':'environment-episode/1' if episode_id is None else environment_turns.VERSION,'metadata':deepcopy(metadata or {}),'steps':[]}
         if episode_id is not None:self.document['episode_id']=environment_turns.identifier(episode_id, 'episode_id')
         if goal is not None:self.document['goal']=goal
         if visible_context is not None:self.document['visible_context']=json_value(visible_context)
+        for field,value in [('action_schema',action_schema),('observation_schema',observation_schema)]:
+            if value is not None:self.document[field]=capture_schema(value,field)
 
     def reset(self,observation,info=None):
         if 'initial' in self.document or self.document['steps']:raise InputError('Create a new Episode for each reset')

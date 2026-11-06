@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from . import graph_store, graph_queries
 from .schema import InputError, digest
 
-VERSION = 'annotation-changes/1'
+VERSION = 'annotation-changes/2'
 STRUCTURAL = {'grounded_in', 'next_record', 'next_unit'}
 
 
@@ -106,7 +106,8 @@ def _patterns(inventory):
         if n['properties'].get('actor') != 'agent' or n['properties'].get('kind') == 'feedback':
             continue
         activities[n.get('activity')] += 1
-        streams[n['trajectory_id']].append(n)
+        source=inventory['events'][n['properties']['source']['event_id']]['properties']
+        streams[(n['trajectory_id'],source.get('context_id'))].append(n)
     for stream in streams.values():
         stream.sort(key=lambda n: (n['event_index'], n['properties']['source']['start']))
         transitions.update((a.get('activity'), b.get('activity')) for a, b in zip(stream, stream[1:]))

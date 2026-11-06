@@ -207,9 +207,12 @@ def path_for(directory,extraction):return Path(directory)/'requested_work'/f'{di
 def build(run,extraction,provider,choose,policy=None,version=VERSION):
     if extraction['status']!='complete_local_extraction':raise InputError('Complete local extraction before work records')
     records=[];steps=[];changes=[]
+    from .capabilities import recorded_scope
+    events={e['id']:e for e in run['events']};units={u['id']:u for u in extraction['units']}
+    def scope(uid):return recorded_scope(events[units[uid]['source']['event_id']])
     for unit in user_units(extraction):
-        # Keep concurrent trajectories independent; never carry one user's task into another.
-        current=[r for r in records if r['trajectory_id']==unit['trajectory_id']]
+        # A reset starts another visible history, even for the same worker.
+        current=[r for r in records if scope(r['source_unit_id'])==scope(unit['id'])]
         req=proposal_request(run,extraction,unit,current,policy,version);proposal=provider.get(run,req,unit)
         step={'unit_id':unit['id'],'proposal_request_hash':digest(req),'previous_state_hash':digest(current)}
         if proposal is None:
@@ -221,13 +224,13 @@ def build(run,extraction,provider,choose,policy=None,version=VERSION):
             index=int(choice[1:])
             if index>=len(candidates):raise InputError('Unknown work candidate')
             updated,delta=apply_edits(run,unit,current,candidates[index]['edits'],version)
-            records=[r for r in records if r['trajectory_id']!=unit['trajectory_id']]+updated
+            records=[r for r in records if scope(r['source_unit_id'])!=scope(unit['id'])]+updated
             changes.extend(delta);step['status']='selected_update';step['changes']=delta
         elif choice=='unchanged':step['status']='unchanged';step['changes']=[]
         elif choice in {'no_suitable_candidate','unresolved'}:
             steps.append({**step,'status':'needs_review'});break
         else:raise InputError('Unknown requested-work selection')
-        step['state_after']=deepcopy([r for r in records if r['trajectory_id']==unit['trajectory_id']]);steps.append(step)
+        step['state_after']=deepcopy([r for r in records if scope(r['source_unit_id'])==scope(unit['id'])]);steps.append(step)
     complete=len(steps)==len(user_units(extraction)) and all(s['status'] in {'selected_update','unchanged'} for s in steps)
     return {'schema':version,'run_id':run['id'],'source_hash':digest(run),'extraction_hash':digest(extraction),
         'context_policy':deepcopy(policy),'status':'complete' if complete else 'needs_work',

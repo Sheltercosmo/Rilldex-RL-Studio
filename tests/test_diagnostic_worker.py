@@ -48,8 +48,11 @@ class WorkerTests(unittest.TestCase):
         old=w.execute(self.store,self.work,clear,selector=selector,protocol_name='search',max_new_calls=10)
         self.assertEqual(old['coverage']['counts'],{'complete':1})
         upgraded=self.root/'upgraded'
-        new=w.execute(self.store,upgraded,lambda _:self.fail('Unchanged request must use exact cache'),
-                      selector=selector,protocol_name='search',max_new_calls=0)
+        # /19 changes detector routing without changing capture. /20 deliberately
+        # changes source scope and must not reuse decisions from different inputs.
+        with patch.object(search,'protocol',lambda version=search.CONTRACT_VERSION:original(version)):
+            new=w.execute(self.store,upgraded,lambda _:self.fail('Unchanged request must use exact cache'),
+                          selector=selector,protocol_name='search',max_new_calls=0)
         self.assertEqual(new['protocol']['schema'],search.CONTRACT_VERSION)
         self.assertEqual(new['new_calls'],0)
         self.assertEqual(new['coverage']['counts'],{'complete':1})

@@ -10,9 +10,10 @@ import time
 from .activity import units as activity_units
 from .jev import JevClient, observation_hash, validate_answers, SELECTION_POLICY
 from .schema import digest, InputError
+from .capabilities import recorded_scope
 
 VERSION = 'trajectory-unit-graph/1'
-HARNESS = 'unit-relations/0.1'
+HARNESS = 'unit-relations/0.2'
 RELATIONS = {
     'addresses': 'The current unit responds to or pursues the specific earlier request, question or objective. Mere topical similarity is insufficient; intermediate work may address a goal. This does not establish success.',
     'uses_evidence': 'The current unit explicitly uses the earlier observation, result or claim as evidence or a premise. Merely following it or sharing words is insufficient. Using a claim does not establish its truth.',
@@ -36,6 +37,7 @@ def units(run):
             continue
         result.append({'id': 's' + digest([e['id'], e['text'], e['trajectory_id'], VERSION])[:20],
             'event_id': e['id'], 'event_index': e['index'], 'trajectory_id': e['trajectory_id'],
+            **({'context_id':e['context_id']} if 'context_id' in e else {}),
             'kind': 'source_record', 'source_event_kind': e['kind'], 'actor': e['actor'],
             'source_pointer': e['source_pointer'], 'start': 0, 'end': len(e['text']), 'text': e['text'],
             'eligible': False, 'copied_context': bool(e.get('copied_context')),
@@ -70,7 +72,7 @@ def recurring_phrases(nodes):
 
 def candidates(run, subject, all_units=None):
     all_units = all_units if all_units is not None else units(run)
-    prior = [u for u in all_units if u['trajectory_id'] == subject['trajectory_id']
+    prior = [u for u in all_units if recorded_scope(u) == recorded_scope(subject)
              and not u['copied_context'] and u['text'].strip()
              and not u['source_event_kind'].startswith('external_')
              and u['source_event_kind'] != 'context' and u['kind'] != 'action_payload'
@@ -98,7 +100,7 @@ def packet(run, unit_id):
         text = u['text']
         if len(text) > 12000:
             clipped.append(u['id'])
-        return {k: u[k] for k in ('id','event_id','event_index','trajectory_id','actor','kind','source_event_kind','source_pointer','start','end','agent_visibility')} | {'text': text[:12000]}
+        return {k: u[k] for k in ('id','event_id','event_index','trajectory_id','context_id','actor','kind','source_event_kind','source_pointer','start','end','agent_visibility') if k in u} | {'text': text[:12000]}
     state = {'harness': HARNESS, 'subject': evidence(subject), 'candidates': [evidence(u) for u in earlier],
              'cutoff_event_id': subject['event_id'], 'cutoff_codepoint': subject['end'],
              'retrieval': {'version': 'task-recency-lexical/1', 'eligible_prior_units': total, 'supplied': len(earlier), 'omitted': total-len(earlier)},
@@ -153,7 +155,9 @@ def build(run, activity, observations=None, entity_observations=None):
         edges.append({'id': 'l'+digest([source,target,kind,basis])[:20], 'source': source, 'target': target,
                       'type': kind, 'basis': basis, **extra})
     def entity(key, label, kind, basis, u, start=None, end=None):
-        eid = 'n'+digest([u['trajectory_id'],kind,key])[:20]
+        identity = [u['trajectory_id'],kind,key]
+        if u.get('context_id') is not None:identity.append(u['context_id'])
+        eid = 'n'+digest(identity)[:20]
         entities.setdefault(eid, {'id': eid, 'label': label, 'type': kind, 'basis': basis, 'unit_ids': []})
         if u['id'] not in entities[eid]['unit_ids']:
             entities[eid]['unit_ids'].append(u['id'])
@@ -175,7 +179,7 @@ def build(run, activity, observations=None, entity_observations=None):
         if u['entity_extraction']['routes']:
             coverage['entity_routed_units'] += 1
             coverage['entity_observed_units'] += int(u['entity_extraction']['extraction_status']=='observed')
-        t = u['trajectory_id']
+        t = recorded_scope(u)
         if t in last:
             edge(last[t], u['id'], 'precedes', 'source_order', note='Recorded order only; no causal or execution-order claim.')
         last[t] = u['id']
@@ -218,20 +222,21 @@ def build(run, activity, observations=None, entity_observations=None):
     for phrase, occurrences in recurring_phrases(nodes):
         for uid,start,end in occurrences:
             entity(phrase,phrase,'repeated_phrase','literal_casefold_match_not_coreference',by_id[uid],start,end)
-    # Bind recorded calls by trajectory plus source call ID, never proximity.
+    # Bind recorded calls by agent/context plus source call ID, never proximity.
     calls = defaultdict(list)
     for e in run['events']:
         if e['kind'] in {'action','external_action'} and e.get('call_id'):
-            calls[(e['trajectory_id'],e['call_id'])].append(e)
-        if e.get('parent_id') in event_nodes:
+            calls[(*recorded_scope(e),e['call_id'])].append(e)
+        parent = events.get(e.get('parent_id'))
+        if parent and parent['id'] in event_nodes and recorded_scope(parent) == recorded_scope(e) and parent['index'] < e['index']:
             for target in event_nodes[e['id']]:
                 # Link the parent record via its last unit; scope remains the entire event.
                 edge(event_nodes[e['parent_id']][-1]['id'],target['id'],'parent_message','source_parent_id',
                      parent_event_id=e['parent_id'],note='Parent-record link, not attribution to the parent’s final span.')
     for e in run['events']:
         if e.get('source_call_id'):
-            matched = calls.get((e['trajectory_id'],e['source_call_id']),[])
-            if len(matched) == 1:
+            matched = calls.get((*recorded_scope(e),e['source_call_id']),[])
+            if len(matched) == 1 and matched[0]['index'] < e['index']:
                 for target in event_nodes[e['id']]:
                     edge(event_nodes[matched[0]['id']][-1]['id'],target['id'],'result_of','source_call_id',
                          note='Recorded tool result; not proof of success or visibility to another actor.')

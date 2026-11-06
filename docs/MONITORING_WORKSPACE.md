@@ -134,7 +134,7 @@ but the view did not support an interpretation of task phases or work relations.
 The reported software trace contains 68 agent units: 27 Orient, 2 Plan, 28
 Construct, 9 Inspect and 2 Report. Its activity preview was not a strategy map.
 
-`activity-sequence/4` preserves the individual activity labels, exact unit IDs,
+`activity-sequence/5` preserves the individual activity labels, exact unit IDs,
 source spans and source excerpts. A single observed rollout now uses an overview
 of all blocks and paginated labeled cards. Every unit links to its original graph
 and selected card. Multiple observed rollouts can use count-scaled aggregate

@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 from .repeated_sequences import find
-from .recurrence_context import build as interval_context
+from .recurrence_context import safe_build as interval_context
 from .schema import digest
 from .returning_sequences import find as find_returns
 

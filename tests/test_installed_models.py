@@ -90,6 +90,10 @@ class InstalledModelTests(unittest.TestCase):
         with patch.dict(os.environ,{'RILLDEX_LLM_MODEL':'changed'}):
             with self.assertRaisesRegex(InputError,'Model configuration changed'):
                 models.pilot(store,directory,run['id'])
+        with patch.dict(os.environ,{'RILLDEX_LLM_JSON_MODE':'prompt'}):
+            with self.assertRaisesRegex(InputError,'Model configuration changed'):
+                models.pilot(store,directory,run['id'])
+        self.assertEqual(len(self.calls),calls)
 
     def test_managed_pilot_checks_before_calls_and_restores_saved_progress(self):
         from tracker.model_pilot import ModelPilotService
@@ -112,9 +116,9 @@ class InstalledModelTests(unittest.TestCase):
         from tracker.semantic_catalog import load
         store=Store(self.root/'links.sqlite');run=action_fixture(3);store.add([run]);directory=self.root/'links'
         def decide(req):
-            if req['state']['stage']=='action_target_scope_pairs':return pair_transport(req)
+            if req['state']['stage'] in {'action_target_scope_pairs','action_targets'}:return pair_transport(req)
             if req['state']['stage']=='method_comparison':
-                from tests.test_method_comparison import native_response
+                from tests.method_comparison_fixture import native_response
                 return native_response(req,work='different_work')
             if req['state']['stage']=='executor_reports':
                 from tests.test_execution_reports import answer
@@ -123,24 +127,24 @@ class InstalledModelTests(unittest.TestCase):
                 return {'model':req['model'],'answers':{'choice':{'type':'choice',
                     'probabilities':{c:float(c=='inspect') for c in req['questions']['choice']['criteria']}}}}
             return response(req)
-        # Three native actions take two local choices each, then two work pages.
+        # Three native actions take two local choices each, then three pair pages.
         initial=models.pilot(store,directory,run['id'],candidate_calls=20,decision_calls=7,input_bytes=1000000,transport=decide)
         self.assertEqual(initial['status'],'budget_reached',initial)
         self.assertEqual(initial['map_scope'],'local_activities')
         self.assertEqual(initial['layers']['action_targets']['coverage']['compared_pairs'],1)
         calls=len(self.calls)
-        resumed=models.pilot(store,directory,run['id'],candidate_calls=20,decision_calls=13,input_bytes=1000000,transport=decide)
+        resumed=models.pilot(store,directory,run['id'],candidate_calls=20,decision_calls=14,input_bytes=1000000,transport=decide)
         self.assertEqual(resumed['status'],'complete_local_extraction',resumed)
         self.assertEqual(resumed['map_scope'],'activities_and_work_links')
         self.assertEqual(resumed['layers']['action_targets']['coverage']['compared_pairs'],3)
         self.assertEqual(len(self.calls),calls)
-        self.assertEqual(resumed['provider_usage']['providers']['jev']['attempts'],13)
+        self.assertEqual(resumed['provider_usage']['providers']['jev']['attempts'],14)
         self.assertEqual(resumed['last_execution']['cached_decisions_this_execution'],7)
         # The originally published local observer remains loadable after links arrive.
         from urllib.parse import parse_qs,urlsplit
         observer=parse_qs(urlsplit(initial['map_url']).query)['observer'][0]
         self.assertTrue(load(run,observer,store)['available'])
-        models.pilot(store,directory,run['id'],candidate_calls=20,decision_calls=13,input_bytes=1000000,
+        models.pilot(store,directory,run['id'],candidate_calls=20,decision_calls=14,input_bytes=1000000,
                      transport=lambda _:self.fail('Cached pages should not be called'))
 
     def test_old_pilot_identity_remains_local_only(self):
@@ -156,6 +160,21 @@ class InstalledModelTests(unittest.TestCase):
         self.assertEqual(result['layers']['execution_reports']['status'],'not_requested')
         self.assertEqual(result['layers']['method_comparison']['status'],'not_requested')
 
+    def test_existing_paged_pilot_keeps_its_reader_on_resume(self):
+        from tracker import action_targets,semantic_watch
+        from tracker.semantic_extraction import read,write
+        store=Store(self.root/'pinned.sqlite');run=fixture();store.add([run])
+        directory=self.root/'pinned'
+        first=models.pilot(store,directory,run['id'],transport=response)
+        self.assertEqual(first['model']['action_target_version'],action_targets.INTERVAL_VERSION)
+        self.assertEqual(semantic_watch.behavior_options()['action_target_version'],action_targets.INTERVAL_VERSION)
+        # A zero-call workspace made by the previous release remains resumable.
+        for path in (directory/'model.json',directory/'extraction/workspace.json'):
+            saved=read(path);saved['action_target_version']=action_targets.PAGED_VERSION;write(path,saved)
+        resumed=models.pilot(store,directory,run['id'],transport=lambda _:self.fail('Zero budget must make no calls'))
+        self.assertEqual(resumed['model']['action_target_version'],action_targets.PAGED_VERSION)
+        self.assertEqual(read(directory/'extraction/workspace.json')['action_target_version'],action_targets.PAGED_VERSION)
+
     def test_plan_layer_resume_publishes_plan_map_and_preserves_local_observer(self):
         from tests.test_plan_scope_pages import fixture as plan_fixture,transport as plan_transport
         from tests.test_action_scope_pages import transport as pair_transport
@@ -167,9 +186,9 @@ class InstalledModelTests(unittest.TestCase):
         def decide(req):
             seen.append(req['state']['stage'])
             if req['state']['stage']=='method_comparison':
-                from tests.test_method_comparison import native_response
+                from tests.method_comparison_fixture import native_response
                 return native_response(req,work='different_work')
-            if req['state']['stage']=='action_target_scope_pairs':return pair_transport(req)
+            if req['state']['stage'] in {'action_target_scope_pairs','action_targets'}:return pair_transport(req)
             if req['state']['stage']=='executor_reports':
                 from tests.test_execution_reports import answer
                 return answer(req,'not_reported')
@@ -180,8 +199,8 @@ class InstalledModelTests(unittest.TestCase):
         initial=models.pilot(store,directory,run['id'],candidate_calls=100,decision_calls=local_calls+1,input_bytes=5000000,transport=decide)
         self.assertEqual(initial['status'],'budget_reached',initial)
         self.assertFalse(initial['plan_map_available'])
-        self.assertEqual(initial['layers']['plan_relations']['coverage']['compared_pairs'],2)
-        self.assertEqual(initial['layers']['plan_relations']['coverage']['pending_pairs'],6)
+        self.assertEqual(initial['layers']['plan_relations']['coverage']['compared_pairs'],1)
+        self.assertEqual(initial['layers']['plan_relations']['coverage']['pending_pairs'],7)
         calls=len(self.calls)
         result=models.pilot(store,directory,run['id'],candidate_calls=100,decision_calls=total,input_bytes=5000000,transport=decide)
         self.assertEqual(result['status'],'complete_local_extraction',result)

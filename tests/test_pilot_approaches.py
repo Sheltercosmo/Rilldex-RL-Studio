@@ -14,15 +14,15 @@ from tracker.semantic_extraction import Pipeline,read,write
 from tracker.semantic_budget import BudgetReached
 from tracker.semantic_catalog import load
 from tracker.store import Store
-from research.method_comparison_trial import fixture as method_fixture,CASES
-from tests.test_method_comparison import native_response
+from tests.method_comparison_fixture import repeat_sample
+from tests.method_comparison_fixture import native_response
 from tests.test_pilot_execution_reports import fixture,transport
 from tests import test_installed_models as installed
 
 
 class NativeMethodTests(TestCase):
     def native(self):
-        run,doc=method_fixture(CASES[0])
+        run,doc=repeat_sample()
         actions=[u for u in doc['units'] if u['kind']=='action']
         events={e['id']:e for e in run['events']}
         for i,u in enumerate(actions):
@@ -46,6 +46,7 @@ class NativeMethodTests(TestCase):
     def test_partial_action_does_not_inherit_whole_native_payload(self):
         run,doc,actions=self.native();ref=actions[-1]['source']
         ref['end']-=1;ref['text']=ref['text'][:-1]
+        actions[-1]['content']['summary']['evidence']=[deepcopy(ref)]
         req=methods.pair_request(run,doc,*[u['id'] for u in actions],methods.NATIVE_VERSION)
         self.assertIsNone(req['state']['native_dispatches'][-1]['fields'])
         self.assertIn('partial action',req['state']['native_dispatches'][-1]['scope'])

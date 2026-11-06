@@ -4,7 +4,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from rilldex.candidate import propose
+from rilldex.candidate import propose,settings,identity
 
 
 class CandidateExampleTests(unittest.TestCase):
@@ -31,6 +31,25 @@ class CandidateExampleTests(unittest.TestCase):
         response=json.dumps({'choices':[{'message':{'content':'[]'}}]}).encode()
         with patch('rilldex.candidate.urlopen',return_value=io.BytesIO(response)):
             with self.assertRaises(ValueError):propose({},endpoint='http://localhost:8000/chat',model='model')
+
+    def test_prompt_only_endpoint_uses_same_validated_payload_without_json_mode(self):
+        packet={'request':{'source':'exact source','response_contract':{'candidates':[]}}}
+        response=json.dumps({'choices':[{'message':{'content':'{"candidates":[]}'}}]}).encode()
+        with patch('rilldex.candidate.urlopen',return_value=io.BytesIO(response)) as call:
+            result=propose(packet,endpoint='http://localhost:8000/chat',model='local-model',json_mode='prompt')
+            self.assertEqual(result,{'candidates':[]})
+            body=json.loads(call.call_args.args[0].data)
+            self.assertNotIn('response_format',body)
+            self.assertEqual(json.loads(body['messages'][1]['content']),packet)
+            call.assert_called_once()
+
+    def test_generation_mode_is_pinned_without_changing_legacy_identity(self):
+        env=dict(RILLDEX_LLM_PRESET='local',RILLDEX_LLM_MODEL='pinned',RILLDEX_LLM_API_KEY='test-only')
+        legacy=identity(settings(env));self.assertEqual(set(legacy),{'adapter','endpoint','model'})
+        changed=identity(settings({**env,'RILLDEX_LLM_JSON_MODE':'prompt'}))
+        self.assertEqual(changed,{**legacy,'json_mode':'prompt'})
+        self.assertNotIn('test-only',json.dumps(changed))
+        with self.assertRaises(ValueError):settings({**env,'RILLDEX_LLM_JSON_MODE':'guess'})
 
 
 if __name__=='__main__':unittest.main()

@@ -10,9 +10,11 @@ import time
 from .schema import digest, InputError
 from .jev import JevClient, validate_answers, observation_hash, SELECTION_POLICY
 from .text_units import segments, SEGMENTATION_VERSION
+from .capabilities import recorded_scope
+from .environment_contracts import READING_RULE, excerpt_contracts, reading_context
 
 UNIT_VERSION = "activity-units/2"
-HARNESS = "semantic-activity/1.4"
+HARNESS = "semantic-activity/1.7"
 TAXONOMY_VERSION = "general-activities/2"
 ACTIVITIES = {
     "orient": ("Orient", "Restates the task, constraints or current situation. Repeating text does not establish comprehension."),
@@ -52,12 +54,14 @@ ACTION_TYPES = {
 
 def units(run):
     result = []
-    actions = [e for e in run["events"] if e["kind"] == "action" and not e.get("copied_context")]
+    def visible(event):
+        return event.get('agent_visible') is not False and event.get('agent_visibility') != 'not_established'
+    actions = [e for e in run["events"] if e["kind"] == "action" and not e.get("copied_context") and visible(e)]
     children = defaultdict(list)
     for action in actions:
         children[action.get("parent_id")].append(action)
     for event in run["events"]:
-        if event.get("copied_context") or event["kind"] not in {"message", "reasoning", "action"} or event.get("actor") in {"environment", "harness", "user", "system", "unknown"}:
+        if not visible(event) or event.get("copied_context") or event["kind"] not in {"message", "reasoning", "action"} or event.get("actor") in {"environment", "harness", "user", "system", "unknown"}:
             continue
         kind = "action_dispatch" if event["kind"] == "action" else "model_span"
         slices = [(0, len(event["text"]), "tool_arguments")] if kind == "action_dispatch" else segments(event["text"])
@@ -83,6 +87,7 @@ def units(run):
                     "eligibility_reason": "represented_by_dispatch" if represented else "whitespace" if not text.strip() else "eligible",
                     "represented_by": represented,
                     "linked_action_ids": [a["id"] for a in children[event["id"]]] if kind == "model_span" else [event["id"]]}
+            if 'context_id' in event:unit['context_id'] = event['context_id']
             # A parent expression link is not a claim that this particular span caused a call.
             if kind == "action_dispatch":
                 unit["action_type"] = {"value": ACTION_TYPES.get(event.get("tool"), "unmapped_tool"),
@@ -100,10 +105,22 @@ def packet(run, unit_id):
     subject = next((u for u in all_units if u["id"] == unit_id), None)
     if not subject or not subject["eligible"]:
         raise InputError("Activity subject is missing or has no text")
+    by_id = {e['id']:e for e in run['events']}
+    current = by_id[subject['event_id']]
+    def same_context(e):
+        return (recorded_scope(e) == recorded_scope(current) and
+                not e['kind'].startswith('external_') and e.get('agent_visibility') != 'not_established' and
+                e.get('agent_visible') is not False and not e.get('copied_context') and e.get('order_known') is not False)
     prior = [u for u in all_units if u["eligible"] and u["trajectory_id"] == subject["trajectory_id"] and
+             same_context(by_id[u['event_id']]) and
              (u["event_index"] < subject["event_index"] or u["event_index"] == subject["event_index"] and u["end"] <= subject["start"])]
     candidates = prior[-6:]
-    events = [e for e in run["events"] if e["index"] < subject["event_index"] and e["trajectory_id"] == subject["trajectory_id"] and not e.get("copied_context")]
+    from .source_retrieval import select
+    retrieval=select(prior,subject['text'],retained_ids=[u['id'] for u in candidates])
+    candidate_ids={u['id'] for u in candidates}|{r['event_id'] for r in retrieval['selected']}
+    candidates=[u for u in prior if u['id'] in candidate_ids]
+    retrieval['selected']=[{'unit_id':r['event_id'],**{k:v for k,v in r.items() if k!='event_id'}} for r in retrieval['selected']]
+    events = [e for e in run["events"] if e["index"] < subject["event_index"] and same_context(e) and not e.get("copied_context")]
     all_instructions = [e for e in events if e["kind"] == "instruction"]
     instructions = list({e["id"]:e for e in [*all_instructions[:1], *all_instructions[-2:]]}.values())
     context = [e for e in events if e["kind"] in {"feedback", "context"}][-3:]
@@ -113,20 +130,17 @@ def packet(run, unit_id):
         if len(text) > 5000:
             truncated.append(item["id"])
         result = {k: v for k, v in item.items() if k in {"id", "event_id", "trajectory_id", "kind", "source_event_kind", "channel", "actor", "source_pointer", "start", "end", "syntax", "action_type", "dispatch_basis", "source_call_id", "feedback_origin"}} | {"text": text[:5000]}
+        result.update(excerpt_contracts(item, limit=8000, truncated=truncated))
         if item["id"] == subject["id"]:
             if len(text) > 5000:
                 required_truncated.append(item["id"])
-            contract = item.get("tool_contract")
-            if contract:
-                from .schema import dumps
-                serialized = dumps(contract["definition"])
-                contract_id = "tool_contract:" + contract["source_pointer"]
-                if len(serialized) > 8000:
-                    truncated.append(contract_id); required_truncated.append(contract_id)
-                result["tool_contract"] = {"source_pointer":contract["source_pointer"],
-                                           "definition_text":serialized[:8000], "source_characters":len(serialized)}
+            for field in ('tool_contract','observation_contract'):
+                if field in result and result[field]['source_characters'] > 8000:
+                    required_truncated.append(field + ':' + result[field]['source_pointer'])
         return result
     state = {"harness": HARNESS, "taxonomy_version": TAXONOMY_VERSION, "unit_version": UNIT_VERSION, "subject": excerpt(subject),
+             **reading_context(run, current),
+             "interpretation_rule": READING_RULE,
              "activity_definitions": {key: {"label": label, "rule": rule} for key, (label, rule) in ACTIVITIES.items()},
              "annotation_boundaries": [
                  "Tag what the subject does as an expression or dispatch, not the activity it merely describes. A future plan to check or edit is plan; it is not itself verify or construct.",
@@ -141,6 +155,7 @@ def packet(run, unit_id):
                  "A structured or adapter-extracted action records an attempted operation under its source convention, not independent execution instrumentation. Do not infer state change, correctness or success."
              ],
              "authorized_instructions": [excerpt(e) for e in instructions], "earlier_units": [excerpt(u) for u in candidates],
+             "earlier_unit_retrieval": retrieval,
              "prior_environment_or_harness_context": [excerpt(e) for e in context],
              "cutoff_event_id": subject["event_id"], "cutoff_codepoint": subject["end"],
              "missingness": {"truncated_event_ids": truncated, "objective_missing": not instructions,

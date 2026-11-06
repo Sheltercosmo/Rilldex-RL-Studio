@@ -13,6 +13,7 @@ from .semantic_extraction import request,checked_span,read,write,audit_result,re
 from .requested_work import audit as audit_work,CLAUSE_VERSION
 from .work_correspondence import state_before,references,compact,POLICY
 from .feedback_assessments import linked_feedback
+from .readable_context import POLICY_VERSIONS
 
 VERSION='requested-check-evidence/1'
 ISOLATED_VERSION='requested-check-evidence/2'
@@ -62,7 +63,7 @@ def selection_request(run,extraction,work,action,snapshot,pool,response=None,pol
     if version not in {VERSION,ISOLATED_VERSION}:raise InputError('Unknown check correspondence version')
     isolated=bool(response and version==ISOLATED_VERSION)
     context_policy=deepcopy(policy or POLICY)
-    if context_policy.get('schema') not in {'readable-context/1','readable-context/2','readable-context/3'}:
+    if context_policy.get('schema') not in POLICY_VERSIONS:
         raise InputError('Check correspondence requires readable context')
     for ref in [action['source'],*references(action['content']),*references(snapshot['records'])]:
         checked_span(run,ref,action['source'])

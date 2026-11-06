@@ -13,7 +13,7 @@ def configure(commands):
     sub=parser.add_subparsers(dest='monitor_command',required=True)
     for name in ('run','watch','plan'):
         p=sub.add_parser(name);p.add_argument('directory')
-        p.add_argument('--protocol',choices=('source','chains','search','requirements'),default='chains',help='requirements finds task-conflict candidates; search scans long traces for behavior flags')
+        p.add_argument('--protocol',choices=('source','chains','search','requirements'),help='New work uses search; existing work keeps its protocol. requirements checks task conflicts.')
         if name!='plan':
             p.add_argument('--prompt-key',action='store_true');p.add_argument('--max-new-calls',type=int,default=100)
             p.add_argument('--retry-failed',action='store_true',help='Explicitly retry failed sources once in this process')
@@ -30,6 +30,7 @@ def configure(commands):
 def execute(args,store):
     if args.monitor_command in {'status','audit'}:
         print(json.dumps(getattr(worker,args.monitor_command)(store,args.directory),ensure_ascii=False,indent=2));return
+    args.protocol=worker.selected_implementation(args.directory,args.protocol,worker=True)
     if args.monitor_command=='plan':
         print(json.dumps(worker.plan(store,worker.selection(args.run_id,args.experiment,args.adapter),args.protocol),ensure_ascii=False,indent=2));return
     from .jev import JevClient

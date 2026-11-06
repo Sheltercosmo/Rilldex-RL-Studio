@@ -11,7 +11,11 @@ from .schema import InputError, digest
 VERSION = 'readable-context/1'
 GOVERNING_VERSION = 'readable-context/2'
 CONTEXT_VERSION = 'readable-context/3'
-POLICY_VERSIONS = {VERSION,GOVERNING_VERSION,CONTEXT_VERSION}
+LINKED_VERSION = 'readable-context/4'
+RETRIEVED_VERSION = 'readable-context/5'
+DEPENDENCY_VERSIONS = {LINKED_VERSION, RETRIEVED_VERSION}
+SCOPED_VERSIONS = {CONTEXT_VERSION, *DEPENDENCY_VERSIONS}
+POLICY_VERSIONS = {VERSION,GOVERNING_VERSION,*SCOPED_VERSIONS}
 DATA_URI = re.compile(r'data:([a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+);base64,[A-Za-z0-9+/=]+')
 
 
@@ -23,7 +27,7 @@ def protected_instruction(event,policy):
     # Roles come from the adapter, never words such as "system" in tool text.
     # Retention does not adjudicate conflicting instructions or their adoption.
     return (event['kind']=='instruction' or
-            (policy['schema'] in {GOVERNING_VERSION,CONTEXT_VERSION} and event.get('actor') in {'system','developer'}))
+            (policy['schema'] in {GOVERNING_VERSION,*SCOPED_VERSIONS} and event.get('actor') in {'system','developer'}))
 
 
 def validate_policy(policy):
@@ -95,7 +99,7 @@ def project(event, policy, subject):
         if isinstance(value,dict):return {k:scrub(v,path+'/'+str(k)) for k,v in value.items()}
         if isinstance(value,list):return [scrub(v,path+'/'+str(i)) for i,v in enumerate(value)]
         return value
-    auxiliary_fields={k:scrub(event[k],'/'+k) for k in ('arguments','tool_contract') if k in event}
+    auxiliary_fields={k:scrub(event[k],'/'+k) for k in ('arguments','tool_contract','observation_contract') if k in event}
     if not media and not omitted and not event.get('media') and not auxiliary:
         return deepcopy(event)
     chunks=[];mapping=[];view_pos=0;pos=0
@@ -119,6 +123,63 @@ def project(event, policy, subject):
     return out
 
 
+def linked_event_ids(full, subject, recent_ids):
+    """Retain a small source-linked neighborhood, never guessed textual matches.
+
+    Input has already been filtered to the visible, ordered source context.
+    Include the latest observation and the dispatch/parent of retained results.
+    Don't recursively traverse all history through a chain of prior actions.
+    """
+    lookup = {e['id']: e for e in full}
+    current = lookup.get(subject['event_id'])
+    if current is None:
+        return set()
+    scope = (current.get('trajectory_id'), current.get('context_id'))
+    eligible = [e for e in full if
+                (e.get('trajectory_id'), e.get('context_id')) == scope and
+                not e.get('copied_context') and not e['kind'].startswith('external_') and
+                e.get('agent_visibility') != 'not_established' and e.get('order_known') is not False]
+    positions = {e['id']: i for i,e in enumerate(eligible)}
+    keep = {subject['event_id']}
+    observations = [e for e in eligible if e['id'] != subject['event_id'] and
+                    (e['kind'] == 'feedback' or e['kind'] == 'context' and e.get('actor') == 'environment')]
+    if observations:
+        keep.add(observations[-1]['id'])
+    calls = {}
+    for e in eligible:
+        if e['kind'] == 'action' and e.get('call_id'):
+            calls.setdefault(e['call_id'], []).append(e)
+    for e in eligible:
+        if e['id'] not in keep | recent_ids:
+            continue
+        if e['kind'] == 'feedback' and e.get('source_call_id'):
+            targets = calls.get(e['source_call_id'], [])
+            if len(targets) == 1 and positions[targets[0]['id']] < positions[e['id']]:
+                keep.add(targets[0]['id'])
+    for eid in list(keep | recent_ids):
+        e = lookup.get(eid, {})
+        parent = e.get('parent_id')
+        if parent in positions and eid in positions and positions[parent] < positions[eid]:
+            keep.add(parent)
+    return keep - recent_ids
+
+
+def selected_context(full, subject, policy):
+    """One selection policy shared by decision and candidate-generation requests."""
+    include={e['id'] for e in full[-policy['recent_events']:]}|{r['event_id'] for r in policy['extra_ranges']}
+    if policy['schema'] in DEPENDENCY_VERSIONS:
+        include |= linked_event_ids(full, subject, include)
+    report=None;effective=deepcopy(policy)
+    if policy['schema']==RETRIEVED_VERSION:
+        from .source_retrieval import select
+        prior=[e for e in full if e['id']!=subject['event_id'] and not protected_instruction(e,policy)]
+        report=select(prior,subject['text'],retained_ids=include)
+        include|={r['event_id'] for r in report['selected']}
+        include|=linked_event_ids(full,subject,include)
+        effective['extra_ranges'] += [{k:r[k] for k in ('event_id','start','end')} for r in report['selected']]
+    return include,effective,report
+
+
 def project_prefix(full, subject, policy):
     validate_policy(policy)
     if DATA_URI.search(subject['text']):
@@ -127,9 +188,9 @@ def project_prefix(full, subject, policy):
     for ref in policy['extra_ranges']:
         if ref['event_id'] not in lookup:raise InputError('Requested context is future, another trajectory, or not agent-visible')
         if ref['end']>len(lookup[ref['event_id']]['text']):raise InputError('Requested context range exceeds source cutoff')
-    include={e['id'] for e in full[-policy['recent_events']:]}|{r['event_id'] for r in policy['extra_ranges']}
+    include,effective,_=selected_context(full,subject,policy)
     selected=[e for e in full if e['id'] in include or protected_instruction(e,policy)]
-    return [project(e,policy,subject) for e in selected]
+    return [project(e,effective,subject) for e in selected]
 
 
 def contains(prefix_event, ref):

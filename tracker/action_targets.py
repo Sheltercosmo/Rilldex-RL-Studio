@@ -16,6 +16,7 @@ CHARACTERIZED_VERSION='action-target-correspondence/3'
 SCOPE_VERSION='action-target-correspondence/4'
 PAIRWISE_VERSION='action-target-correspondence/5'
 PAGED_VERSION='action-target-correspondence/6'
+INTERVAL_VERSION='action-target-correspondence/7'
 EVIDENCE_LAYOUT='source-once/1'
 SCOPED_LAYOUT='target-meaning-and-shared-tools/1'
 LIMIT=32
@@ -204,10 +205,10 @@ def argument_delta(before,after):
 
 
 def build(run,extraction,choose,*,evidence_layout=EVIDENCE_LAYOUT,version=VERSION,decide=None,progress=None):
-    if version==PAGED_VERSION:
+    if version in {PAGED_VERSION,INTERVAL_VERSION}:
         from .action_scope_pages import build as build_pages
         if decide is None:raise InputError('Scope comparison requires the multi-question decision interface')
-        return build_pages(run,extraction,decide,progress=progress)
+        return build_pages(run,extraction,decide,progress=progress,version=version)
     if version==PAIRWISE_VERSION:
         from .action_scope_pairs import build as build_pairs
         if decide is None:raise InputError('Scope comparison requires the multi-question decision interface')
@@ -260,7 +261,7 @@ def build(run,extraction,choose,*,evidence_layout=EVIDENCE_LAYOUT,version=VERSIO
 
 
 def path_for(directory,extraction,version=VERSION):
-    if version not in {VERSION,SCOPED_VERSION,CHARACTERIZED_VERSION,SCOPE_VERSION,PAIRWISE_VERSION,PAGED_VERSION}:raise InputError('Unknown target correspondence version')
+    if version not in {VERSION,SCOPED_VERSION,CHARACTERIZED_VERSION,SCOPE_VERSION,PAIRWISE_VERSION,PAGED_VERSION,INTERVAL_VERSION}:raise InputError('Unknown target correspondence version')
     layout=SCOPED_LAYOUT if version!=VERSION else EVIDENCE_LAYOUT
     return Path(directory)/'action_targets'/extraction['run_id']/version.replace('/','-')/layout.replace('/','-')/f'{digest(extraction)}.json'
 

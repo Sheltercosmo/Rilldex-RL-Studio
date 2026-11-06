@@ -136,6 +136,9 @@ class JevTests(unittest.TestCase):
         self.assertEqual(result["mode"]["status"], "decided")
         self.assertEqual(result["mode"]["value"], "explore")
         request["state"]["missingness"]["truncated_event_ids"] = ["e1"]
+        # Legacy packets had one blanket clipping list. New packets identify
+        # the questions whose required evidence was actually clipped.
+        request["state"]["missingness"].pop('required_truncated_by_question')
         result = validate_answers(response_for(request), request)
         self.assertTrue(all(x["status"] == "unresolved" for x in result.values()))
 

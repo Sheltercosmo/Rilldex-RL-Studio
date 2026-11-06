@@ -30,10 +30,14 @@ FLOW_VERSION = 'diagnostic-search/16'
 CONTRACT_PROBE_VERSION = 'diagnostic-search/17'
 CONTRACT_REFINED_VERSION = 'diagnostic-search/18'
 CONTRACT_VERSION = 'diagnostic-search/19'
-FLOW_VERSIONS = {FLOW_PROBE_VERSION, FLOW_VERSION, CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION}
+HARNESS_VERSION = 'diagnostic-search/20'
+ATTRIBUTED_VERSION = 'diagnostic-search/21'
+HARNESS_VERSIONS = {HARNESS_VERSION, ATTRIBUTED_VERSION}
+CONTRACT_VERSIONS = {CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION, *HARNESS_VERSIONS}
+FLOW_VERSIONS = {FLOW_PROBE_VERSION, FLOW_VERSION, *CONTRACT_VERSIONS}
 # Keep the historical LATEST_VERSION alias stable for frozen evaluation scripts.
-DEFAULT_VERSION = CONTRACT_VERSION
-DIRECT_VERSIONS = {CONTRACT_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_PROBE_VERSION, DIRECT_VERSION, NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}
+DEFAULT_VERSION = ATTRIBUTED_VERSION
+DIRECT_VERSIONS = {*HARNESS_VERSIONS, CONTRACT_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_PROBE_VERSION, DIRECT_VERSION, NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}
 FRAGMENT_CHARS = 1800
 PAGE_CHARS = 16000
 PAGE_SERIALIZED_CHARS = 32000
@@ -45,14 +49,22 @@ SENTINELS = {'none': 'No remaining fragment in this page supplies a candidate fo
 
 
 def protocol(version=DEFAULT_VERSION):
-    if version in {CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION}:
+    if version in CONTRACT_VERSIONS:
         from . import diagnostic_contract as contract
         value = {**protocol(FLOW_VERSION), 'schema': version,
                  'artifact_contract': dict(schema=contract.CURRENT_VERSION if version != CONTRACT_PROBE_VERSION else contract.VERSION, max_views=contract.MAX_VIEWS,
                      max_payload_chars=contract.MAX_PAYLOAD_CHARS, opening_chars=contract.OPENING_CHARS,
                      max_packet_chars=contract.MAX_PACKET_CHARS,
                      selection='raw_argmax:target_required AND substitute AND delivered')}
-        if version == CONTRACT_VERSION: value['artifact_contract']['routing'] = 'preserve-existing-code-flow-page/1'
+        if version in {CONTRACT_VERSION, *HARNESS_VERSIONS}: value['artifact_contract']['routing'] = 'preserve-existing-code-flow-page/1'
+        if version in HARNESS_VERSIONS:
+            from . import diagnostic_relations as relations
+            value['recorded_relations'].update(schema=relations.HARNESS_VERSION, encoding_chars=relations.CONTRACT_LIMIT,
+                capture='visible-records-with-context-reset-and-source-definitions/1')
+        if version == ATTRIBUTED_VERSION:
+            from . import diagnostic_attribution as attribution
+            value['candidate_attribution'] = dict(schema=attribution.VERSION,
+                max_packet_chars=attribution.MAX_PACKET_CHARS, reading_rule=attribution.RULE)
         value.pop('id')
         return {**value, 'id': 'diagnostic-search-' + digest(value)[:20]}
     if version not in {LEGACY_VERSION, VERSION, CURRENT_VERSION, *DIRECT_VERSIONS}:
@@ -234,7 +246,7 @@ def _nested_regions(text):
 
 def index(source, version=VERSION):
     """Partition exact original ranges; event labels are structural, not verdicts."""
-    if version in {CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION}: version = FLOW_VERSION
+    if version in CONTRACT_VERSIONS: version = FLOW_VERSION
     validate_input(source)
     fragments = []
     for origin in ('trace', 'task'):
@@ -306,6 +318,12 @@ def request(source, stage, fragments, questions, *, version=VERSION, **state):
                        'source_fragments': {f['id']: f for f in fragments},
                        'scope': 'Selected original ranges, not the complete rollout. Do not infer missing evidence.',
                        **state}, 'questions': questions}
+    # Definitions are optional reference context. Retain source candidates and
+    # report whole omitted definitions when the remaining wire budget is small.
+    definitions = value['state'].get('recorded_encoding_definitions', [])
+    while definitions and len(dumps(value)) > REQUEST_CHARS:
+        removed = definitions.pop()
+        value['state']['omitted_encoding_event_ids'].append(removed['event_id'])
     if len(dumps(value)) > REQUEST_CHARS:
         raise InputError('Bounded diagnostic request exceeds its serialized limit; no evidence was clipped')
     return value
@@ -619,7 +637,10 @@ def audit(source, result, directory):
 
 
 def source_from_run(run, version=DEFAULT_VERSION):
-    if version in {CONTRACT_PROBE_VERSION, CONTRACT_REFINED_VERSION, CONTRACT_VERSION}: version = FLOW_VERSION
+    if version in HARNESS_VERSIONS:
+        from . import diagnostic_relations as relations
+        return relations.from_run(run, version=relations.HARNESS_VERSION)
+    if version in CONTRACT_VERSIONS: version = FLOW_VERSION
     if version in {SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
         from .diagnostic_relations import from_run
         return from_run(run)

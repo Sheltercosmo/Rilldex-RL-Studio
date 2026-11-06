@@ -4,6 +4,7 @@ This joins saved relations and outcomes. No new model call or confidence gate.
 """
 from .operation_outcomes import action_outcomes
 from .attempt_revision import change_kinds
+from .capabilities import recorded_scope
 
 VERSION='enacted-attempt-change/1'
 DEFINITIONS={
@@ -20,6 +21,7 @@ def inspect(run,document):
     events={e['id']:e for e in run['events']};units={u['id']:u for u in document['units']}
     outcomes=action_outcomes(run,document['operation_outcomes']);episodes=[];excluded=[];seen=set()
     def order(u):return events[u['source']['event_id']]['index'],u['source']['start']
+    def scope(u):return recorded_scope(events[u['source']['event_id']])
     for row in observed['observations']:
         a,b=units[row['previous_unit_id']],units[row['current_unit_id']]
         old,new=outcomes.get(a['source']['event_id'],{}),outcomes.get(b['source']['event_id'],{})
@@ -30,18 +32,19 @@ def inspect(run,document):
         responses=[events[o['response_event_id']] for o in old.get('observations',[])]
         eligible=(row['status']=='inspected' and row.get('work_instance')=='same_work_instance' and
             a['kind']==b['kind']=='action' and a['actor']==b['actor']=='agent' and
-            a['trajectory_id']==b['trajectory_id'] and responses and
-            all(e['trajectory_id']==b['trajectory_id'] and e['index']<order(b)[0] for e in responses))
+            scope(a)==scope(b) and responses and
+            all(recorded_scope(e)==scope(b) and e['index']<order(b)[0] for e in responses))
         if not eligible:
             excluded.append({'pair':list(key),'reason':'Failure, source ordering or same-work inspection is incomplete'});continue
         feedback_end=max((e['index'],len(e.get('text',''))) for e in responses);matches=[]
         for change in row['declarations']:
             statement=units[change['unit_id']]
+            if scope(statement)!=scope(b):continue
             if not (feedback_end<order(statement)<order(b)):continue
             for kind in change_kinds(change['selection']):
                 selected=change.get('executions',{}).get(kind,{})
                 action=units.get(selected.get('selection'))
-                if not action or action['kind']!='action' or action['actor']!='agent' or action['trajectory_id']!=b['trajectory_id']:continue
+                if not action or action['kind']!='action' or action['actor']!='agent' or scope(action)!=scope(b):continue
                 if not (feedback_end<order(action)<=order(b)):continue
                 matches.append({'declaration_unit_id':statement['id'],'execution_unit_id':action['id'],
                     'change_kind':kind,'declaration_request_hash':change['request_hash'],'execution_request_hash':selected['request_hash']})

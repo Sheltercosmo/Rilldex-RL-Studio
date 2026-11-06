@@ -16,6 +16,8 @@ FORMATS = ("auto", "harbor", "harbor-bundle", "swe-agent", "swe-rl", "mini-swe-a
 FORMATS += ('nebius-openhands',)
 FORMATS += ('slime-debug',)
 FORMATS += ('weave',)
+FORMATS += ('responses-items',)
+FORMAT_VERSIONS['responses-items'] = 'responses-items/1'
 FORMAT_VERSIONS['slime-debug'] = 'slime-debug/1'
 FORMAT_VERSIONS['weave'] = 'weave-calls/1'
 
@@ -23,6 +25,8 @@ FORMAT_VERSIONS['weave'] = 'weave-calls/1'
 def detect(document: dict) -> str:
     from .weave_import import matches as weave_matches
     if weave_matches(document): return 'weave'
+    if document.get('trajectory_format') == 'chat-messages/2': return 'chat-messages'
+    if document.get('trajectory_format') == 'responses-items/1': return 'responses-items'
     if document.get('trajectory_format') == 'environment-episode/2': return 'environment-episode'
     if document.get('trajectory_format') == 'slime-debug/1': return 'slime-debug'
     from .nebius_openhands import matches as openhands_matches
@@ -119,7 +123,7 @@ def normalize(document: dict, fmt: str = "auto", meta: dict | None = None, sourc
     elif fmt=='nebius-openhands':
         from .nebius_openhands import append_events
         outcome=append_events(document,events,warnings,result_meta)
-    elif fmt in {'chat-messages','environment-episode','generation'}:
+    elif fmt in {'chat-messages','environment-episode','generation','responses-items'}:
         from .portable import append_events
         outcome=append_events(document,fmt,events,warnings,result_meta)
     elif fmt == "agent-process-bench":
@@ -210,8 +214,11 @@ def normalize(document: dict, fmt: str = "auto", meta: dict | None = None, sourc
         from .anthropic_blocks import native, VERSION as native_version
         if native(document.get('messages', [])) or 'system' in document or any(isinstance(t,dict) and 'input_schema' in t for t in document.get('tools', [])):
             version = native_version
+        if document.get('trajectory_format') == 'chat-messages/2':version = 'chat-messages/2'
     if fmt == 'environment-episode' and document.get('trajectory_format') == 'environment-episode/2':
         version = 'environment-episode/2'
+    if fmt == 'environment-episode' and any(k in document for k in ('action_schema','observation_schema')):
+        version += '+contracts-1'
     if fmt=='agent-process-bench' and document.get('data_source','').startswith('bfcl'):
         version='agent-process-bench/2'
     if fmt == 'mini-swe-agent' and mini_swe.is_v2(document): version = mini_swe.VERSION

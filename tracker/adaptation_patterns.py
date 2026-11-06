@@ -111,7 +111,7 @@ def project(graph):
             reviewed = m.get('basis') == 'procedure-review/1' and m.get('status') == 'reviewed'
             original_schema = (observations.get('method_schema') if method_schema != 'procedure-review/1' else
                                (graph.get('semantic_context') or {}).get('procedure_reviews', {}).get('original_schema'))
-            if ((reviewed or original_schema in {'work-method-comparison/3','work-method-comparison/4'} and m.get('status') == 'selected')
+            if ((reviewed or original_schema in {'work-method-comparison/3','work-method-comparison/4','work-method-comparison/5'} and m.get('status') == 'selected')
                     and m.get('work_instance') == 'same_work_instance'
                     and not m.get('upstream_identity_disputed')
                     and m.get('comparison') in PROCEDURES):

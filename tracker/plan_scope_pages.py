@@ -21,7 +21,7 @@ CHOICES.update(no_supported_role='None of the roles is directly supported. Inclu
 
 def candidates(run,extraction,action):
     current=checked_span(run,action['source']);pool=[];excluded=[]
-    for candidate in plans.candidates(run,extraction,action):
+    for candidate in plans.candidates(run,extraction,action,include_unavailable=True):
         prior=checked_span(run,candidate['plan_source'])
         reason=('different_recorded_context' if recorded_scope(prior)!=recorded_scope(current)
                 else 'source_order_unestablished' if prior.get('order_known') is False or current.get('order_known') is False else None)
@@ -72,15 +72,31 @@ def coverage(result):
         linked_pairs=sum(bool(p['roles']) for p in pairs),
         oversized_pairs=sum(len(r.get('oversized_pairs',[])) for r in rows),
         excluded_pairs=sum(len(r['excluded_candidates']) for r in rows))
-    if result['schema']==plans.DIRECT_VERSION:
+    if result['schema'] in {plans.DIRECT_VERSION,plans.FOCUSED_VERSION}:
         output['indirect_pairs']=sum(p['choice']=='upstream_work_only' for p in pairs)
     return output
+
+
+def request_pages(run,extraction,action,pool,make,version):
+    for chunk,req in bounded_requests(pool,lambda group:make(run,extraction,action,group),count=LIMIT,max_bytes=MAX_BYTES):
+        if version!=plans.FOCUSED_VERSION or req is None:
+            yield chunk,req
+            continue
+        # Retain the source packet, contracts and cutoff of the full page.
+        # Each decision sees just one named candidate, so another step cannot
+        # absorb its role. Every candidate still receives its own observation.
+        for candidate in chunk:
+            focused=deepcopy(req);key=candidate['id']
+            focused['state']['relation_harness']=version
+            focused['state']['plan_stage_candidates']=[deepcopy(candidate)]
+            focused['questions']={key:focused['questions'][key]}
+            yield [candidate],focused
 
 
 def build(run,extraction,decide,*,progress=None,version=VERSION):
     if version not in plans.PAGED_VERSIONS:raise InputError('Unknown paged Plan correspondence version')
     make,choices,roles_for,unresolved=request,CHOICES,ROLE_SETS,'unresolved'
-    if version==plans.DIRECT_VERSION:
+    if version in {plans.DIRECT_VERSION,plans.FOCUSED_VERSION}:
         from . import plan_scope_roles as direct
         make,choices,roles_for,unresolved=direct.request,direct.CHOICES,direct.ROLE_SETS,direct.UNRESOLVED
     if extraction['status']!='complete_local_extraction':raise InputError('Complete local selection is required before plan relations')
@@ -101,7 +117,7 @@ def build(run,extraction,decide,*,progress=None,version=VERSION):
         if not pool:
             row['status']='excluded_prior_plans' if excluded else 'no_prior_selected_plan';publish();continue
         row['status']='inspecting'
-        for chunk,req in bounded_requests(pool,lambda chunk:make(run,extraction,action,chunk),count=LIMIT,max_bytes=MAX_BYTES):
+        for chunk,req in request_pages(run,extraction,action,pool,make,version):
             if req is None:
                 row.setdefault('oversized_pairs',[]).extend(dict(plan_unit_id=c['plan_unit_id'],step_id=c['step']['id']) for c in chunk)
                 publish();continue

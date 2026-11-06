@@ -17,6 +17,9 @@ def build(run,document,before,after):
                 'reason':'A complete selected requested-work history is unavailable.'}
     units={u['id']:u for u in document['units']}
     events={e['id']:e for e in run['events']}
+    def scope(unit):return unit['trajectory_id'],events[unit['source']['event_id']].get('context_id')
+    if scope(before)!=scope(after):
+        return {'schema':VERSION,'available':False,'reason':'The dispatches belong to different recorded contexts.'}
 
     def position(unit):
         ref=unit['source'];return events[ref['event_id']]['index'],ref['start'],ref['end']
@@ -29,7 +32,7 @@ def build(run,document,before,after):
     for step in work['steps']:
         owner=units.get(step['unit_id'])
         if owner is None:raise InputError('Requested scope refers to a missing contribution')
-        if owner['trajectory_id']!=after['trajectory_id']:continue
+        if scope(owner)!=scope(after):continue
         if step['status'] not in {'selected_update','unchanged'}:raise InputError('Incomplete requested scope step')
         steps.append((owner,step))
     steps.sort(key=lambda item:position(item[0]))

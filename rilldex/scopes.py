@@ -74,7 +74,7 @@ def extract(packet, unit_id, directory, *, candidate_calls=0, decision_calls=0,
         if candidate_identity is not None:
             raise InputError('A custom candidate identity requires a custom transport')
         config = candidate.settings()
-        identity = dict(adapter=candidate.VERSION, endpoint=config['endpoint'], model=config['model'])
+        identity = candidate.identity(config)
         candidate_transport = lambda payload: candidate.completion(payload, **config)
     else:
         if not isinstance(candidate_identity,str) or not 0 < len(candidate_identity.strip()) <= 240:

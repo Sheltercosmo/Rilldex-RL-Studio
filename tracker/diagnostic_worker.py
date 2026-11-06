@@ -33,6 +33,30 @@ def implementation(name):
     raise InputError('Unknown diagnostic implementation')
 
 
+def selected_implementation(directory, explicit=None, *, worker=False):
+    """Use current reading for new work; resume the saved protocol family."""
+    if explicit is not None:
+        implementation(explicit)
+        return explicit
+    root=Path(directory)
+    if worker:
+        path=root/'worker.json'
+        if not path.exists():return 'search'
+        name=read(path)['implementation']
+        implementation(name)
+        return name
+    for name in ('protocol.json','result.json'):
+        path=root/name
+        if not path.exists():continue
+        document=read(path)
+        schema=document.get('protocol',document).get('schema','')
+        for prefix,family in (('diagnostic-search/','search'),('requirement-diagnostics/','requirements'),
+                              ('source-diagnostic-chains/','chains'),('source-diagnostics/','source')):
+            if schema.startswith(prefix):return family
+        raise InputError('Unknown saved diagnostic protocol; choose --protocol explicitly')
+    return 'search'
+
+
 def selection(run_ids=None,experiment=None,adapters=None):
     if run_ids is not None:
         if experiment or adapters or not run_ids:raise InputError('Select explicit run IDs or latest-source filters')
@@ -86,8 +110,8 @@ def inventory(store,selector,protocol_name='chains',protocol_version=None):
         elif run['adapter']=='verl-generation':
             item.update(eligibility='ineligible',reason='Flattened generation has no recorded action coverage')
         else:
-            source=(implementation('search').source_from_run(run, protocol_version or implementation('search').DEFAULT_VERSION)
-                    if protocol_name=='search' else source_monitor.from_run(run))
+            source=(implementation(protocol_name).source_from_run(run, protocol_version or implementation(protocol_name).DEFAULT_VERSION)
+                    if protocol_name in {'search','requirements'} else source_monitor.from_run(run))
             if source['action_coverage']=='unavailable':item.update(eligibility='ineligible',reason='Recorded action coverage is unavailable')
             elif not source['trace'].strip():item.update(eligibility='ineligible',reason='No readable recorded trace')
             elif protocol_name not in {'search','requirements'} and len(source['task'])+len(source['trace'])>source_monitor.MAX_CHARS:
@@ -106,7 +130,7 @@ def plan(store,selector,protocol_name='chains'):
         row={k:v for k,v in item.items() if not k.startswith('_')}
         if item['eligibility']=='ready':
             source=item['_source'];row['source_chars']=len(source['task'])+len(source['trace'])
-            row['scan_requests_before_cache']=(sum(1 for _ in module.requests(source))+sum(1 for _ in module.term_requests(source)) if protocol_name=='requirements'
+            row['scan_requests_before_cache']=(sum(1 for _ in module.requests(source,version=module.protocol()['schema']))+sum(1 for _ in module.term_requests(source,version=module.protocol()['schema'])) if protocol_name=='requirements'
                 else len(list(module.pages(module.index(source, module.protocol()['schema'])))) if protocol_name=='search' else 1)
             row['published_result_reusable']=published_measurement(store,item,module.protocol()) is not None
         rows.append(row)
@@ -338,7 +362,7 @@ def audit(store,root):
             run=read(path);folder=path.parent
             if run['id']!=folder.parent.name or digest(run)!=folder.name:raise InputError('Frozen diagnostic source changed')
             source=(module.source_from_run(run, config['protocol']['schema'])
-                    if config['implementation']=='search' else source_monitor.from_run(run))
+                    if config['implementation'] in {'search','requirements'} else source_monitor.from_run(run))
             if (folder/'input.json').exists() and read(folder/'input.json')!=source:raise InputError('Frozen diagnostic input changed')
             validation=module.audit(source,read(folder/'result.json'),folder) if (folder/'result.json').exists() else None
             for packet in (folder/'decisions').glob('*.json'):

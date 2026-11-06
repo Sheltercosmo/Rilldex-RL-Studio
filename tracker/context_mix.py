@@ -86,7 +86,8 @@ def _input(run, selected):
         if event['index'] >= anchor['index'] or not same_scope(event): continue
         if (event.get('source_message_index') is not None and
                 event.get('source_message_index') == selected.get('source_message_index')): continue
-        if event.get('agent_visibility') == 'not_established' or event['kind'].startswith('external'): continue
+        if (event.get('agent_visible') is False or event.get('agent_visibility') == 'not_established'
+                or event['kind'].startswith('external')): continue
         if event.get('order_known') is False: continue
         if event['kind'] not in {'instruction', 'message', 'reasoning', 'action', 'feedback', 'context'}: continue
         actor = event.get('actor')
@@ -95,7 +96,12 @@ def _input(run, selected):
         if event.get('context_kind') in {'summary','memory','retrieval'}: category = event['context_kind']
         prior.append(block(event.get('text', ''), category, event['source_pointer'], event['id']))
     # Root tool definitions in chat exports apply to the exported conversation.
-    if run.get('adapter') in {'chat-messages', 'agent-process-bench', 'nebius-openhands'} and raw.get('tools'):
+    if run.get('adapter_version') == 'chat-messages/2':
+        scope = (selected.get('trajectory_id'), selected.get('context_id'))
+        for i,session in enumerate(raw['sessions']):
+            if (session['trajectory_id'],session['context_id']) == scope and session.get('tools'):
+                prior.append(block(session['tools'], 'tools', f'/sessions/{i}/tools'))
+    if run.get('adapter') in {'chat-messages', 'responses-items', 'agent-process-bench', 'nebius-openhands'} and raw.get('tools'):
         prior.append(block(raw['tools'], 'tools', '/tools'))
     return prior, 'recorded_prefix', None
 
@@ -105,6 +111,9 @@ def scan(run, event_id):
     if selected is None: raise InputError('Selected source step was not found')
     if selected.get('actor') not in {'agent', 'assistant'}:
         return dict(schema=VERSION, available=False, reason='Select an agent message or action to inspect its input context.')
+    if (selected.get('agent_visible') is False or selected.get('agent_visibility') == 'not_established'
+            or selected['kind'].startswith('external')):
+        return dict(schema=VERSION, available=False, reason='Agent-visible input is not established for this source record.')
     blocks, basis, request_path = _input(run, selected)
     totals = Counter()
     for b in blocks: totals[b['category']] += b['chars']

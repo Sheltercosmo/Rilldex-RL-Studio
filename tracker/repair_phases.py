@@ -4,14 +4,16 @@ Inspired by Graphectory's history-sensitive phase mapping. This deliberately
 supports fewer command forms: opaque dispatches remain visible gaps. It records
 attempts, never successful edits, tests, private intent, or task completion.
 """
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import PurePosixPath
 import re
 import shlex
 
 from .schema import InputError, digest
+from .capabilities import recorded_scope
+from .work_order import Evidence
 
-VERSION = 'repair-phases/1'
+VERSION = 'repair-phases/2'
 PROFILE = 'software_repair'
 CATEGORIES = {
     'localization': {'label': 'Localize / reproduce', 'color': '#9682d6'},
@@ -106,13 +108,13 @@ def project(run, graph_id):
     histories = defaultdict(lambda: {'patch': None, 'opaque': False})
     actions = [e for e in sorted(run['events'], key=lambda e: e['index'])
                if e['kind'] == 'action' and e.get('actor') == 'agent' and not e.get('copied_context')]
-    batches = Counter((e['trajectory_id'], e.get('parent_id')) for e in actions if e.get('parent_id'))
+    ordering=Evidence({e['id']:e for e in actions})
     if applicable:
         for e in actions:
-            history = histories[e['trajectory_id']]
+            history = histories[recorded_scope(e)]
             op = operation(e)
-            if e.get('batch_size', 0) > 1 or e.get('parent_id') and batches[(e['trajectory_id'], e['parent_id'])] > 1:
-                op = {'kind': 'unknown', 'rule': 'unordered_batch'}
+            if not ordering.is_ordered(e['id']):
+                op = {'kind': 'unknown', 'rule': 'unordered_source' if e.get('order_known') is False else 'unordered_batch'}
             kind = op['kind']
             contextual = kind in {'test', 'test_edit'} or kind == 'read' and op.get('target_role') == 'test'
             if contextual:
@@ -120,6 +122,7 @@ def project(run, graph_id):
             else:
                 phase = {'read': 'localization', 'patch': 'patch', 'submission': 'submission'}.get(kind, 'unknown')
             records.append({'event_id': e['id'], 'event_index': e['index'], 'trajectory_id': e['trajectory_id'],
+                            'context_id':e.get('context_id'),
                             'source_pointer': e['source_pointer'], 'text': e['text'], 'phase': phase,
                             'operation': op, 'prior_patch_event_id': history['patch'],
                             'history_has_unclassified_dispatch': history['opaque'],
@@ -130,7 +133,7 @@ def project(run, graph_id):
                 history['opaque'] = True
     lanes = defaultdict(list)
     for r in records:
-        lane = lanes[r['trajectory_id']]
+        lane = lanes[recorded_scope(r)]
         if not lane or lane[-1]['phase'] != r['phase']:
             lane.append({'phase': r['phase'], 'event_ids': []})
         lane[-1]['event_ids'].append(r['event_id'])
@@ -138,12 +141,12 @@ def project(run, graph_id):
     for tid, blocks in lanes.items():
         for a, b in zip(blocks, blocks[1:]):
             if 'unknown' not in {a['phase'], b['phase']}:
-                pairs.append({'from': a['phase'], 'to': b['phase'], 'trajectory_id': tid,
+                pairs.append({'from': a['phase'], 'to': b['phase'], 'trajectory_id': tid[0],'context_id':tid[1],
                               'from_event_id': a['event_ids'][-1], 'to_event_id': b['event_ids'][0]})
     counts = {k: sum(r['phase'] == k for r in records) for k in CATEGORIES}
     value = {'schema': VERSION, 'profile': PROFILE, 'run_id': run['id'], 'source_hash': digest(run),
              'graph_id': graph_id, 'applicable': applicable, 'activation': 'metadata.task_family=software_repair',
-             'categories': CATEGORIES, 'records': records, 'paths': [{'trajectory_id': k, 'blocks': v} for k, v in lanes.items()],
+             'categories': CATEGORIES, 'records': records, 'paths': [{'trajectory_id': k[0],'context_id':k[1], 'blocks': v} for k, v in lanes.items()],
              'pairs': pairs, 'counts': counts, 'action_count': len(records),
              'coverage': (len(records) - counts['unknown']) / len(records) if records else None,
              'limit': LIMIT}

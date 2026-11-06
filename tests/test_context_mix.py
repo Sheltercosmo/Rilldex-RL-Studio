@@ -54,6 +54,18 @@ class ContextMixTests(unittest.TestCase):
         self.assertIn('summary',[b['category'] for b in result['blocks']])
         self.assertFalse(any('parser fixture' in b['text'] for b in result['blocks']))
 
+    def test_explicit_private_events_are_not_context_or_review_inputs(self):
+        run=example(); selected=run['events'][-2]
+        private=run['events'][1];private['agent_visible']=False
+        private['text']='PRIVATE EVALUATOR SENTINEL'
+        report=scan(run,selected['id'])
+        self.assertNotIn('PRIVATE EVALUATOR SENTINEL',json.dumps(report))
+        self.assertNotIn(private['id'],[b.get('event_id') for b in report['blocks']])
+        selected['agent_visible']=False
+        hidden=scan(run,selected['id'])
+        self.assertFalse(hidden['available'])
+        self.assertNotIn('blocks',hidden)
+
     def test_removed_instructions_and_duplicate_multiplicity_are_visible(self):
         run=example(); first=run['events'][2]; last=run['events'][-2]
         run['raw']['context_snapshots']=[

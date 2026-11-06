@@ -30,7 +30,7 @@ def fixture():
 def transport(req):
     stage=req['state']['stage']
     if stage=='method_comparison':
-        from tests.test_method_comparison import native_response
+        from tests.method_comparison_fixture import native_response
         # The sole repeated pair in this fixture converts the same report twice.
         return native_response(req)
     if stage=='executor_reports':
@@ -41,6 +41,10 @@ def transport(req):
         current=req['state']['current_action']['content']['summary']['text']
         choices={p['id']:'same_work_target' if p['content']['summary']['text']==current else 'unrelated' for p in req['state']['prior_actions']}
         return dict(model=req['model'],answers={k:dict(type='choice',probabilities={v:float(v==choices[k]) for v in q['criteria']}) for k,q in req['questions'].items()})
+    if stage=='action_targets':
+        same=req['state']['current']['content']['summary']['text']==req['state']['earlier']['content']['summary']['text']
+        choice='same_work_target' if same else 'unrelated'
+        return dict(model=req['model'],answers={k:dict(type='choice',probabilities={v:float(v==choice) for v in q['criteria']}) for k,q in req['questions'].items()})
     return plan_transport(req)
 
 

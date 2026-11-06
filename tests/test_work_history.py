@@ -18,6 +18,22 @@ def history_fixture():
 
 
 class WorkHistoryTests(unittest.TestCase):
+    def test_other_context_does_not_become_intervening_work(self):
+        run,doc=history_fixture()
+        run['events'][4]['context_id']='another-context'
+        doc['work_paths']=paths(run,doc)
+        result=build(run,doc)
+        self.assertEqual(len(result['streams']),2)
+        self.assertEqual(result['recurrences'][0]['intervening_action_unit_ids'],[])
+        self.assertEqual(result['counts']['consecutive_recurrences'],1)
+        self.assertEqual({s.get('context_id') for s in result['streams']},{None,'another-context'})
+
+    def test_same_target_link_cannot_join_reset_contexts(self):
+        run,doc=history_fixture()
+        run['events'][7]['context_id']='reset'
+        with self.assertRaisesRegex(InputError,'context'):paths(run,doc)
+        with self.assertRaisesRegex(InputError,'context'):build(run,doc)
+
     def test_spaced_recurrence_is_not_a_failure_or_extra_check(self):
         run,doc=history_fixture();before=deepcopy(doc);result=build(run,doc)
         self.assertEqual(doc,before);self.assertEqual(result['counts']['operations'],3)

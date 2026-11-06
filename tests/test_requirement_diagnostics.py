@@ -113,7 +113,7 @@ class RequirementTests(unittest.TestCase):
     def test_positive_publishes_through_existing_monitor_and_map_evidence(self):
         with TemporaryDirectory() as temp:
             root=Path(temp);store=Store(root/'db');doc=harbor();doc['steps'][-1]['message']='CONFLICT: dummy replacement.'
-            run=normalize(doc,'harbor')[0];store.add([run]);s=worker.source_monitor.from_run(run)
+            run=normalize(doc,'harbor')[0];store.add([run]);s=detector.source_from_run(run)
             result=detector.execute(s,root/'work',transport)
             detector.register(store,run,s,result,root/'work')
             added=reward_detectors.activate(store,{'checks':['requirement_conflict'],'observer':detector.protocol()['id']})
@@ -147,9 +147,9 @@ class RequirementTests(unittest.TestCase):
             self.assertTrue(detector.audit(s,saved,temp)['exact_replay'])
 
     def test_literal_targets_keep_source_candidates_options_and_cached_term_selection(self):
-        s=example();terms=detector.criteria(s)
+        s=example();terms=detector.criteria(s,version=detector.LITERAL_VERSION)
         old=list(detector.requests(s,terms,version=detector.PRIORITIZED_VERSION))
-        new=list(detector.requests(s,terms,version=detector.CURRENT_VERSION))
+        new=list(detector.requests(s,terms,version=detector.LITERAL_VERSION))
         self.assertEqual(new,[detector.bind_questions(r) for r in old])
         for previous,current in zip(old,new):
             self.assertEqual(previous['state']['source_fragments'],current['state']['source_fragments'])
@@ -203,7 +203,7 @@ class RequirementTests(unittest.TestCase):
             done=worker.execute(store,root/'work',transport,selector=selector,protocol_name='requirements',max_new_calls=100)
             self.assertEqual(done['coverage']['counts'],{'complete':1})
             self.assertTrue(worker.audit(store,root/'work')['runs'][0]['validation']['exact_replay'])
-            self.assertTrue(detector.audit(worker.source_monitor.from_run(run),partial,folder)['exact_replay'])
+            self.assertTrue(detector.audit(detector.source_from_run(run,partial['schema']),partial,folder)['exact_replay'])
 
 
 if __name__=='__main__':unittest.main()

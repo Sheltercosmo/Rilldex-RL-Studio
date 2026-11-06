@@ -58,7 +58,10 @@ def capture(run):
         if not isinstance(sid,str) or sid not in snaps:raise InputError('Missing input snapshot')
         s=snaps[sid]
         if ev(s['event_id'])['index']>ev(eid)['index']:raise InputError('Future snapshot cannot bind earlier event')
-        if ev(s['event_id'])['trajectory_id']!=ev(eid)['trajectory_id']:raise InputError('Cross-trajectory state binding requires an explicit handoff')
+        # Producer-bound environment state can survive a conversation reset.
+        # This binding records input state, not what the agent remembers.
+        if ev(s['event_id'])['trajectory_id']!=ev(eid)['trajectory_id']:
+            raise InputError('Cross-trajectory state binding requires an explicit handoff')
         return s
     def pair(row):
         a=ev(row.get('action_id'));r=ev(row.get('result_event_id'))
@@ -120,7 +123,7 @@ def derive(run):
             edits.append({**edit,'changed_objects':sorted(k for k in set(a)|set(b) if a.get(k)!=b.get(k))})
     checks.sort(key=lambda q:events[q['action_id']]['index'])
     def index(eid):return events[eid]['index'] if eid else -1
-    def same_lane(a,b):return events[a]['trajectory_id']==events[b]['trajectory_id']
+    def same_lane(a,b):return (events[a]['trajectory_id'],events[a].get('context_id'))==(events[b]['trajectory_id'],events[b].get('context_id'))
     def applicability(check,snapshot):
         old=snaps.get(check.get('snapshot_id'))
         if not old or not check['required_objects'] or check.get('state_stable') is not True:return 'unknown'

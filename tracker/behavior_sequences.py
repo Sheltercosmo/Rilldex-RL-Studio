@@ -1,7 +1,9 @@
 """Occurrence-preserving activity sequences. Order is not causality or task purpose."""
 from collections import Counter, defaultdict
 from .schema import digest
-VERSION = 'activity-sequence/4'
+from .capabilities import recorded_scope
+from .graph_sequence import Ordering
+VERSION = 'activity-sequence/5'
 # A sequence must preserve the unit vocabulary. Distribution groupings merge
 # distinct operations (e.g. Orient/Plan) and cannot stand in for task phases.
 CATEGORIES = {key: {'label':label, 'color':color} for key,label,color in [
@@ -20,6 +22,7 @@ CATEGORIES.update(unknown={'label':'Unmapped activity','color':'#9296a4'},
 
 
 def project(graph):
+    ordering=Ordering(graph)
     events = sorted([n['properties'] for n in graph['nodes'] if n['kind']=='event'], key=lambda e:e['index'])
     units = defaultdict(list)
     for n in graph['nodes']:
@@ -27,7 +30,6 @@ def project(graph):
         if n['kind']=='unit' and p.get('actor')=='agent' and p.get('kind')!='feedback':
             units[p.get('source',{}).get('event_id')].append(n)
     lanes=defaultdict(list); missing=0; unit_count=0; source_records=0
-    batches=Counter((e['trajectory_id'],e.get('parent_id')) for e in events if e['kind']=='action' and e.get('parent_id'))
     def append(lane, category, eid, uid=None, start=None, end=None, member=None):
         # Gaps never disappear through compression, even between matching labels.
         if not lane or lane[-1]['category']!=category:
@@ -39,13 +41,14 @@ def project(graph):
         if start is not None:b['spans'].append({'event_id':eid,'start':start,'end':end})
     for e in events:
         if e.get('actor')!='agent' or e.get('copied_context') or not e.get('text','').strip():continue
-        source_records+=1; lane=lanes[e['trajectory_id']]; text=e['text']; rows=units.get(e['id'],[])
+        source_records+=1; lane=lanes[recorded_scope(e)]; text=e['text']; rows=units.get(e['id'],[])
         bounds=[n['properties'].get('source',{}) for n in rows]
         valid=bool(rows) and all(type(b.get('start')) is int and type(b.get('end')) is int and
             0<=b['start']<b['end']<=len(text) and text[b['start']:b['end']]==b.get('text') for b in bounds)
         rows=sorted(rows,key=lambda n:n['properties'].get('source',{}).get('start',0)) if valid else []
         overlapping=any(a['properties']['source']['end']>b['properties']['source']['start'] for a,b in zip(rows,rows[1:]))
-        if not valid or overlapping or e.get('batch_size',0)>1 or batches[(e['trajectory_id'],e.get('parent_id'))]>1:
+        if (not valid or overlapping or not ordering.native.is_ordered(e['id']) or
+                e.get('agent_visible') is False or e.get('agent_visibility')=='not_established'):
             append(lane,'gap',e['id']);missing+=1;continue
         cursor=0
         for n in rows:
@@ -60,17 +63,18 @@ def project(graph):
             append(lane,activity if activity in CATEGORIES else 'unknown',e['id'],n['id'],s['start'],s['end'],member);unit_count+=1
             cursor=s['end']
         if text[cursor:].strip():append(lane,'gap',e['id'],start=cursor,end=len(text));missing+=1
-    paths=[{'trajectory_id':k,'blocks':v} for k,v in sorted(lanes.items())]
+    paths=[{'trajectory_id':k[0],'context_id':k[1],'blocks':v}
+           for k,v in sorted(lanes.items(),key=lambda item:(item[0][0],item[0][1] or ''))]
     pairs=[]
     for p in paths:
         for a,b in zip(p['blocks'],p['blocks'][1:]):
             if {a['category'],b['category']} & {'gap','unknown','unresolved'}:continue
-            pairs.append({'from':a['category'],'to':b['category'],'trajectory_id':p['trajectory_id'],
+            pairs.append({'from':a['category'],'to':b['category'],'trajectory_id':p['trajectory_id'],'context_id':p['context_id'],
                           'from_units':a['unit_ids'],'to_units':b['unit_ids']})
     value={'schema':VERSION,'run_id':graph['run_id'],'graph_id':graph['id'],'observer':graph['observer'],
            'source_hash':graph['source_hash'],'paths':paths,'pairs':pairs,'units':unit_count,
            'source_records':source_records,'gaps':missing,'flow_eligible':len(paths)==1 and unit_count>0,
-           'limit':'Consecutive units of the same base activity form a block. Blocks are not task phases; adjacency is not a relationship. Observation ends is not termination. Parallel trajectories are not concatenated.'}
+           'limit':'Consecutive units of the same base activity form a block within one agent context. Blocks are not task phases; adjacency is not a relationship. Observation ends is not termination. Separate agents and context resets are not concatenated.'}
     return {'id':'sequence-'+digest(value),**value}
 
 
@@ -91,6 +95,7 @@ def compare(sequences, focus, reference, width=10):
             visible=[cats[i] if i<len(cats) else 'end' for i in range(width)]
             visible.append('tail' if len(cats)>width else 'end')
             paths.append({'run_id':s['run_id'],'graph_id':s['graph_id'],'trajectory_id':s['paths'][0]['trajectory_id'],
+                          'context_id':s['paths'][0].get('context_id'),
                           'categories':visible,'blocks':blocks,'units':s['units'],'source_records':s['source_records'],
                           'gaps':s['gaps'],'hidden_blocks':max(0,len(blocks)-width)})
             for i,cat in enumerate(visible):columns[i][cat].append(s['run_id'])
@@ -102,12 +107,14 @@ def compare(sequences, focus, reference, width=10):
             if total:
                 for a in CATEGORIES:
                     for b in CATEGORIES:shares[(a,b)].append(counts[(a,b)]/total)
+        context_paths=[{'run_id':s['run_id'],'graph_id':s['graph_id'],**path}
+                       for s in chosen if len(s['paths'])>1 for path in s['paths']]
         groups[name]={'total':len(ids),'available':len(chosen),'flow_eligible':len(eligible),
-            'missing_or_multistream':len(ids)-len(eligible),'paths':paths,
+            'missing_or_multistream':len(ids)-len(eligible),'paths':paths,'context_paths':context_paths,
             'columns':[[{'category':k,'count':len(v),'run_ids':v} for k,v in sorted(c.items())] for c in columns],
             'links':[[{'from':a,'to':b,'count':len(v),'run_ids':v} for (a,b),v in sorted(c.items())] for c in links],
             'transitions':[{'from':a,'to':b,'count':sum(v['count'] for v in rows),'rollouts':len(rows),
                 'mean_pair_share':sum(shares[(a,b)])/len(shares[(a,b)]),'witnesses':rows} for (a,b),rows in sorted(matrix.items())],
             'pair_rollouts':sum(bool(s['pairs']) for s in chosen)}
     return {'schema':VERSION,'categories':CATEGORIES,'width':width,'requested_width':requested_width,'groups':groups,
-            'definition':'Flow: one path per eligible single-trajectory rollout. Matrix: mean per-rollout share of eligible compressed adjacent pairs. Gaps are not bridged.'}
+            'definition':'Flow: one path per eligible single-context rollout. Multiple contexts remain individually inspectable. Matrix: mean per-rollout share of eligible compressed adjacent pairs within recorded contexts. Gaps are not bridged.'}

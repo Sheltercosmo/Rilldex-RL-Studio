@@ -20,7 +20,7 @@ def transport(req):
             return 'prepares' if subject.startswith('Create') else 'attempts' if subject.startswith('Write') else 'no_supported_role'
         return 'attempts' if subject.startswith('Convert') else 'checks' if subject.startswith('List') else 'no_supported_role'
     selected={p['id']:role(p) for p in req['state']['plan_stage_candidates']}
-    if req['state']['relation_harness']==plans.DIRECT_VERSION:
+    if req['state']['relation_harness'] in {plans.DIRECT_VERSION,plans.FOCUSED_VERSION}:
         from tracker.plan_scope_roles import NAMES
         selected={k:NAMES.get(v,'another_step_or_unrelated') for k,v in selected.items()}
     return {'model':req['model'],'answers':{key:{'type':'choice','choice':'unresolved','confidence':0,

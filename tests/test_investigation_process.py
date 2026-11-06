@@ -111,6 +111,31 @@ class WorkStateTests(unittest.TestCase):
 
 
 class SequenceTests(unittest.TestCase):
+    def test_context_resets_do_not_create_strategy_transitions(self):
+        run=captured()
+        for e in run['events']:e['context_id']='before' if e['index']<7 else 'after'
+        graph=semantic(run,['inspect','construct','verify']);out=seq.project(graph)
+        self.assertEqual(len(out['paths']),2)
+        self.assertFalse(out['flow_eligible'])
+        events={e['id']:e for e in run['events']}
+        for path in out['paths']:
+            self.assertEqual({events[eid]['context_id'] for b in path['blocks'] for eid in b['event_ids']},{path['context_id']})
+        for pair in out['pairs']:
+            unit_events={n['id']:n['properties']['source']['event_id'] for n in graph['nodes'] if n['kind']=='unit'}
+            contexts={events[unit_events[uid]]['context_id'] for uid in pair['from_units']+pair['to_units']}
+            self.assertEqual(contexts,{pair['context_id']})
+        comparison=seq.compare([out],[run['id']],[])['groups']['focus']
+        self.assertEqual(comparison['flow_eligible'],0)
+        self.assertEqual(len(comparison['context_paths']),2)
+
+    def test_unknown_order_is_an_explicit_gap_in_activity_sequences(self):
+        run=captured()
+        agent=[e for e in run['events'] if e['actor']=='agent']
+        agent[1]['order_known']=False
+        out=seq.project(semantic(run,['inspect','construct','verify']))
+        self.assertEqual(out['gaps'],1)
+        self.assertTrue(any(agent[1]['id'] in b['event_ids'] for b in out['paths'][0]['blocks'] if b['category']=='gap'))
+
     def test_sequence_preserves_base_activities_and_exact_unit_navigation(self):
         acts=['plan','orient','construct','report','inspect','reason','hypothesize','decide','verify','coordinate']
         graph=semantic(captured(),acts);out=seq.project(graph);blocks=out['paths'][0]['blocks']

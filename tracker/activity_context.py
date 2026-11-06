@@ -5,21 +5,23 @@ No request, selected option, gate or stored observation is changed.
 """
 from collections import defaultdict
 from copy import deepcopy
+from .capabilities import recorded_scope
 
 VERSION = "activity-context-coverage/1"
-SUPPORTED_HARNESSES = {"semantic-activity/1.4"}
+SUPPORTED_HARNESSES = {"semantic-activity/1.4", "semantic-activity/1.6", "semantic-activity/1.7"}
 TEXT_PACKET_SCHEMA = "activity-text-packet/1"
 SECTIONS = ("authorized_instructions", "earlier_units", "prior_environment_or_harness_context")
 
 
 def visible_prefix(run, subject):
     result = []
+    current = next(e for e in run['events'] if e['id'] == subject['event_id'])
     for event in run["events"]:
-        if (event["trajectory_id"] != subject["trajectory_id"] or event["index"] > subject["event_index"]
+        if (recorded_scope(event) != recorded_scope(current) or event["index"] > subject["event_index"]
                 or event["kind"].startswith("external_")):
             continue
         kept = {k: deepcopy(event[k]) for k in ("id", "index", "actor", "kind", "text", "source_pointer", "trajectory_id",
-                "copied_context", "tool", "arguments", "parent_id", "source_call_id", "tool_contract", "media") if k in event}
+                "copied_context", "tool", "arguments", "parent_id", "source_call_id", "tool_contract", "media", "context_id") if k in event}
         if event["id"] == subject["event_id"]:
             kept["text"] = event["text"][:subject["end"]]
             kept["cutoff_codepoint"] = subject["end"]

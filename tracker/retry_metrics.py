@@ -5,8 +5,9 @@ semantic revision, causal learning, correctness, or whole-task recovery.
 """
 from copy import deepcopy
 from .operation_outcomes import action_outcomes
+from .capabilities import recorded_scope
 
-VERSION = 'same-work-retry/2'
+VERSION = 'same-work-retry/3'
 DEFINITIONS = {
     'changed_retry_completion_fraction': ('Changed retries completed · experimental',
         'Completed first recorded same-target retries with changed tool/arguments / such retries with a complete terminal operation outcome. Failure feedback must precede the retry. Partial outcomes count as not completed; unknowns are excluded. A payload change is not necessarily a semantic revision; completion is not task success.'),
@@ -45,7 +46,7 @@ def inspect(run, document):
         previous, current = events[a['source']['event_id']], events[b['source']['event_id']]
         if a['kind'] != 'action' or b['kind'] != 'action' or previous['actor'] != 'agent' or current['actor'] != 'agent':
             continue
-        if previous['trajectory_id'] != current['trajectory_id'] or previous['index'] >= current['index']:
+        if recorded_scope(previous) != recorded_scope(current) or previous['index'] >= current['index']:
             continue
         old = outcomes.get(previous['id'], {})
         if old.get('outcome') != 'failed' or not old.get('observations'):
@@ -75,11 +76,15 @@ def inspect(run, document):
 def refresh(run, observed):
     """Repair payload comparability while preserving saved identities/outcomes."""
     events = {e['id']: e for e in run['events']}
-    episodes = deepcopy(observed['episodes'])
-    for e in episodes:
-        before, after = payload(events[e['failed_event_id']]), payload(events[e['retry_event_id']])
+    episodes=[];missing=set(observed['failed_calls_without_selected_retry'])
+    for e in deepcopy(observed['episodes']):
+        previous,current=events[e['failed_event_id']],events[e['retry_event_id']]
+        if recorded_scope(previous)!=recorded_scope(current):
+            missing.add(previous['id']);continue
+        before, after = payload(previous), payload(current)
         e['payload_changed'] = None if before is None or after is None else before != after
-    return summarize(episodes, observed['failed_calls_without_selected_retry'])
+        episodes.append(e)
+    return summarize(episodes, sorted(missing-{e['failed_event_id'] for e in episodes}))
 
 
 def summarize(episodes, missing):

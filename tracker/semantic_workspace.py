@@ -16,7 +16,7 @@ from .semantic_extraction import (
 )
 
 VERSION = 'semantic-workspace/1'
-DEFAULT_CONTEXT = {'schema': 'readable-context/3', 'recent_events': 8,
+DEFAULT_CONTEXT = {'schema': 'readable-context/5', 'recent_events': 8,
                    'max_event_chars': 4000, 'extra_ranges': []}
 
 
@@ -71,8 +71,8 @@ def initialize(directory, run, *, include_user=True, context_policy=None,activit
     if feedback_profile is not None:config['feedback_profile']=feedback_profile
     if requested_profile is not None:config['requested_profile']=requested_profile
     if action_target_version is not None:
-        from .action_targets import PAGED_VERSION
-        if action_target_version!=PAGED_VERSION:raise InputError('Unsupported workspace action correspondence version')
+        from .action_targets import PAGED_VERSION,INTERVAL_VERSION
+        if action_target_version not in {PAGED_VERSION,INTERVAL_VERSION}:raise InputError('Unsupported workspace action correspondence version')
         config['action_target_version']=action_target_version
     if plan_relation_version is not None:
         from .plan_relations import PAGED_VERSIONS
@@ -83,8 +83,8 @@ def initialize(directory, run, *, include_user=True, context_policy=None,activit
         if execution_report_version!=REPORT_VERSION:raise InputError('Unsupported execution report version')
         config['execution_report_version']=execution_report_version
     if method_comparison_version is not None:
-        from .method_comparison import NATIVE_VERSION
-        if method_comparison_version!=NATIVE_VERSION or not action_target_version:
+        from .method_comparison import WORKSPACE_VERSIONS
+        if method_comparison_version not in WORKSPACE_VERSIONS or not action_target_version:
             raise InputError('Approach comparison requires the current method protocol and work-target links')
         config['method_comparison_version']=method_comparison_version
     with exclusive(directory) as root:
@@ -112,8 +112,8 @@ def load(directory):
     requested_profile(config.get('requested_profile'),config.get('include_user'))
     activity_choices(config.get('activity_routing',ACTIVITY_ROUTING))
     protocol(config.get('reading_protocol',READING_VERSION))
-    from .action_targets import PAGED_VERSION
-    if config.get('action_target_version') not in {None,PAGED_VERSION}:
+    from .action_targets import PAGED_VERSION,INTERVAL_VERSION
+    if config.get('action_target_version') not in {None,PAGED_VERSION,INTERVAL_VERSION}:
         raise InputError('Unsupported workspace action correspondence version')
     from .plan_relations import PAGED_VERSIONS
     if config.get('plan_relation_version') not in {None,*PAGED_VERSIONS}:
@@ -121,8 +121,8 @@ def load(directory):
     from .execution_reports import VERSION as REPORT_VERSION
     if config.get('execution_report_version') not in {None,REPORT_VERSION}:
         raise InputError('Unsupported execution report version')
-    from .method_comparison import NATIVE_VERSION
-    if config.get('method_comparison_version') not in {None,NATIVE_VERSION} or (config.get('method_comparison_version') and not config.get('action_target_version')):
+    from .method_comparison import WORKSPACE_VERSIONS
+    if config.get('method_comparison_version') not in {None,*WORKSPACE_VERSIONS} or (config.get('method_comparison_version') and not config.get('action_target_version')):
         raise InputError('Unsupported approach comparison configuration')
     if (config.get('schema') != VERSION or not config.get('run_id', '').isalnum()
             or config.get('activity_standard') != ACTIVITY_VERSION

@@ -25,6 +25,15 @@ def fixture(texts=('The status is ready.', 'Proceed with the task.')):
 
 
 class AnnotationChangesTests(unittest.TestCase):
+    def test_annotation_transitions_do_not_join_contexts(self):
+        _,g,_=fixture()
+        for n in g['nodes']:
+            if n['kind']=='event':n['properties']['context_id']=n['properties']['id']
+        g=ur.finish(g)
+        result=ac.compare(g,g)
+        self.assertTrue(result['activity_counts'])
+        self.assertEqual(result['observed_transitions'],[])
+
     def test_identical_snapshot_and_id_renaming_do_not_create_annotation_drift(self):
         _, g, units = fixture(); renamed = deepcopy(g)
         names = {u['id']: 'new-'+u['id'] for u in units}

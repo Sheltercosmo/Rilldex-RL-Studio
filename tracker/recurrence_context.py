@@ -7,6 +7,66 @@ from copy import deepcopy
 from .schema import InputError, digest
 
 VERSION = 'recurrence-context/2'
+VISIBLE_VERSION = 'recurrence-context/3'
+
+
+def source_reader(run, document, current_id):
+    """Restrict a current reader to its recorded, visible context.
+
+    Original event identities, indices and offsets remain intact. Removed
+    records contribute only an ID and reason, never text or native payloads.
+    Legacy readers continue to call build() directly.
+    """
+    events={e['id']:e for e in run['events']}
+    current=next(u for u in document['units'] if u['id']==current_id)
+    # Older exported projections may omit event trajectory metadata. Keep that
+    # scope unspecified; never replace it with a guessed trajectory identity.
+    def recorded_scope(event):return event.get('trajectory_id'),event.get('context_id')
+    endpoint=events[current['source']['event_id']];scope=recorded_scope(endpoint)
+    if endpoint.get('order_known') is False:raise InputError('Current dispatch order is not established')
+    kept=[];excluded=[]
+    for event in run['events']:
+        reason=None
+        if recorded_scope(event)!=scope:reason='different_recorded_context'
+        elif event.get('copied_context'):reason='copied_context_not_current_observation'
+        elif event.get('order_known') is False:reason='order_not_established'
+        elif (event.get('kind','').startswith('external_') or event.get('agent_visibility')=='not_established'
+              or event.get('agent_visible') is False):reason='not_established_as_agent_visible'
+        if reason:
+            if event.get('trajectory_id')==endpoint.get('trajectory_id') and event['index']<=endpoint['index']:
+                excluded.append(dict(event_id=event['id'],reason=reason))
+        else:kept.append(event)
+    if endpoint['id'] not in {e['id'] for e in kept}:
+        raise InputError('Current dispatch is not a visible source observation')
+    if len(kept)==len(run['events']):return run,document,excluded
+    scoped_run={**run,'events':kept};ids={e['id'] for e in kept}
+    scoped=deepcopy(document)
+    scoped['units']=[u for u in scoped['units'] if u['source']['event_id'] in ids]
+    unit_ids={u['id'] for u in scoped['units']}
+    scoped['relations']=[r for r in scoped['relations'] if r['from'] in unit_ids and r['to'] in unit_ids]
+    if scoped.get('requested_work'):
+        scoped['requested_work']['steps']=[s for s in scoped['requested_work']['steps'] if s['unit_id'] in unit_ids]
+    if scoped.get('work_context'):
+        scoped['work_context']['observations']=[r for r in scoped['work_context']['observations'] if r['unit_id'] in unit_ids]
+    scoped['source_hash']=digest(scoped_run)
+    return scoped_run,scoped,excluded
+
+
+def safe_build(run, document, previous_id, current_id):
+    """Current UI context without foreign or unobserved source content."""
+    reader_run,reader_document,excluded=source_reader(run,document,current_id)
+    if not any(u['id']==previous_id for u in reader_document['units']):
+        raise InputError('Previous dispatch is outside the visible recorded context')
+    result=build(reader_run,reader_document,previous_id,current_id)
+    # The returned context accompanies the original document in history and
+    # pattern views. Keep relation references in that document's index space.
+    ids={u['id'] for u in reader_document['units']}
+    relation_indices=[i for i,r in enumerate(document['relations']) if r['from'] in ids and r['to'] in ids]
+    result['assessment_relation_indices']=[relation_indices[i] for i in result['assessment_relation_indices']]
+    if excluded:
+        result.update(schema=VISIBLE_VERSION,excluded_source_events=excluded,
+            scope='One recorded context through the current dispatch. Other contexts, copied records and unobserved source are excluded; their identifiers are coverage metadata only.')
+    return result
 
 
 def build(run, document, previous_id, current_id):

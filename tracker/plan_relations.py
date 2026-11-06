@@ -15,7 +15,8 @@ from .semantic_map import evidence
 VERSION = 'plan-stage-correspondence/2'
 PAGED_VERSION = 'plan-stage-correspondence/3'
 DIRECT_VERSION = 'plan-stage-correspondence/4'
-PAGED_VERSIONS = {PAGED_VERSION, DIRECT_VERSION}
+FOCUSED_VERSION = 'plan-stage-correspondence/5'
+PAGED_VERSIONS = {PAGED_VERSION, DIRECT_VERSION, FOCUSED_VERSION}
 POLICY = {'schema':'readable-context/1','recent_events':6,
           'max_event_chars':4000,'extra_ranges':[]}
 LIMIT = 24
@@ -32,7 +33,7 @@ EXPLANATIONS = {
     'checks':'This dispatch checks an aspect of the named stage’s result or progress; coverage and outcome remain separate questions.'}
 
 
-def candidates(run, extraction, action):
+def candidates(run, extraction, action, *, include_unavailable=False):
     current = checked_span(run, action['source'])
     result = []
     for plan in extraction['units']:
@@ -40,9 +41,15 @@ def candidates(run, extraction, action):
         event=checked_span(run,plan['source'])
         if (plan['actor']!=action['actor'] or plan['trajectory_id']!=action['trajectory_id'] or
                 (event['index'],plan['source']['end'])>(current['index'],action['source']['start'])):continue
+        unavailable=(event.get('context_id')!=current.get('context_id') or
+                     event.get('order_known') is False or current.get('order_known') is False)
+        if unavailable and not include_unavailable:continue
         for step in plan['plan_structure']['steps']:
             refs=[plan['source'],*step['evidence']]
-            for ref in refs:checked_span(run,ref,action['source'])
+            # The paged reader reports excluded plans without giving them to
+            # inference. Validate those against their own source cutoff.
+            cutoff=plan['source'] if unavailable else action['source']
+            for ref in refs:checked_span(run,ref,cutoff)
             result.append({'id':'s'+str(len(result)), 'plan_unit_id':plan['id'],
                 'plan_content_request':plan['content_request'], 'plan_source':plan['source'],
                 'plan_content':plan['content'], 'step':deepcopy(step)})

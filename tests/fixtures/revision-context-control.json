@@ -1,0 +1,563 @@
+{
+  "schema": "authored-revision-context-control/1",
+  "provenance": "Authored payment-change control, frozen from the existing revision metrics fixture; no model predictions or external data.",
+  "run": {
+    "schema": "jev-trace/1",
+    "adapter": "devai",
+    "adapter_version": "devai/1",
+    "metadata": {
+      "environment": "devai-openhands"
+    },
+    "events": [
+      {
+        "id": "e1",
+        "index": 0,
+        "kind": "instruction",
+        "actor": "user",
+        "text": "Book Alex on F.",
+        "source_pointer": "/trajectory/0/user_message",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "af93d088a3bd3de25bb89a83d0cfccaa543378bc818e57ea0a5624fff4f6d0bd"
+      },
+      {
+        "id": "e2",
+        "index": 1,
+        "kind": "reasoning",
+        "actor": "agent",
+        "text": "I will work on this request.",
+        "source_pointer": "/trajectory/0/agent/thought",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "c29feccaf10f2322b58d3a094f78e67081fb19d8a0fb65dcbe424fa36c16041a"
+      },
+      {
+        "id": "e3",
+        "index": 2,
+        "kind": "action",
+        "actor": "agent",
+        "text": "book(Alex,F,gift_card)",
+        "source_pointer": "/trajectory/0/agent/action",
+        "tool": "devai_recorded_action",
+        "arguments": {},
+        "arguments_available": false,
+        "call_id": "devai-step-0",
+        "parent_id": "e2",
+        "source_action_format": "publisher description; native arguments unavailable",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "73ae978acd01917585d721128654fce5adbae296b7ed2a3a8e17bd54d904f8a8"
+      },
+      {
+        "id": "e4",
+        "index": 3,
+        "kind": "feedback",
+        "actor": "environment",
+        "text": "Insufficient gift-card balance.",
+        "source_pointer": "/trajectory/0/environment",
+        "source_call_id": "devai-step-0",
+        "source_binding": "publisher_step_pair",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "3fd8f996f98cd98f673f927a40a06ae73416565974f2d34b2e1e00115085daca"
+      },
+      {
+        "id": "e5",
+        "index": 4,
+        "kind": "reasoning",
+        "actor": "agent",
+        "text": "The gift card cannot cover this booking, so I will use the authorized credit card.",
+        "source_pointer": "/trajectory/1/agent/thought",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "4dadfb77f20b8f7b06c01b3d8d8602afc2e06d21e4be35005f32a493e929658e"
+      },
+      {
+        "id": "e6",
+        "index": 5,
+        "kind": "action",
+        "actor": "agent",
+        "text": "book(Alex,F,credit_card)",
+        "source_pointer": "/trajectory/1/agent/action",
+        "tool": "devai_recorded_action",
+        "arguments": {},
+        "arguments_available": false,
+        "call_id": "devai-step-1",
+        "parent_id": "e5",
+        "source_action_format": "publisher description; native arguments unavailable",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "9394af11e278b38581fd490ac5ad2917e3f17b73a150e47639e87c14b3de1879"
+      },
+      {
+        "id": "e7",
+        "index": 6,
+        "kind": "feedback",
+        "actor": "environment",
+        "text": "WITHHELD_FUTURE_RESULT",
+        "source_pointer": "/trajectory/1/environment",
+        "source_call_id": "devai-step-1",
+        "source_binding": "publisher_step_pair",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "7e85d8789a6d7e1c5d7bf1aed84c36db4d61e296f0ca1261941e6581a1f04318"
+      }
+    ],
+    "outcome": {
+      "recorded_steps": 2
+    },
+    "warnings": [
+      "DevAI action strings and terminal output are recorded evidence; no exit status, policy checkpoint or independent task-success judgment is inferred.",
+      "Task identity missing: excluded from paired checkpoint comparisons.",
+      "Policy version missing: policy identity cannot be verified. Rollout trends use explicit experiment and training_step when provided."
+    ],
+    "raw": {
+      "trajectory_format": "devai/1",
+      "trajectory": [
+        {
+          "step": 0,
+          "user_message": "Book Alex on F.",
+          "agent": {
+            "thought": "I will work on this request.",
+            "action": "book(Alex,F,gift_card)"
+          },
+          "environment": "Insufficient gift-card balance."
+        },
+        {
+          "step": 1,
+          "agent": {
+            "thought": "The gift card cannot cover this booking, so I will use the authorized credit card.",
+            "action": "book(Alex,F,credit_card)"
+          },
+          "environment": "WITHHELD_FUTURE_RESULT"
+        }
+      ]
+    },
+    "id": "d8a1d52063d4d9559336a7f8"
+  },
+  "document": {
+    "source_hash": "dc58315982d2d02f35a312ce4ea1c8f3dc1e0343d187cb493f5f7bfc8cd34283",
+    "units": [
+      {
+        "id": "u-e1",
+        "actor": "user",
+        "trajectory_id": "main",
+        "kind": "semantic",
+        "activity": "orient",
+        "source": {
+          "event_id": "e1",
+          "start": 0,
+          "end": 15,
+          "text": "Book Alex on F.",
+          "source_pointer": "/trajectory/0/user_message"
+        },
+        "content": {
+          "summary": {
+            "text": "Book Alex on F.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 15,
+                "text": "Book Alex on F.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          },
+          "target": {
+            "text": "Book Alex on F.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 15,
+                "text": "Book Alex on F.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e2",
+        "actor": "agent",
+        "trajectory_id": "main",
+        "kind": "semantic",
+        "activity": "orient",
+        "source": {
+          "event_id": "e2",
+          "start": 0,
+          "end": 28,
+          "text": "I will work on this request.",
+          "source_pointer": "/trajectory/0/agent/thought"
+        },
+        "content": {
+          "summary": {
+            "text": "I will work on this request.",
+            "evidence": [
+              {
+                "event_id": "e2",
+                "start": 0,
+                "end": 28,
+                "text": "I will work on this request.",
+                "source_pointer": "/trajectory/0/agent/thought"
+              }
+            ]
+          },
+          "target": {
+            "text": "Book Alex on F.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 15,
+                "text": "Book Alex on F.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e3",
+        "actor": "agent",
+        "trajectory_id": "main",
+        "kind": "action",
+        "activity": "construct",
+        "source": {
+          "event_id": "e3",
+          "start": 0,
+          "end": 22,
+          "text": "book(Alex,F,gift_card)",
+          "source_pointer": "/trajectory/0/agent/action"
+        },
+        "content": {
+          "summary": {
+            "text": "book(Alex,F,gift_card)",
+            "evidence": [
+              {
+                "event_id": "e3",
+                "start": 0,
+                "end": 22,
+                "text": "book(Alex,F,gift_card)",
+                "source_pointer": "/trajectory/0/agent/action"
+              }
+            ]
+          },
+          "target": {
+            "text": "Book Alex on F.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 15,
+                "text": "Book Alex on F.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e4",
+        "actor": "environment",
+        "trajectory_id": "main",
+        "kind": "feedback",
+        "activity": null,
+        "source": {
+          "event_id": "e4",
+          "start": 0,
+          "end": 31,
+          "text": "Insufficient gift-card balance.",
+          "source_pointer": "/trajectory/0/environment"
+        },
+        "content": {
+          "summary": {
+            "text": "Insufficient gift-card balance.",
+            "evidence": [
+              {
+                "event_id": "e4",
+                "start": 0,
+                "end": 31,
+                "text": "Insufficient gift-card balance.",
+                "source_pointer": "/trajectory/0/environment"
+              }
+            ]
+          },
+          "target": {
+            "text": "Book Alex on F.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 15,
+                "text": "Book Alex on F.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e5",
+        "actor": "agent",
+        "trajectory_id": "main",
+        "kind": "semantic",
+        "activity": "orient",
+        "source": {
+          "event_id": "e5",
+          "start": 0,
+          "end": 82,
+          "text": "The gift card cannot cover this booking, so I will use the authorized credit card.",
+          "source_pointer": "/trajectory/1/agent/thought"
+        },
+        "content": {
+          "summary": {
+            "text": "The gift card cannot cover this booking, so I will use the authorized credit card.",
+            "evidence": [
+              {
+                "event_id": "e5",
+                "start": 0,
+                "end": 82,
+                "text": "The gift card cannot cover this booking, so I will use the authorized credit card.",
+                "source_pointer": "/trajectory/1/agent/thought"
+              }
+            ]
+          },
+          "target": {
+            "text": "Book Alex on F.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 15,
+                "text": "Book Alex on F.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e6",
+        "actor": "agent",
+        "trajectory_id": "main",
+        "kind": "action",
+        "activity": "construct",
+        "source": {
+          "event_id": "e6",
+          "start": 0,
+          "end": 24,
+          "text": "book(Alex,F,credit_card)",
+          "source_pointer": "/trajectory/1/agent/action"
+        },
+        "content": {
+          "summary": {
+            "text": "book(Alex,F,credit_card)",
+            "evidence": [
+              {
+                "event_id": "e6",
+                "start": 0,
+                "end": 24,
+                "text": "book(Alex,F,credit_card)",
+                "source_pointer": "/trajectory/1/agent/action"
+              }
+            ]
+          },
+          "target": {
+            "text": "Book Alex on F.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 15,
+                "text": "Book Alex on F.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e7",
+        "actor": "environment",
+        "trajectory_id": "main",
+        "kind": "feedback",
+        "activity": null,
+        "source": {
+          "event_id": "e7",
+          "start": 0,
+          "end": 22,
+          "text": "WITHHELD_FUTURE_RESULT",
+          "source_pointer": "/trajectory/1/environment"
+        },
+        "content": {
+          "summary": {
+            "text": "WITHHELD_FUTURE_RESULT",
+            "evidence": [
+              {
+                "event_id": "e7",
+                "start": 0,
+                "end": 22,
+                "text": "WITHHELD_FUTURE_RESULT",
+                "source_pointer": "/trajectory/1/environment"
+              }
+            ]
+          },
+          "target": {
+            "text": "Book Alex on F.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 15,
+                "text": "Book Alex on F.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "relations": [
+      {
+        "from": "u-e2",
+        "to": "u-e3",
+        "type": "recorded_with"
+      },
+      {
+        "from": "u-e4",
+        "to": "u-e3",
+        "type": "feedback_for"
+      },
+      {
+        "from": "u-e5",
+        "to": "u-e6",
+        "type": "recorded_with"
+      },
+      {
+        "from": "u-e7",
+        "to": "u-e6",
+        "type": "feedback_for"
+      },
+      {
+        "from": "u-e6",
+        "to": "u-e3",
+        "type": "same_action_target"
+      }
+    ],
+    "work_history": {
+      "available": true,
+      "streams": [
+        {
+          "groups": [
+            {
+              "id": "g",
+              "occurrences": [
+                {
+                  "unit_id": "u-e3"
+                },
+                {
+                  "unit_id": "u-e6"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "recurrences": [
+        {
+          "group_id": "g",
+          "previous_group_unit_id": "u-e3",
+          "unit_id": "u-e6"
+        }
+      ]
+    },
+    "origin": "Authored layer-isolation control; upstream grouping may deliberately be wrong",
+    "method_comparison": {
+      "schema": "work-method-comparison/3",
+      "available": true,
+      "definitions": {
+        "same_procedure": "Same procedure and same dispatched instructions/explicit settings. Formatting-only differences do not count. Changes to previously stored files, installed dependencies, environment state, new evidence or authorization are INTERVENING CONTEXT, not changed instructions in this dispatch. Re-executing the same command on an edited file belongs here; it need not be a blind retry.",
+        "reconfigured_procedure": "The procedure is retained, while the CURRENT DISPATCH changes explicit arguments, embedded payload, query, execution settings or parameters. An explicitly added setting counts even if it restates a default; it does not establish changed effective behavior. A changed file/environment referenced by an OTHERWISE IDENTICAL command is not a changed dispatch configuration.",
+        "alternative_procedure": "The mechanism or route for accomplishing the same work is replaced: for example deriving symbolically versus numerical search, reading existing records versus generating them experimentally, or browser interaction versus a direct API for the same transaction. A changed tool name, flag, file, query, payload or wording alone is insufficient.",
+        "different_work": "These operations do not address the same immediate work instance. A shared artifact/topic or broad task is insufficient. Preserve this disagreement with the upstream work grouping.",
+        "unresolved": "The supplied operations/context do not establish a comparison, or the needed procedure is not visible. Do not force a label from tool names or narrated intentions."
+      },
+      "observations": [
+        {
+          "previous_unit_id": "u-e3",
+          "current_unit_id": "u-e6",
+          "group_id": "g",
+          "status": "selected",
+          "upstream_identity_disputed": false,
+          "work_instance": "same_work_instance",
+          "comparison": "same_procedure",
+          "request": "authored-work-control",
+          "work_request": "authored-work-control"
+        }
+      ]
+    },
+    "attempt_revisions": {
+      "schema": "attempt-revision/4",
+      "source_hash": "dc58315982d2d02f35a312ce4ea1c8f3dc1e0343d187cb493f5f7bfc8cd34283",
+      "base_map_hash": "0f1006332f87ddfa46d7ef306585f7350c07a4759b6001a7b31b51e814350329",
+      "observations": [
+        {
+          "previous_unit_id": "u-e3",
+          "current_unit_id": "u-e6",
+          "group_id": "g",
+          "comparison": "same_procedure",
+          "work_instance": "same_work_instance",
+          "method_request_hash": "authored-work-control",
+          "declarations": [
+            {
+              "unit_id": "u-e5",
+              "selection": "procedure_change",
+              "request_hash": "9768fcfe064cdf86eeb34d64604b90592dfad5e01a048a7b8fd230166da1a02a",
+              "executions": {
+                "procedure_change": {
+                  "selection": "u-e6",
+                  "request_hash": "5fe059294f66748598209f46399b7789a4b463d875d6a0fc1d538275f64a45e1"
+                }
+              }
+            }
+          ],
+          "cutoff": {
+            "event_id": "e6",
+            "start": 0,
+            "end": 24,
+            "text": "book(Alex,F,credit_card)",
+            "source_pointer": "/trajectory/1/agent/action"
+          },
+          "candidate_unit_ids": [
+            "u-e5"
+          ],
+          "complete_candidate_window": true,
+          "status": "inspected"
+        }
+      ],
+      "scope": "Declared changes and their dispatch correspondence within selected consecutive same-work attempts. Missing links are not negative behavior evidence; execution correspondence is not task recovery or causation."
+    },
+    "operation_outcomes": {
+      "schema": "operation-outcomes/5",
+      "source_hash": "dc58315982d2d02f35a312ce4ea1c8f3dc1e0343d187cb493f5f7bfc8cd34283",
+      "observations": [
+        {
+          "action_event_id": "e3",
+          "response_event_id": "e4",
+          "outcome": "failed",
+          "complete_readable_response": true,
+          "complete_readable_dispatch": true
+        },
+        {
+          "action_event_id": "e6",
+          "response_event_id": "e7",
+          "outcome": "completed",
+          "complete_readable_response": true,
+          "complete_readable_dispatch": true
+        }
+      ]
+    }
+  }
+}

@@ -81,5 +81,17 @@ class ActivityTimelineTests(unittest.TestCase):
         for value in (0,101,True,1.5):
             with self.assertRaises(InputError):build([],{}, {},window_size=value)
 
+    def test_context_resets_have_separate_windows_for_the_same_agent(self):
+        run=reasoning_run()
+        for i,event in enumerate(run['events']):event['context_id']='first' if i<3 else 'second'
+        observed=analyze(run)
+        streams=observed['timeline']['streams']
+        self.assertEqual(len(streams),2)
+        self.assertEqual({s['context_id'] for s in streams},{'first','second'})
+        events={e['id']:e for e in run['events']}
+        for stream in streams:
+            self.assertEqual({events[u['event_id']]['context_id'] for u in stream['units']},{stream['context_id']})
+            self.assertEqual(stream['views'][0]['windows'][0]['start'],0)
+
 
 if __name__=='__main__':unittest.main()

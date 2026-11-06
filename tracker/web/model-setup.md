@@ -10,11 +10,12 @@ Collection, trainer signals and source inspection need no model credentials. For
 | `RILLDEX_LLM_URL` | Full HTTPS or loopback `/v1/chat/completions` URL; overrides the preset |
 | `RILLDEX_LLM_MODEL` | Explicit candidate model identifier |
 | `RILLDEX_LLM_API_KEY` | Candidate credential, when required |
+| `RILLDEX_LLM_JSON_MODE` | `json_object` (default), or `prompt` if the server rejects `response_format` |
 | `JEV_API_KEY` | Jev/Typesafe decision credential |
 
 Use `export NAME="value"` in Bash or `$env:NAME="value"` in PowerShell, then start Rilldex in that environment. The UI provides both templates. Proxy environment variables are respected; local servers may need `NO_PROXY=127.0.0.1,localhost`.
 
-The installed adapter accepts chat completions with JSON-object `response_format`. The candidate model proposes source-bound alternatives; Jev selects the maximum-probability supplied option. No confidence threshold is used.
+The installed adapter accepts local or hosted chat completions. `prompt` mode omits `response_format`; the returned JSON still follows the same validated source-evidence contract. For another API dialect or an in-process model, use a JSON stdin/stdout worker or a Python candidate transport. The candidate model proposes source-bound alternatives; Jev selects the maximum-probability supplied option. No confidence threshold is used.
 
 For staged work-content extraction directly from a saved graph, see [source qualifications](SCOPE_MEMBERSHIP.md). It supports bounded generation, contract repair, partial results and resume through Python, without an export step. This remains experimental and does not replace the main map extractor.
 
@@ -34,7 +35,7 @@ All stages share the allowance. Comparisons grow with action and plan counts; a 
 
 For an older pilot, click **Inspect execution feedback** or add `--inspect-feedback` to its command. Existing annotations and decisions are reused. Reported errors connect to later returns to the same work; retrieved error text is inspected in its tool context. No reported error is not a success verdict. Uninspected or unreadable feedback stays unknown.
 
-To add approach comparisons to an older pilot with work links, click **Compare approaches** or add `--inspect-approaches`. Each repeated-work pair uses up to two decision calls: confirm comparable work, then compare procedure and stated reason. Native arguments are included when captured. Progress survives a stop between calls; evidence-limit gaps remain visible. A changed procedure does not establish success or exploration.
+To add approach comparisons to an older pilot with work links, click **Compare approaches** or add `--inspect-approaches`. New analyses examine repeated and related work, first confirming the same work instance, then comparing procedure and stated reason. Each pair uses up to two decision calls. Open an action to inspect its comparisons and native arguments. Progress survives a stop; a changed procedure alone does not establish success.
 
 ## Continuous or custom workers
 

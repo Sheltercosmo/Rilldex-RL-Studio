@@ -4,7 +4,9 @@ window.trackerActivityTimeline=(()=>{
  let data=null,kind=null,key=null,actor=null,profile=null,windowIndex=0,selectUnit=null,selected=null;
  const option=(parent,value,label)=>{const o=node('option',label);o.value=value??'';parent.append(o);};
  const streams=()=>data.timeline.streams.filter(s=>s.kind===kind);
- const stream=()=>streams().find(s=>s.trajectory_id===actor);
+ const streamKey=s=>s?JSON.stringify([s.trajectory_id,s.context_id??null]):null;
+ const streamLabel=s=>s.trajectory_id+(s.context_id!=null?' · '+s.context_id:'');
+ const stream=()=>streams().find(s=>streamKey(s)===actor);
  const view=()=>stream()?.views.find(v=>(v.profile_id??'')===(profile??''));
  const fieldLabel=(activity,field)=>field==='plan'&&activity.taxonomy_version==='general-activities/2'?'Intended steps / plans (broad)':activity.taxonomy[field]?.label||field.replaceAll('_',' ');
  const fields=()=>data.timeline.field_order.map(field=>[field,{...data.taxonomy[field],label:fieldLabel(data,field)}]);
@@ -31,16 +33,16 @@ window.trackerActivityTimeline=(()=>{
    }
    const count=w.fields[field],td=node('td',`${count.present} / ${count.absent} / ${count.unknown}`,'activity-time-count');td.dataset.field=field;td.title=`${count.denominator} source units. Unknown reasons: ${JSON.stringify(count.unknown_reasons)}. Raw selected options: ${JSON.stringify(count.selected_options)}.`;row.append(td);body.append(row);
   }
-  table.append(body);root.append(table);$('#activity-time-summary').textContent=`Source units ${w.start+1}–${w.end} of ${s.units.length} · actor ${s.trajectory_id}. All eligible units remain in order, including unobserved units. Text and tag filters below affect the list only.`;
+  table.append(body);root.append(table);$('#activity-time-summary').textContent=`Source units ${w.start+1}–${w.end} of ${s.units.length} · ${streamLabel(s)}. All eligible units remain in order, including unobserved units. Text and tag filters below affect the list only.`;
  }
  function render(activity,runId,unitKind,unitSelected,onSelect){
   data=activity;selectUnit=onSelect;const changed=key!==runId+':'+unitKind;kind=unitKind;key=runId+':'+unitKind;
   $('#activity-timeline').hidden=false;$('#activity-timeline').dataset.runId=runId;
   if(!activity.timeline){$('#activity-time-summary').textContent='Restart the server to load the semantic activity timeline.';$('#activity-time-grid').replaceChildren();$('#activity-time-controls').hidden=true;return;}
   $('#activity-time-controls').hidden=false;$('#activity-time-definition').textContent=activity.timeline.definition;
-  const all=streams();if(changed||!all.some(s=>s.trajectory_id===actor)){actor=all[0]?.trajectory_id;profile=null;windowIndex=0;}
-  if(unitSelected&&unitSelected!==selected){const s=all.find(s=>s.units.some(u=>u.id===unitSelected));if(s){actor=s.trajectory_id;windowIndex=Math.floor(s.units.findIndex(u=>u.id===unitSelected)/activity.timeline.window_size);}}
-  selected=unitSelected;const actors=$('#activity-time-actor');actors.replaceChildren();for(const s of all)option(actors,s.trajectory_id,s.trajectory_id);actors.value=actor??'';actors.disabled=!all.length;profiles();draw();
+  const all=streams();if(changed||!all.some(s=>streamKey(s)===actor)){actor=streamKey(all[0]);profile=null;windowIndex=0;}
+  if(unitSelected&&unitSelected!==selected){const s=all.find(s=>s.units.some(u=>u.id===unitSelected));if(s){actor=streamKey(s);windowIndex=Math.floor(s.units.findIndex(u=>u.id===unitSelected)/activity.timeline.window_size);}}
+  selected=unitSelected;const actors=$('#activity-time-actor');actors.replaceChildren();for(const s of all)option(actors,streamKey(s),streamLabel(s));actors.value=actor??'';actors.disabled=!all.length;profiles();draw();
  }
  $('#activity-time-actor').onchange=()=>{actor=$('#activity-time-actor').value;profile=null;windowIndex=0;profiles();draw();};
  $('#activity-time-profile').onchange=()=>{profile=$('#activity-time-profile').value||null;draw();};

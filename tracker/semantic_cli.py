@@ -6,7 +6,7 @@ from pathlib import Path
 
 from . import semantic_workspace as workspace
 from .schema import InputError
-from .semantic_extraction import ACTIVITY_ROUTING,WORK_PHASE_ACTIVITY_ROUTING,WORK_ORGANIZATION_ACTIVITY_ROUTING
+from .semantic_extraction import ACTIVITY_ROUTING,WORK_PHASE_ACTIVITY_ROUTING,WORK_ORGANIZATION_ACTIVITY_ROUTING,PURPOSE_ACTIVITY_ROUTING
 
 
 def configure(commands):
@@ -40,13 +40,13 @@ def configure(commands):
     prepare.add_argument('--requested-conditions',action='store_true',help='Pin the requested terms/checks layer; requires user contributions')
     prepare.add_argument('--context-policy',help='Explicit JSON readable-context policy; frozen for this workspace')
     prepare.add_argument('--partition-standard',choices=['contribution-boundaries/3','contribution-boundaries/4'],help='Pinned contribution boundary standard; v4 preserves distinct work phases')
-    prepare.add_argument('--activity-routing',choices=[ACTIVITY_ROUTING,WORK_PHASE_ACTIVITY_ROUTING,WORK_ORGANIZATION_ACTIVITY_ROUTING],
+    prepare.add_argument('--activity-routing',choices=[ACTIVITY_ROUTING,WORK_PHASE_ACTIVITY_ROUTING,WORK_ORGANIZATION_ACTIVITY_ROUTING,PURPOSE_ACTIVITY_ROUTING],
                          help='Versioned activity definitions; frozen in a new workspace. Work-organization is experimental.')
     prepare.add_argument('--reading-protocol',choices=['contribution-readings/1','contribution-readings/2'],
                          help='V2 aligns candidate definitions with selection and distinguishes contributed from described work; experimental.')
     revise=sub.add_parser('revise',help='Reclassify a complete extraction on frozen boundaries; changed activities queue fresh content')
     revise.add_argument('directory');revise.add_argument('--from-directory');revise.add_argument('--run-id')
-    revise.add_argument('--activity-routing',choices=[ACTIVITY_ROUTING,WORK_PHASE_ACTIVITY_ROUTING,WORK_ORGANIZATION_ACTIVITY_ROUTING])
+    revise.add_argument('--activity-routing',choices=[ACTIVITY_ROUTING,WORK_PHASE_ACTIVITY_ROUTING,WORK_ORGANIZATION_ACTIVITY_ROUTING,PURPOSE_ACTIVITY_ROUTING])
     revise.add_argument('--prompt-key',action='store_true')
     revise.add_argument('--plan-links',action='store_true',help='After a complete revision, rebuild action-to-Plan-stage links within the remaining call/byte budget')
     revise.add_argument('--max-new-calls',type=int,default=50);revise.add_argument('--max-input-bytes',type=int,default=1_000_000)

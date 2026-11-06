@@ -6,11 +6,11 @@ positive identity link; missing links never prove novelty or a target switch.
 from collections import Counter
 from .schema import InputError,digest
 
-VERSION='work-history-projection/2'
+VERSION='work-history-projection/3'
 LIMITS=('This overview groups dispatched operations using saved immediate-target identities. '
         'Missing identity links are not evidence of new work. Recurrence is not a failed retry, '
         'exploration, exploitation, causal response, progress or successful completion. '
-        'Positions are source order within one actor and trajectory, not elapsed time. '
+        'Positions are source order within one actor, trajectory and context, not elapsed time. '
         'One operation counts once even if it relates to several requests, plans or checks.')
 OPEN_STATUSES={'unresolved','multiple_distinct_targets','needs_target_candidate_retrieval',
                'evidence_too_large','pending','inspecting'}
@@ -18,8 +18,9 @@ OPEN_STATUSES={'unresolved','multiple_distinct_targets','needs_target_candidate_
 
 def build(run,document):
     paths=document.get('work_paths',{})
-    result={'schema':VERSION,'available':bool(paths.get('available')),'streams':[],
-            'recurrences':[],'limits':LIMITS}
+    scoped=any(e.get('context_id') is not None for e in run['events'])
+    result={'schema':VERSION if scoped else 'work-history-projection/2','available':bool(paths.get('available')),'streams':[],
+            'recurrences':[],'limits':LIMITS if scoped else LIMITS.replace('actor, trajectory and context','actor and trajectory')}
     if not result['available']:
         result['reason']='Selected action-target identities have not been projected.'
         return result
@@ -27,6 +28,8 @@ def build(run,document):
     def order(uid):
         u=units[uid];ref=u['source']
         return events[ref['event_id']]['index'],ref['start'],ref['end']
+    def scope(uid):
+        u=units[uid];return u['actor'],u['trajectory_id'],events[u['source']['event_id']].get('context_id')
     actions=sorted((u['id'] for u in units.values() if u['kind']=='action'),key=order)
     reviews={r['action_unit_id']:r for r in document.get('action_target_review',[])}
     identities={}
@@ -35,8 +38,8 @@ def build(run,document):
         current,prior=edge['from'],edge['to']
         if current not in actions or prior not in actions:raise InputError('History identity must connect actions')
         if (order(prior)>=order(current) or
-            (units[current]['actor'],units[current]['trajectory_id'])!=(units[prior]['actor'],units[prior]['trajectory_id'])):
-            raise InputError('History identity must connect earlier work in the same actor trajectory')
+            scope(current)!=scope(prior)):
+            raise InputError('History identity must connect earlier work in the same actor trajectory and context')
         if current in identities:raise InputError('Duplicate history identity')
         identities[current]=edge
     group_for={};groups={}
@@ -57,7 +60,7 @@ def build(run,document):
             raise InputError('History group differs from selected identity closure')
     lanes={}
     for uid in actions:
-        u=units[uid];lanes.setdefault((u['actor'],u['trajectory_id']),[]).append(uid)
+        lanes.setdefault(scope(uid),[]).append(uid)
     def support(uid):
         chain=[]
         while uid in identities:
@@ -66,14 +69,15 @@ def build(run,document):
                           **{k:edge[k] for k in ('request','pair_request') if k in edge}})
             uid=edge['to']
         return chain
-    for (actor,trajectory),members in lanes.items():
-        lane={'actor':actor,'trajectory_id':trajectory,'action_unit_ids':members,'groups':[],'segments':[],
+    for (actor,trajectory,context),members in lanes.items():
+        lane={'actor':actor,'trajectory_id':trajectory,'context_id':context,'action_unit_ids':members,'groups':[],'segments':[],
               'identity_status_counts':dict(Counter(reviews.get(uid,{}).get('status','not_inspected') for uid in members))}
-        lane['id']='stream-'+digest([actor,trajectory])[:20]
+        if not scoped:lane.pop('context_id')
+        lane['id']='stream-'+digest([actor,trajectory] if context is None else [actor,trajectory,context])[:20]
         represented_events={units[uid]['source']['event_id'] for uid in members}
         first,last=order(members[0])[0],order(members[-1])[0]
         omitted=[e for e in run['events'] if e.get('kind')=='action' and
-                 e.get('actor')==actor and e.get('trajectory_id')==trajectory and
+                 e.get('actor')==actor and e.get('trajectory_id')==trajectory and e.get('context_id')==context and
                  first<=e['index']<=last and e['id'] not in represented_events]
         axis=[{'unit_id':uid,'event_id':units[uid]['source']['event_id'],'order':order(uid)} for uid in members]
         axis.extend({'unit_id':None,'event_id':e['id'],'order':(e['index'],0,len(e.get('text','')))} for e in omitted)
@@ -108,6 +112,8 @@ def build(run,document):
                     'relation_basis':'selected identity closure; previous group occurrence chosen by source order',
                     'pattern':'with_intervening_operations' if between else 'consecutive_operations'}
                 from .recurrence_context import build as build_context
+                if document.get('provenance',{}).get('action_target_harness')=='action-target-correspondence/7':
+                    from .recurrence_context import safe_build as build_context
                 recurrence['context']=build_context(run,document,prior,uid)
                 result['recurrences'].append(recurrence)
                 occurrence['recurrence_index']=len(result['recurrences'])-1

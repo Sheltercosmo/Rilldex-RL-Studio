@@ -16,13 +16,20 @@ from .base_units import ACTIVITIES as OLD_ACTIVITIES, FIELDS as OLD_FIELDS
 from .jev import DEFAULT_MODEL, JevClient, SELECTION_POLICY, validate_answers
 from .schema import InputError, digest, dumps
 from .semantic_map import evidence
-from .readable_context import is_readable, GOVERNING_VERSION, CONTEXT_VERSION, protected_instruction
+from .readable_context import is_readable, GOVERNING_VERSION, CONTEXT_VERSION, LINKED_VERSION, RETRIEVED_VERSION, DEPENDENCY_VERSIONS, SCOPED_VERSIONS, protected_instruction
 
 VERSION='semantic-extraction/1'
 ACTIVITIES=definitions(OLD_ACTIVITIES)
 ACTIVITY_ROUTING='interaction-boundary/1'
 WORK_PHASE_ACTIVITY_ROUTING='work-phase-activity/1'
 WORK_ORGANIZATION_ACTIVITY_ROUTING='work-organization-activity/1'
+PURPOSE_ACTIVITY_ROUTING='work-organization-activity/2'
+PURPOSE_RULE=('For a read, query or observation, distinguish gathering previously unknown facts for a later decision '
+    'from testing a specified claim, expected result or acceptance criterion. The former is Inspect; '
+    'a read dispatched to test that expectation is Verify even when the tool only returns data. '
+    'Use its expressed local purpose and visible context, not the tool name alone. '
+    'A preceding statement merely announcing or requesting a check is not the check itself. '
+    'Classify this recorded dispatch separately; neither kind establishes a successful outcome.')
 ACTIVITIES['orient'] += ' If the contribution instructs or asks another actor to perform the needed work, use Coordinate. Explaining a situation before such a request does not turn that request into Orient.'
 ACTIVITIES['coordinate'] += ' Includes direct imperatives and procedural instructions to the user/customer, not only questions or delegation language. A supporting explanation, expected benefit or polite closing stays with the substantive request. The agent asking the user to turn a setting off is Coordinate; the user turning it off is a different actor’s action.'
 FIELDS=fields(OLD_FIELDS)
@@ -30,14 +37,14 @@ FIELDS=fields(OLD_FIELDS)
 
 def activity_choices(routing):
     if routing==ACTIVITY_ROUTING:return deepcopy(ACTIVITIES)
-    if routing not in {WORK_PHASE_ACTIVITY_ROUTING,WORK_ORGANIZATION_ACTIVITY_ROUTING}:raise InputError('Unknown semantic activity routing')
+    if routing not in {WORK_PHASE_ACTIVITY_ROUTING,WORK_ORGANIZATION_ACTIVITY_ROUTING,PURPOSE_ACTIVITY_ROUTING}:raise InputError('Unknown semantic activity routing')
     options=deepcopy(ACTIVITIES)
     options['plan']+=' Ordering the facts, sections or sentences of one answer is content organization, not by itself a broader work plan. Require organization of distinct work stages or subgoals, rather than an outline of what the answer will say.'
     options['orient']+=' Restating answer requirements and outlining the immediate answer content can form one Orient contribution. Supporting recalled facts do not by themselves make its main contribution a separate Knowledge activity.'
     options['verify']+=' Applying a word-count or other acceptance criterion to candidate wording is an expressed check even if its reported result is wrong. Rechecking alternative versions under that criterion remains checking; do not treat it as new task derivation merely because it contains comparisons. This label does not verify the check result.'
     options['construct']+=' Distinguish creating a draft from publishing an already expressed draft: repeating it as the final delivered response belongs to Report when prior visible source establishes that draft. New artifact creation can still be Construct in a user-facing answer.'
     options['report']+=' A separately delivered final response that repeats a draft already expressed in visible preceding source is Report. Do not infer that producing an artifact must occur again each time its text is communicated.'
-    if routing==WORK_ORGANIZATION_ACTIVITY_ROUTING:
+    if routing in {WORK_ORGANIZATION_ACTIVITY_ROUTING,PURPOSE_ACTIVITY_ROUTING}:
         options['plan']+=' Distinguish organization of future WORK from organization of the intended PRODUCT. A proposed file tree, schema, component inventory or answer outline describes what a local artifact should contain; that alone is not a work plan. Require distinct work stages/subgoals with a progression or dependency, or a strategy that governs multiple subsequent choices. Naming one method or tool for the next local operation is not such a strategy. Several files or several shell operations implementing one immediate setup change do not by themselves establish a broader plan.'
         options['orient']+=' An announcement of the immediate setup or arrangement needed next can include a proposed file tree or component inventory. Those are contents of the local work being oriented, not automatically stages of a Plan. If the passage actually creates the requested artifact rather than announcing future work, use Construct; if it requests another actor to act, use Coordinate.'
     return options
@@ -125,7 +132,14 @@ def write(path,value):
 
 
 def read(path):
-    return json.loads(Path(path).read_text(encoding='utf-8'))
+    # Atomic progress replacement can also briefly deny the reader on Windows.
+    # Retry opening the file only; corrupt JSON and other errors stay visible.
+    for delay in (.005,.01,.02,.04,.08,.16,.32,None):
+        try:
+            return json.loads(Path(path).read_text(encoding='utf-8'))
+        except PermissionError as exc:
+            if getattr(exc,'winerror',None) not in (5,32,33) or delay is None:raise
+            time.sleep(delay)
 
 
 def replay_decision(saved):
@@ -167,7 +181,8 @@ def windows(run,*,include_user=False):
         # Governing system/developer instructions stay context, never user work.
         for e in run['events']:
             if (e.get('actor')!='user' or e['kind'] not in {'instruction','message'} or
-                    e.get('copied_context') or e.get('agent_visibility')=='not_established' or not e['text'].strip()):continue
+                    e.get('copied_context') or e.get('agent_visible') is False or
+                    e.get('agent_visibility')=='not_established' or not e['text'].strip()):continue
             regions.append({'event_id':e['id'],'start':0,'end':len(e['text']),'text':e['text'],
                             'source_pointer':e['source_pointer'],'kind':'user_span','trajectory_id':e['trajectory_id']})
         order={e['id']:e['index'] for e in run['events']}
@@ -181,23 +196,25 @@ def windows(run,*,include_user=False):
     return regions
 
 
-def prefix(run,ref,context_policy=None):
+def prefix(run,ref,context_policy=None,*,project_context=True):
     event=next(e for e in run['events'] if e['id']==ref['event_id'])
     result=[];excluded=[]
     for e in run['events']:
         if e['index']>event['index']:break
-        if e['trajectory_id']!=event['trajectory_id']:continue
-        if context_policy and context_policy.get('schema')==CONTEXT_VERSION:
-            if e.get('context_id')!=event.get('context_id'):continue
+        if (e['trajectory_id'],e.get('context_id'))!=(event['trajectory_id'],event.get('context_id')):continue
+        if context_policy and context_policy.get('schema') in SCOPED_VERSIONS:
             if e.get('copied_context') or e['id']!=event['id'] and (e.get('order_known') is False or event.get('order_known') is False):
                 excluded.append(e['id']);continue
-        if e['kind'].startswith('external_') or e.get('agent_visibility')=='not_established':
+        if e['kind'].startswith('external_') or e.get('agent_visibility')=='not_established' or e.get('agent_visible') is False:
             excluded.append(e['id']);continue
         text=e['text'][:ref['end']] if e['id']==ref['event_id'] else e['text']
         keys=('id','kind','actor','trajectory_id','source_pointer','tool','arguments','tool_contract')
+        if 'observation_contract' in e:keys=(*keys,'observation_contract')
+        if context_policy and context_policy.get('schema') in DEPENDENCY_VERSIONS:
+            keys=(*keys,'context_id','call_id','source_call_id','parent_id','feedback_origin','link_basis','order_known')
         if is_readable(context_policy):keys=(*keys,'media')
         result.append({k:deepcopy(e[k]) for k in keys if k in e}|{'text':text})
-    if context_policy is not None:
+    if context_policy is not None and project_context:
         if is_readable(context_policy):
             from .readable_context import project_prefix
             return project_prefix(result,ref,context_policy),excluded
@@ -210,15 +227,20 @@ def prefix(run,ref,context_policy=None):
 
 
 def context_scope(run,ref,policy):
-    if policy is None:return {}
+    from .environment_contracts import reading_context
+    current=next(e for e in run['events'] if e['id']==ref['event_id'])
+    encoding=reading_context(run,current)
+    if policy is None:return encoding
     full,_=prefix(run,ref);selected,_=prefix(run,ref,policy)
-    if policy.get('schema')==CONTEXT_VERSION:
+    if policy.get('schema')==RETRIEVED_VERSION:
+        full,_=prefix(run,ref,policy,project_context=False)
+    if policy.get('schema') in SCOPED_VERSIONS:
         events={e['id']:e for e in run['events']};current=events[ref['event_id']]
         full=[e for e in full if events[e['id']].get('context_id')==current.get('context_id')
               and not events[e['id']].get('copied_context') and (e['id']==current['id'] or
                   events[e['id']].get('order_known') is not False and current.get('order_known') is not False)]
     included={e['id'] for e in selected}
-    result={'context_policy':deepcopy(policy),'omitted_context_event_ids':[e['id'] for e in full if e['id'] not in included],
+    result={**encoding,'context_policy':deepcopy(policy),'omitted_context_event_ids':[e['id'] for e in full if e['id'] not in included],
             'context_limit':'Explicit partial prefix. Original events remain stored. Choose unresolved/no suitable candidate if omitted history is needed; do not infer that omitted events did not happen.'}
     if is_readable(policy):
         result['context_projection']={'schema':'readable-context/1',
@@ -227,12 +249,21 @@ def context_scope(run,ref,policy):
           'unobserved_media':[{'event_id':e['id'],**m} for e in selected for m in e.get('unobserved_inline_media',[])],
           'unobserved_media_parts':[{'event_id':e['id'],**m} for e in selected for m in e.get('unobserved_media_parts',[])],
           'unobserved_auxiliary_media':[{'event_id':e['id'],**m} for e in selected for m in e.get('unobserved_auxiliary_media',[])]}
-        if policy['schema'] in {GOVERNING_VERSION,CONTEXT_VERSION}:
+        if policy['schema'] in {GOVERNING_VERSION,*SCOPED_VERSIONS}:
             result['context_projection']['retained_instruction_event_ids']=[e['id'] for e in selected if protected_instruction(e,policy)]
             result['context_projection']['instruction_retention']='Recorded user instructions and system/developer-role events are retained in full as text evidence, subject to the same visibility/cutoff and media rules. This does not adjudicate conflicts, adoption or compliance.'
-        if policy['schema']==CONTEXT_VERSION:
+        if policy['schema'] in SCOPED_VERSIONS:
             result['context_projection']['source_context']=current.get('context_id')
             result['context_projection']['source_scope']='Only the same recorded source context; missing context IDs form the legacy unspecified context. Cross-context visibility or inheritance is not inferred.'
+        if policy['schema'] in DEPENDENCY_VERSIONS:
+            from .environment_contracts import READING_RULE
+            result['interpretation_rule']=READING_RULE
+            recent={e['id'] for e in full[-policy['recent_events']:]}|{r['event_id'] for r in policy['extra_ranges']}
+            result['context_projection']['retained_dependency_event_ids']=[e['id'] for e in selected if e['id'] not in recent and not protected_instruction(e,policy)]
+            result['context_projection']['dependency_retention']='Retains the latest recorded observation, source-linked dispatches for retained results, and their recorded parent expressions. These links establish correspondence, not causation or a complete hidden state.'
+        if policy['schema']==RETRIEVED_VERSION:
+            from .readable_context import selected_context
+            result['context_projection']['source_retrieval']=selected_context(full,ref,policy)[2]
     return result
 
 
@@ -246,7 +277,8 @@ def checked_span(run,ref,cutoff=None):
         c=next(x for x in run['events'] if x['id']==cutoff['event_id'])
         if (e['index'],t)>(c['index'],cutoff['end']):raise InputError('Future evidence')
         if e['trajectory_id']!=c['trajectory_id']:raise InputError('Evidence belongs to another trajectory')
-        if e['kind'].startswith('external_') or e.get('agent_visibility')=='not_established':raise InputError('Evidence is not established as agent-visible')
+        if e.get('context_id')!=c.get('context_id'):raise InputError('Evidence belongs to another recorded context')
+        if e['kind'].startswith('external_') or e.get('agent_visibility')=='not_established' or e.get('agent_visible') is False:raise InputError('Evidence is not established as agent-visible')
     return e
 
 
@@ -254,13 +286,15 @@ def episode_scope(run, first_event, last_event,*,include_user=False):
     events={e['id']:e for e in run['events']}
     if first_event not in events or last_event not in events:raise InputError('Unknown episode boundary event')
     first,last=events[first_event],events[last_event]
-    if first['index']>last['index'] or first['trajectory_id']!=last['trajectory_id']:
-        raise InputError('Episode boundaries must be ordered in one trajectory')
-    selected=[w for w in windows(run,include_user=include_user) if w['trajectory_id']==first['trajectory_id'] and
+    if first['index']>last['index'] or (first['trajectory_id'],first.get('context_id'))!=(last['trajectory_id'],last.get('context_id')):
+        raise InputError('Episode boundaries must be ordered in one trajectory and context')
+    selected=[w for w in windows(run,include_user=include_user) if
+              (w['trajectory_id'],events[w['event_id']].get('context_id'))==(first['trajectory_id'],first.get('context_id')) and
               first['index']<=events[w['event_id']]['index']<=last['index']]
     if not selected:raise InputError('Episode has no eligible source windows')
     return {'schema':'semantic-episode-scope/1','first_event_id':first_event,'last_event_id':last_event,
             'trajectory_id':first['trajectory_id'],'window_ids':[w['id'] for w in selected],
+            **({'context_id':first['context_id']} if 'context_id' in first else {}),
             **({'participant_scope':PARTICIPANT_SCOPE} if include_user else {})}
 
 
@@ -569,6 +603,8 @@ class Pipeline:
                         if readings['status']!='ready':
                             u['status']=readings['status'];save();continue
                         req=enrich_activity(req,readings['response'])
+                    if routing==PURPOSE_ACTIVITY_ROUTING and e['kind']=='action':
+                        req['questions']['choice']['instructions']+=' '+PURPOSE_RULE
                     u['status']='needs_activity'
                     act,act_key=self.choose(req);u['activity']=act;u['activity_request']=act_key
                     if act in {'other','unresolved'}:u['status']='needs_activity_review';save();continue
@@ -737,7 +773,7 @@ def audit_result(run,result,directory):
                 not u.get('activity_reading_request') or
                 activity_req['state'].get('activity_routing')!=(declared_routing or ACTIVITY_ROUTING)):
             raise InputError('Scoped activity requires readings and the declared routing')
-        if activity_req['state'].get('activity_routing')==WORK_ORGANIZATION_ACTIVITY_ROUTING and declared_routing is None:
+        if activity_req['state'].get('activity_routing') in {WORK_ORGANIZATION_ACTIVITY_ROUTING,PURPOSE_ACTIVITY_ROUTING} and declared_routing is None:
             raise InputError('Activity decision lacks declared routing')
         if declared_routing is not None and activity_req['state'].get('activity_routing')!=declared_routing:
             raise InputError('Activity decision differs from declared routing')
@@ -753,7 +789,9 @@ def audit_result(run,result,directory):
             validate_readings(run,rr,candidate)
             if reading_version==SCOPED_VERSION and activity_req['state'].get('contribution_scope')!=SCOPE_RULE:
                 raise InputError('Activity contribution scope differs from candidate protocol')
-        if declared_routing==WORK_ORGANIZATION_ACTIVITY_ROUTING or reading_version==SCOPED_VERSION:
+        if declared_routing==PURPOSE_ACTIVITY_ROUTING and u['kind']=='action' and not activity_req['questions']['choice']['instructions'].endswith(PURPOSE_RULE):
+            raise InputError('Activity purpose rule differs from declared routing')
+        if declared_routing in {WORK_ORGANIZATION_ACTIVITY_ROUTING,PURPOSE_ACTIVITY_ROUTING} or reading_version==SCOPED_VERSION:
             expected=activity_choices(declared_routing or ACTIVITY_ROUTING)
             for row in activity_req['state'].get('activity_reading_candidates',{}).get('readings',[]):
                 expected[row['activity']]+=' Candidate interpretation for this source: '+row['text']
@@ -882,7 +920,9 @@ def load_extraction(run,directory=None,*,action_target_version=None,plan_relatio
         config,frozen,parent=semantic_revision.load(directory)
         if frozen!=run:raise InputError('Revision source differs from displayed rollout')
         validation['revision']=semantic_revision.validate_result(directory,config,run,parent,result)
-    initial=next((e for e in run['events'] if e['kind'] in {'instruction','message'} and e['actor']=='user' and not e.get('copied_context')),None)
+    initial=next((e for e in run['events'] if e['kind'] in {'instruction','message'} and e['actor']=='user'
+                  and not e.get('copied_context') and e.get('agent_visible') is not False
+                  and e.get('agent_visibility')!='not_established'),None)
     doc={'schema':'semantic-extraction-view/1','run_id':rid,'source_hash':digest(run),
          'title':('Observed user and agent contributions · ' if result.get('participant_scope') else 'Observed agent contributions · ')+(run['metadata'].get('task_id') or rid),
          'provenance':{'origin':'jev_selected_model_candidates','selection_policy':SELECTION_POLICY,

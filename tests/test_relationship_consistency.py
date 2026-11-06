@@ -38,7 +38,7 @@ class RelationshipConsistencyTests(unittest.TestCase):
             root=Path(tmp)/'workspace';old={**workspace.DEFAULT_CONTEXT,'schema':'readable-context/2'}
             config=workspace.initialize(root,run,context_policy=old,feedback_profile='feedback-references/1')
             self.assertEqual(workspace.initialize(root,run,feedback_profile='feedback-references/1'),config)
-            self.assertEqual(workspace.initialize(Path(tmp)/'new',run)['context_policy']['schema'],'readable-context/3')
+            self.assertEqual(workspace.initialize(Path(tmp)/'new',run)['context_policy']['schema'],'readable-context/5')
         self.assertEqual(semantic_layers.feedback_protocol('feedback-references/1')['retrieval_version'],feedback_retrieval.HYBRID_VERSION)
         self.assertEqual(semantic_layers.feedback_protocol('feedback-references/2')['retrieval_version'],feedback_retrieval.CONTEXT_VERSION)
 

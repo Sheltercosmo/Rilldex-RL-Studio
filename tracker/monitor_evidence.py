@@ -118,6 +118,9 @@ def _read(store,identifier,run_id=None):
         if schema.startswith('diagnostic-search/'):
             from .diagnostic_search import source_from_run
             diagnostic_source=source_from_run(run,schema)
+        elif schema.startswith('requirement-diagnostics/'):
+            from .requirement_diagnostics import source_from_run
+            diagnostic_source=source_from_run(run,schema)
         else:diagnostic_source=from_run(run)
         diagnostic=explanation['diagnostic'];refs=list(diagnostic.get('evidence_roles',{}).values())
         for contract in diagnostic.get('artifact_contracts',[]):

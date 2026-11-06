@@ -13,6 +13,7 @@ Harbor and SWE-agent are only the supported **multi-file job layout**, which joi
 | Evidence supplied | What survives ingestion | Useful analysis | Boundary |
 | --- | --- | --- | --- |
 | `messages` with roles, tool calls and result IDs | Message text, call arguments, parallel call/result identities, explicit outcome | Activity and relation analysis, feedback sequences, tool behavior | No result link is invented from message proximity. Extra fields remain raw; media is not visually inspected. |
+| `responses-items/1` with accumulated items | Messages, reasoning summaries, function/custom calls and linked outputs | The same maps, activity analysis and measures | Encrypted reasoning and unresolved item references stay unread; completion status is not success. |
 | `Episode` with actions, observations and explicit endings | Environment transitions, reward, terminated/truncated or unsplit done; optional model response and turn identity | Episode return, response/action/feedback relations, later semantic analysis of recorded model text | Capture must supply JSON-safe visible state. Private `info` stays outside agent-visible evidence. Truncation is not task failure. |
 | `prompt` and `completion` text | Exact recorded text and explicit outcome | Reasoning activity, answer/output and reward analysis | Internal environment actions, missing intermediate steps and training clock stay unknown. Token IDs require the matching tokenizer before capture. |
 | ATIF or another supported native export | Structure actually recorded by that reader | Measures supported by that evidence; native links where available | Import support does not establish full runtime integration with the originating trainer. |
@@ -47,6 +48,47 @@ The same `messages` route accepts Anthropic `tool_use`, `tool_result` and record
 thinking blocks, native tool definitions and top-level `system`. Mixed user
 messages separate tool feedback from instructions; results link by call ID.
 Supply accumulated message records, not raw Claude Code stream chunks.
+
+For Responses histories, retain the items actually exchanged with the model:
+
+```python
+from rilldex import responses_document
+record = responses_document(items=recorded_items, tools=tool_definitions)
+capture.log("rollout-42", record, state="in_progress")
+```
+
+Include input messages, model output items and returned tool outputs in recorded
+order. A response's output alone is not the full history. Put system/developer
+instructions in explicit message items. Use the same document inside a session
+with `trajectory_id` and `context_id` when capturing several contexts.
+
+## Capture multiple agents or context resets
+
+Keep each agent's visible history and tool definitions together:
+
+```python
+from rilldex import chat_sessions_document
+
+record = chat_sessions_document([
+    {"trajectory_id": "planner", "context_id": "attempt-1",
+     "messages": planner_messages, "tools": planner_tools},
+    {"trajectory_id": "worker", "context_id": "attempt-1",
+     "messages": worker_messages, "tools": worker_tools},
+], metadata={"experiment": "run-a"})
+capture.log("rollout-42", record, state="in_progress")
+```
+
+Use a new `context_id` after a reset. OpenAI-style calls and Anthropic content
+blocks can coexist in separate sessions; tool-call IDs may repeat across them.
+Include a handoff or summary in the receiving agent's messages when it was
+actually visible. Analysis uses each recorded history separately. Session list
+order does not establish concurrency or communication. Save this document as
+JSON/JSONL or send it through the existing outbox; `auto` recognizes it.
+
+Activity windows and sequence comparisons keep contexts separate. Use the
+existing **Agent / context** selector to inspect each history. Transition counts
+and retry measurements never join a reset to the preceding context. Work in
+another context does not count as intervening work in the current one.
 
 ## Capture in a rollout loop
 
@@ -89,7 +131,124 @@ availability = ws.metric_availability()
 
 Analysis and graph tables use the normalized evidence, independently of transport. No export is required for the existing native workspace analysis API.
 
-## Validation in this change
+## Explain an unfamiliar environment
+
+Supply tool descriptions and parameter schemas with chat histories. For numeric or
+structured environments, add JSON Schema descriptions to `Episode`:
+
+```python
+episode = Episode(
+    episode_id="trial-42",
+    action_schema={"type": "integer", "oneOf": [
+        {"const": 0, "title": "move left"},
+        {"const": 1, "title": "move right"},
+    ]},
+    observation_schema={"type": "object", "properties": {
+        "position": {"type": "number", "description": "Position in metres"},
+    }},
+)
+episode.reset({"position": 0}).step(1, {"position": 0.5})
+```
+
+Use `properties` for named fields, `prefixItems` for vector dimensions, and
+`const` with `title` for encoded actions. Existing Pydantic models can supply
+`model_json_schema()` directly. Match the values emitted by your actual wrapper.
+
+These definitions reach macro, activity and semantic analysis alongside the
+original values. Chat tool catalogs are also available when reading a plan before
+its first call. They describe the encoding; they do not assert that the agent
+saw the definitions or that an action succeeded. Invalid attempted actions remain
+in the trace. Schemas are stored as supplied; external references are not fetched.
+
+New semantic workspaces retain recent context, native call/result links and up
+to six relevant earlier passages, with exact source offsets. This helps recover
+distant plans, revisions and drafts. Later state updates stay in source order.
+Other sessions, future results and private evaluator data remain outside the
+reading. Existing workspaces keep their saved context policy.
+
+Validation includes navigation, continuous control, inventory and browser
+captures, plus four public airline/telecom traces. These are evidence-preservation
+checks; they do not establish a cross-environment model accuracy score. Numeric
+arrays need documented meanings; image/audio references still require perception.
+
+`python scripts/evaluate_environment_reading.py` exports a reproducible reading
+test. Add `--live` with `JEV_API_KEY` to compare described, renamed and undocumented
+operations. Results report model accuracy separately from capture validation.
+
+The macro reader retrieves relevant earlier call results alongside recent steps,
+including matched passages inside long results. It retains native policies and
+keeps source offsets, agent/context scope and later state updates. Clipping a
+policy no longer discards an otherwise supported action-purpose decision.
+
+Live development checks use `jev-1.13.0` and retain exact requests/responses:
+
+| Check | Result |
+| --- | --- |
+| Task constraints, same controls | 12/15 → 15/15; three added long-result/renaming controls also passed |
+| Described / renamed / undocumented operations | 11/11 · 9/9 · 11/11 |
+| Chat, Anthropic and Responses purpose/activity readings | 96/96 paired decisions from nine authored operations and seven public trace actions |
+| Distant revisions and repeated drafts | 0/6 → 6/6; full-prefix diagnostics also passed |
+| Read versus expected-result check, across three formats | 15/18 → 18/18 after retaining local purpose |
+| Fresh generated-map dispatch readings | 9/11 → 11/11 with a clearer Inspect/Verify boundary |
+| Plan relationships with one candidate per decision | 35/36 → 36/36, retaining the same source context |
+| Related-work method candidates | Recovered a missed route change; all nine reviewed pairs separated comparable from different work |
+| Ten previously unused public airline/telecom actions | 20/20 purpose/activity judgments; both handoff-report checks passed |
+| Target relationships with source intervals and recorded operation definitions | 13/17 → 16/17 against the original labels; three encoded-operation and four explicit-identity controls passed |
+| Reward checks with each operation beside its own definitions | 12/14 → 14/14; eight earlier code-flow and artifact controls also passed |
+| Custom requirement checks | 15/15 controlled outcomes, including partial traces, unverified completion claims and five cases with fresh requirement extraction |
+
+These are development controls and selected public examples, not a deployment
+accuracy estimate. Paired serializations are not independent samples. Repeat the
+reading checks with `python scripts/evaluate_generalization.py --live --prompt-key`.
+The full generated-map tests use `scripts/evaluate_generated_generalization.py`;
+its candidates are explicit development artifacts, not a general-purpose worker.
+`--focused --refined --public --interval` exercises the current target, plan, feedback and method
+layers on six scenarios. Related-work candidates pass an independent work-instance
+check; rejected pairs do not alter other work groups. Accepted comparisons reach
+the action inspector and behavior measurements without merging the original paths.
+Saved live evidence is under `tests/fixtures/*generalization*.json` and
+`tests/fixtures/environment_reading_evidence.json`.
+
+The remaining target disagreement concerns a fallback booking: one customer
+request versus two concrete reservation attempts. An independent review found
+the reference ambiguous; the original failed score remains saved. Explicit
+request and record IDs resolve the tested contrasts. New pilots use one target
+pair per decision, with the intervening source and native definitions; saved
+pilots keep their original reader and budget history. This uses more calls than
+batched comparisons on long rollouts; shared limits and cached resume still apply.
+
+Reward checks retain native context, instruction order and operation definitions.
+Private simulator state stays outside the reading. Missing definitions and
+unscanned pages remain coverage gaps rather than negative findings. New CLI
+scans use the current reader; resuming a workspace keeps its saved protocol.
+Custom checks distinguish a concrete conflict from an unmet end goal, an unseen
+helper implementation or an unverified completion claim. Unverified claims stay
+unknown; visible contradictions remain findings even in partial records. The
+saved comparison identifies the requirement, page and request for inspection.
+
+On six older witness-page references, the current reader matches three exact
+labels. Two other pages select independently reviewed earlier evidence of the
+same compression and ordering defects. A BOM defect confirmed by 32 isolated
+parser checks remains missed on its late witness page and two earlier pages with
+the implementation and helpers. Single-question, single-candidate and compact
+code probes also miss it; supplying more context alone does not fix this case.
+Original references, failed trials and alternate-evidence reviews remain
+separate. These are not whole-rollout tests.
+
+Six complete development scenarios exercise the current readers through maps,
+execution feedback, approach comparisons, work episodes and behavior measures:
+software, simulation, service, multiple agents, and two public airline/telecom
+prefixes. The frozen replay contains 36 selected units and 145 responses,
+including reused decisions. It verifies integration, not population accuracy.
+
+Context-reset and interleaving regressions cover requested work, action targets,
+approach comparisons, recurrence intervals and revision outcomes. Private records
+stay outside extraction, context inspection and current relationship readers,
+including their missing-source metadata. Matching names or IDs do not carry work
+across a reset. These checks do not establish coverage of unseen harnesses, unread
+media or every downstream semantic judgment.
+
+## Validation of input delivery
 
 - Authored controls: unmarked parallel-tool conversation with out-of-order results and null `tool_calls`; reasoning generation; environment episode with recorded model text and truncation; verl flat generation export.
 - Public non-software control: pinned airline simulation in `tests/fixtures/tau-bench/airline-0.json`, with provenance in that fixture directory.
@@ -102,7 +261,10 @@ These checks run on Windows in the current workspace. They are contract and tran
 
 ## Upstream basis
 
+- [Gymnasium spaces](https://gymnasium.farama.org/api/spaces/) describe action and observation shapes. Semantic meanings must match the environment and its wrappers; [MiniGrid DoorKey](https://minigrid.farama.org/environments/minigrid/DoorKeyEnv/) documents one example of encoded actions and door states.
+
 - Anthropic's [tool-use](https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/types/tool_use_block.py) and [tool-result](https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/types/tool_result_block_param.py) types define native arguments, result IDs and explicit error status.
+- OpenAI's [function calling](https://developers.openai.com/api/docs/guides/function-calling) and [reasoning](https://developers.openai.com/api/docs/guides/reasoning) guides distinguish call IDs, custom inputs, output items and recorded reasoning summaries.
 
 - [verl rollout tracing](https://verl.readthedocs.io/en/latest/advance/rollout_trace.html) distinguishes the agent loop, individual LLM calls and tool evidence. A flat generation export cannot replace the richer history.
 - [ART client architecture](https://art.openpipe.ai/fundamentals/art-client/) captures trajectories at the client boundary. This supports integrating at the record-producing loop instead of naming every trainer in the file picker.

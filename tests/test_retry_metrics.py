@@ -17,6 +17,16 @@ def fixture():
 
 
 class RetryMetricsTests(unittest.TestCase):
+    def test_reset_context_is_not_a_retry_opportunity(self):
+        r,d=fixture();prior=rm.inspect(r,d)
+        for e in r['events']:
+            if e['index']>=3:e['context_id']='reset'
+        d['operation_outcomes']['source_hash']=digest(r)
+        for result in (rm.inspect(r,d),rm.refresh(r,prior)):
+            self.assertEqual(result['episodes'],[])
+            self.assertEqual(result['metrics']['changed_retry_completion_fraction']['denominator'],0)
+            self.assertIn('e1',result['failed_calls_without_selected_retry'])
+
     def test_changed_retry_uses_bound_outcomes_and_keeps_evidence(self):
         r,d=fixture();before=deepcopy(d);v=rm.inspect(r,d)
         self.assertEqual(v['metrics']['changed_retry_completion_fraction']['numerator'],1)

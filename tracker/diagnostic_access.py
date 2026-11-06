@@ -64,8 +64,12 @@ def restriction_evidence(source, fragments, *, indexed=None):
         anchors=[r for r in indexed if relations.overlaps(r,fragment) and r['actor'] in {'agent','assistant'}]
         if len(anchors)!=1:continue
         anchor=anchors[0];scope=tuple(anchor['scope'])
+        if anchor.get('capture_version') == relations.HARNESS_VERSION and anchor['value'].get('order_known') is False:
+            continue
         for record in indexed:
             if tuple(record['scope'])!=scope or record['end']>anchor['start']:continue
+            if anchor.get('capture_version') == relations.HARNESS_VERSION and record['value'].get('order_known') is False:
+                continue
             if record['actor'] not in {'user','system','developer'} or record['kind'] in {'feedback','tool_result'}:continue
             if record['actor']=='user' and record['kind']!='instruction' and record['start']>=first_agent.get(scope,float('inf')):continue
             view=context.readable(record);cost=0 if record['id'] in instructions else len(dumps(view))

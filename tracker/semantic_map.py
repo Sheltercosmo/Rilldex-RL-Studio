@@ -8,6 +8,7 @@ from pathlib import Path
 import json
 
 from .schema import InputError, digest
+from .capabilities import recorded_scope
 
 VERSION = 'semantic-map/1'
 REFERENCE_DIR = Path(__file__).resolve().parent.parent / 'research/semantic-map-review-2026-10-07/maps'
@@ -136,7 +137,7 @@ def validate(run, document):
         if r['type'] == 'feedback_for':
             ea, eb = events[a['event_id']], events[b['event_id']]
             require(source['kind'] == 'feedback' and target['kind'] == 'action', 'Feedback link endpoint mismatch')
-            require(ea.get('source_call_id') and ea.get('source_call_id') == eb.get('call_id') and ea['trajectory_id'] == eb['trajectory_id'], 'Feedback link lacks source call identity')
+            require(ea.get('source_call_id') and ea.get('source_call_id') == eb.get('call_id') and recorded_scope(ea) == recorded_scope(eb), 'Feedback link lacks source call identity')
         if r['type'] == 'realizes':
             require(source['kind'] == 'action' and target['kind'] == 'semantic', 'Realization requires action and stated intent')
         if r['type'] == 'implements_step':
@@ -189,7 +190,7 @@ def content_choice_request(run, unit, field, candidates, *, model):
     for item in run['events']:
         if item['index'] > e['index']:
             break
-        if item['trajectory_id'] != e['trajectory_id']:
+        if recorded_scope(item) != recorded_scope(e):
             continue
         if item['kind'].startswith('external_') or item.get('agent_visibility') == 'not_established':
             continue
@@ -202,8 +203,8 @@ def content_choice_request(run, unit, field, candidates, *, model):
             ev = next(x for x in run['events'] if x['id'] == a['event_id'])
             if not (0 <= a['start'] < a['end'] <= len(ev['text'])) or ev['text'][a['start']:a['end']] != a['text'] or a['source_pointer'] != ev['source_pointer']:
                 raise InputError('Candidate evidence mismatch')
-            if ev['trajectory_id'] != e['trajectory_id']:
-                raise InputError('Candidate cites another trajectory without visibility evidence')
+            if recorded_scope(ev) != recorded_scope(e):
+                raise InputError('Candidate cites another trajectory or context without visibility evidence')
             if ev['kind'].startswith('external_') or ev.get('agent_visibility') == 'not_established':
                 raise InputError('Candidate cites evidence not established as agent-visible')
             if (ev['index'], a['end']) > (e['index'], unit['source']['end']):

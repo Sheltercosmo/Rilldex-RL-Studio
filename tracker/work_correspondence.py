@@ -10,6 +10,8 @@ from pathlib import Path
 from .schema import InputError,digest,dumps
 from .semantic_extraction import request,checked_span,read,write,audit_result,replay_decision
 from .requested_work import audit as audit_work
+from .readable_context import POLICY_VERSIONS
+from .capabilities import recorded_scope
 
 VERSION='requested-work-action-correspondence/1'
 BATCH_SIZE=12
@@ -38,9 +40,11 @@ def state_before(run,extraction,work,action):
         raise InputError('Complete source-bound requested work is required')
     units={u['id']:u for u in extraction['units']}
     current=source_order(run,action['source']);prior=[]
+    events={e['id']:e for e in run['events']}
+    scope=recorded_scope(events[action['source']['event_id']])
     for step in work['steps']:
         u=units[step['unit_id']];position=source_order(run,u['source'])
-        if u['trajectory_id']==action['trajectory_id'] and (position[0],position[2])<=(current[0],current[1]):
+        if recorded_scope(events[u['source']['event_id']])==scope and (position[0],position[2])<=(current[0],current[1]):
             prior.append((position,step))
     if not prior:return {'source_unit_id':None,'records':[],'state_hash':digest([])}
     step=max(prior,key=lambda p:p[0])[1];records=deepcopy(step['state_after'])
@@ -85,7 +89,7 @@ def compact(value):
 
 def relation_request(run,extraction,work,action,snapshot,pool,policy=None):
     context_policy=deepcopy(policy or POLICY)
-    if context_policy.get('schema') not in {'readable-context/1','readable-context/2'}:
+    if context_policy.get('schema') not in POLICY_VERSIONS:
         raise InputError('Work correspondence requires readable source context')
     refs=[action['source'],*references(action['content']),*references(snapshot['records']),*references(pool)]
     ranges={(r['event_id'],r['start'],r['end']):{k:r[k] for k in ('event_id','start','end')} for r in refs}

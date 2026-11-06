@@ -9,7 +9,7 @@ from .schema import digest
 from .capabilities import recorded_scope
 from .work_order import Evidence as OrderEvidence
 
-VERSION='work-episodes/4'
+VERSION='work-episodes/5'
 LABELS={'continued':'Consecutive same-work recurrence','returned':'Return after intervening operations',
         'interrupted':'Same-work recurrence across an observation gap'}
 METHODS={'same_procedure':'Same dispatched procedure','reconfigured_procedure':'Reconfigured procedure',
@@ -70,6 +70,9 @@ def project(graph):
     for m in methods:
         a,b=m.get('current_unit_id'),m.get('previous_unit_id')
         if a not in actions or b not in actions or not earlier(b,a) or not available(m,a):continue
+        # A rejected related-work candidate is not a dispute of a separately
+        # selected identity. The candidate recall layer never merged its group.
+        if m.get('candidate_basis') and m.get('group_id') is None:continue
         if m.get('comparison')=='different_work' or m.get('work_instance')=='different_work_instance' or m.get('upstream_identity_disputed'):
             disputed.add(a)
     roots={};chains={}
@@ -109,6 +112,47 @@ def project(graph):
             stage=next((s for s in (plan.get('plan_structure') or {}).get('steps',[]) if s['id']==sid),None)
             if stage:result.append({'plan_unit_id':e['target'],'step_id':sid,'text':stage['text'],'target':stage.get('target'), 'role':e['type'],'edge_id':e['id']})
         return result
+    def episode(prior,uid,between,category,group,root,earlier_index,index,actor,trajectory,context):
+        responses=[e for e in edges if e['type']=='feedback_for' and e['target']==prior and e['source'] in valid_units and earlier(prior,e['source']) and earlier(e['source'],uid) and available(e,uid)]
+        response_ids={e['source'] for e in responses}
+        assessments=[e for e in edges if e['type']=='assesses' and e['target'] in response_ids and e['source'] in valid_units and earlier(e['target'],e['source']) and earlier(e['source'],uid) and available(e,uid)]
+        adjustments=[]
+        for e in edges:
+            p0=e['properties'];via=p0.get('via_action')
+            # This relation points to the earlier attempt; retry_unit_id
+            # identifies the recurrence. The correction may be the retry
+            # itself, or an intervening prerequisite operation.
+            if (e['type']=='adjustment_before_retry' and e['target']==prior and p0.get('retry_unit_id')==uid
+                and e['source'] in valid_units and via in actions and earlier(prior,e['source'])
+                and earlier(e['source'],via) and (via==uid or earlier(via,uid)) and available(e,uid)):
+                adjustments.append({'declaration':e['source'],'action':via,'work':p0.get('work_text'),
+                    'scope':p0.get('scope'),'timing':'at_recurrence' if via==uid else 'before_recurrence','edge_id':e['id']})
+        matches=[m for m in methods if m.get('current_unit_id')==uid and m.get('previous_unit_id')==prior and available(m,uid)]
+        method=matches[0] if len(matches)==1 else None
+        member_ids={prior,uid,*[v['unit_id'] for v in between if v['unit_id']],*response_ids,*[e['source'] for e in assessments]}
+        for a in adjustments:member_ids.update((a['declaration'],a['action']))
+        roles={prior:'Earlier attempt',uid:'Current recurrence'}
+        roles.update({r:'Returned feedback' for r in response_ids});roles.update({e['source']:'Assessment of earlier feedback' for e in assessments})
+        for a in adjustments:
+            roles[a['declaration']]='Stated adjustment'
+            roles[a['action']]='Current recurrence · adjustment attempt' if a['action']==uid else 'Adjustment attempt'
+        cards=[card(i,roles.get(i,'Intervening operation')) for i in sorted(member_ids,key=position)]
+        evidence_ids=list(dict.fromkeys([*chains[uid],*chains[prior],*[e['id'] for e in responses+assessments],*[a['edge_id'] for a in adjustments]]))
+        connections=[{k:e[k] for k in ('id','source','target','type')} for e in edges
+                     if e['id'] in evidence_ids and e['source'] in member_ids and e['target'] in member_ids]
+        value={'graph_id':graph['id'],'run_id':graph['run_id'],'actor':actor,'trajectory_id':trajectory,'context_id':context,
+            'category':category,'target':group['target'],'previous_unit_id':prior,'current_unit_id':uid,'group_id':root,
+            'start_position':earlier_index+1,'end_position':index+1,'intervening':between,'cards':cards,
+            'previous_plan_stages':stage_edges(prior),'current_plan_stages':stage_edges(uid),
+            'feedback_unit_ids':sorted(response_ids,key=position),
+            'assessment_unit_ids':sorted({e['source'] for e in assessments},key=position),'adjustments':adjustments,
+            'method':{k:method.get(k) for k in ('comparison','work_instance','request','work_request','cutoff')} if method else None,
+            'edge_ids':evidence_ids,'connections':connections,
+            'interpretation':'Recorded recurrence; failure, progress, deviation and exploration are separate questions.'}
+        if method and method.get('basis')=='procedure-review/1':
+            value['method'].update(basis=method['basis'],review=method['review'])
+        return value
+
     episodes=[];paths=[]
     for (actor,trajectory,context),positions in sorted(streams.items(),key=lambda item:str(item[0])):
         last={};groups={}
@@ -123,47 +167,34 @@ def project(graph):
                 gap=any(v['unit_id'] is None or v['group_id'] is None or not v['order_known'] for v in between)
                 category='interrupted' if gap else 'returned' if between else 'continued'
                 p['category']=category
-                responses=[e for e in edges if e['type']=='feedback_for' and e['target']==prior and e['source'] in valid_units and earlier(prior,e['source']) and earlier(e['source'],uid) and available(e,uid)]
-                response_ids={e['source'] for e in responses}
-                assessments=[e for e in edges if e['type']=='assesses' and e['target'] in response_ids and e['source'] in valid_units and earlier(e['target'],e['source']) and earlier(e['source'],uid) and available(e,uid)]
-                adjustments=[]
-                for e in edges:
-                    p0=e['properties'];via=p0.get('via_action')
-                    # This relation points to the earlier attempt; retry_unit_id
-                    # identifies the recurrence. The correction may be the retry
-                    # itself, or an intervening prerequisite operation.
-                    if (e['type']=='adjustment_before_retry' and e['target']==prior and p0.get('retry_unit_id')==uid
-                        and e['source'] in valid_units and via in actions and earlier(prior,e['source'])
-                        and earlier(e['source'],via) and (via==uid or earlier(via,uid)) and available(e,uid)):
-                        adjustments.append({'declaration':e['source'],'action':via,'work':p0.get('work_text'),
-                            'scope':p0.get('scope'),'timing':'at_recurrence' if via==uid else 'before_recurrence','edge_id':e['id']})
-                matches=[m for m in methods if m.get('current_unit_id')==uid and m.get('previous_unit_id')==prior and available(m,uid)]
-                method=matches[0] if len(matches)==1 else None
-                member_ids={prior,uid,*[v['unit_id'] for v in between if v['unit_id']],*response_ids,*[e['source'] for e in assessments]}
-                for a in adjustments:member_ids.update((a['declaration'],a['action']))
-                roles={prior:'Earlier attempt',uid:'Current recurrence'}
-                roles.update({r:'Returned feedback' for r in response_ids});roles.update({e['source']:'Assessment of earlier feedback' for e in assessments})
-                for a in adjustments:
-                    roles[a['declaration']]='Stated adjustment'
-                    roles[a['action']]='Current recurrence · adjustment attempt' if a['action']==uid else 'Adjustment attempt'
-                cards=[card(i,roles.get(i,'Intervening operation')) for i in sorted(member_ids,key=position)]
-                evidence_ids=list(dict.fromkeys([*chains[uid],*chains[prior],*[e['id'] for e in responses+assessments],*[a['edge_id'] for a in adjustments]]))
-                connections=[{k:e[k] for k in ('id','source','target','type')} for e in edges
-                             if e['id'] in evidence_ids and e['source'] in member_ids and e['target'] in member_ids]
-                value={'graph_id':graph['id'],'run_id':graph['run_id'],'actor':actor,'trajectory_id':trajectory,'context_id':context,
-                    'category':category,'target':group['target'],'previous_unit_id':prior,'current_unit_id':uid,'group_id':root,
-                    'start_position':earlier_index+1,'end_position':index+1,'intervening':between,'cards':cards,
-                    'previous_plan_stages':stage_edges(prior),'current_plan_stages':stage_edges(uid),
-                    'feedback_unit_ids':sorted(response_ids,key=position),
-                    'assessment_unit_ids':sorted({e['source'] for e in assessments},key=position),'adjustments':adjustments,
-                    'method':{k:method.get(k) for k in ('comparison','work_instance','request','work_request','cutoff')} if method else None,
-                    'edge_ids':evidence_ids,'connections':connections,
-                    'interpretation':'Recorded recurrence; failure, progress, deviation and exploration are separate questions.'}
-                if method and method.get('basis')=='procedure-review/1':
-                    value['method'].update(basis=method['basis'],review=method['review'])
+                value=episode(prior,uid,between,category,group,root,earlier_index,index,actor,trajectory,context)
                 eid='work-episode-'+digest(value);p['episode_id']=eid;episodes.append({'id':eid,**value})
             last[root]=index
         paths.append({'actor':actor,'trajectory_id':trajectory,'context_id':context,'positions':positions,'groups':list(groups.values())})
+    paired={(e['previous_unit_id'],e['current_unit_id']) for e in episodes}
+    if observations.get('method_schema')=='work-method-comparison/5':
+        for m in methods:
+            prior,uid=m.get('previous_unit_id'),m.get('current_unit_id')
+            if (m.get('group_id') is not None or not m.get('candidate_basis') or
+                m.get('status')!='selected' or m.get('work_instance')!='same_work_instance' or
+                m.get('upstream_identity_disputed') or (prior,uid) in paired):continue
+            if (prior not in actions or uid not in actions or lane(prior)!=lane(uid) or
+                not earlier(prior,uid) or not available(m,uid)):continue
+            witnesses=[e for e in edges if e['source']==uid and e['target']==prior and
+                e['type'] in {'different_work_same_subject','overlapping_work_scope'} and
+                e['properties'] in m.get('candidate_relations',[]) and available(e,uid)]
+            if not witnesses:continue
+            path=next((p for p in paths if (p['actor'],p['trajectory_id'],p['context_id'])==lane(uid)),None)
+            if path is None:continue
+            positions=path['positions'];indices={p['unit_id']:i for i,p in enumerate(positions) if p['unit_id'] and p['order_known']}
+            if prior not in indices or uid not in indices:continue
+            earlier_index,index=indices[prior],indices[uid];between=positions[earlier_index+1:index]
+            category='interrupted' if any(not p['unit_id'] or not p['order_known'] for p in between) else 'returned' if between else 'continued'
+            actor,trajectory,context=lane(uid)
+            value=episode(prior,uid,between,category,{'target':content(prior)},None,earlier_index,index,actor,trajectory,context)
+            value.update(identity_basis='independent_work_instance',candidate_relation_ids=[e['id'] for e in witnesses],
+                interpretation='Exact-pair same-work comparison selected independently of target grouping. Original paths stay separate; success and causal benefit remain separate observations.')
+            episodes.append({'id':'work-episode-'+digest(value),**value});paired.add((prior,uid))
     positions=[v for p in paths for v in p['positions']]
     counts={k:sum(e['category']==k for e in episodes) for k in LABELS}
     counts.update(recorded_actions=len(positions),represented_actions=sum(bool(v['unit_id']) for v in positions),
@@ -173,6 +204,8 @@ def project(graph):
         recurrences_with_feedback=sum(bool(e['feedback_unit_ids']) for e in episodes),
         recurrences_with_adjustment=sum(bool(e['adjustments']) for e in episodes),
         method_compared=sum(bool(e['method']) for e in episodes))
+    if observations.get('method_schema')=='work-method-comparison/5':
+        counts['independent_work_comparisons']=sum(e.get('identity_basis')=='independent_work_instance' for e in episodes)
     value={'schema':VERSION,'run_id':graph['run_id'],'graph_id':graph['id'],'source_hash':graph['source_hash'],
         'observer':graph['observer'],'metadata':graph.get('metadata',{}),'paths':paths,'episodes':episodes,'counts':counts,'issues':issues,
         'disputed_identity_units':sorted(disputed),'labels':LABELS,'method_labels':METHODS,

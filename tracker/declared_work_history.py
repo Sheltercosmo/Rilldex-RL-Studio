@@ -6,6 +6,7 @@ from .schema import InputError,digest,dumps
 from .semantic_extraction import request,checked_span,read,write,replay_decision
 from .jev import DEFAULT_MODEL
 from .work_correspondence import source_order
+from .capabilities import recorded_scope
 
 VERSION='declared-work-item-history/1'
 PAIR_VERSION='declared-work-item-history/2'
@@ -60,10 +61,13 @@ def build(run,doc,local,decide,version=VERSION):
     if local['status']!='complete' or local['source_hash']!=digest(run) or local['base_map_hash']!=digest(doc):
         raise InputError('Complete local work items over this map must precede histories')
     units={u['id']:u for u in doc['units']};records=[];rows=[];relations=[]
+    events={e['id']:e for e in run['events']}
+    def scope(uid):return recorded_scope(events[units[uid]['source']['event_id']])
     for row in sorted(local['observations'],key=lambda r:source_order(run,units[r['unit_id']]['source'])):
         unit=units[row['unit_id']];position=source_order(run,unit['source'])
         for item in row['items']:
             pool=[r for r in records if (r['actor'],r['trajectory_id'])==(unit['actor'],unit['trajectory_id'])
+                  and scope(r['updates'][-1]['unit_id'])==scope(unit['id'])
                   and source_order(run,units[r['updates'][-1]['unit_id']]['source'])<position]
             update={'unit_id':unit['id'],'item_id':item['id'],'work':item['work'],'declaration':item['declaration'],
                     'evidence':deepcopy(item['evidence']),'local_selection_request':row['request'],

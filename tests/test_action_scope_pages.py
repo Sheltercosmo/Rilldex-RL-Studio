@@ -20,7 +20,7 @@ def fixture(count=64):
 
 
 def transport(req):
-    if req['state']['stage']!='action_target_scope_pairs':return base_transport(req)
+    if req['state']['stage'] not in {'action_target_scope_pairs','action_targets'}:return base_transport(req)
     return {'model':req['model'],'answers':{
         key:{'type':'choice','probabilities':{c:float(c=='same_work_target') for c in q['criteria']}}
         for key,q in req['questions'].items()}}

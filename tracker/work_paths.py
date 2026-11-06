@@ -5,24 +5,29 @@ an assessment is an agent claim, and a plan-stage link is not completion.
 """
 from .schema import InputError
 
-VERSION='work-path-projection/1'
+VERSION='work-path-projection/2'
 
 
 def build(run,document):
-    result={'schema':VERSION,'available':bool(document.get('action_target_review')),'paths':[],
+    # No recorded context means the original projection is unchanged. Preserve
+    # its identity so frozen downstream observations remain replayable.
+    version=VERSION if any(e.get('context_id') is not None for e in run['events']) else 'work-path-projection/1'
+    result={'schema':version,'available':bool(document.get('action_target_review')),'paths':[],
       'limits':'Paths group selected same-work identities. Context may appear in several paths, but each unit appears once within a path. Shared context is not extra activity. Source order is not a causal chain. Plan stages remain intended work; assessments are unvalidated agent interpretations.'}
     if not result['available']:return result
     units={u['id']:u for u in document['units']};events={e['id']:e for e in run['events']}
     def order(uid):
         u=units[uid];return (events[u['source']['event_id']]['index'],u['source']['start'],u['source']['end'])
+    def scope(uid):
+        u=units[uid];return u['actor'],u['trajectory_id'],events[u['source']['event_id']].get('context_id')
     actions={uid for uid,u in units.items() if u['kind']=='action'}
     previous={}
     for edge in document['relations']:
         if edge['type']!='same_action_target':continue
         a,b=edge['from'],edge['to']
         if a not in actions or b not in actions:raise InputError('Work identity must connect dispatch units')
-        if (units[a]['actor']!=units[b]['actor'] or units[a]['trajectory_id']!=units[b]['trajectory_id'] or order(b)>=order(a)):
-            raise InputError('Work identity must point to an earlier action by the same actor in the same trajectory')
+        if scope(a)!=scope(b) or order(b)>=order(a):
+            raise InputError('Work identity must point to an earlier action by the same actor in the same trajectory and context')
         if a in previous and previous[a]!=b:raise InputError('Conflicting work identities')
         previous[a]=b
     groups={}

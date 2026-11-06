@@ -5,6 +5,7 @@ from pathlib import Path
 from .schema import InputError,digest
 from .semantic_extraction import request,checked_span,read,write,replay_decision
 from .work_correspondence import source_order,compact,references
+from .capabilities import recorded_scope
 
 VERSION='declared-work-action-correspondence/1'
 DIRECTED_VERSION='declared-work-action-correspondence/2'
@@ -23,11 +24,13 @@ EXPLANATIONS={
 
 def candidates(run,doc,history,action,version=VERSION):
     units={u['id']:u for u in doc['units']};current=source_order(run,action['source']);pool=[]
+    events={e['id']:e for e in run['events']};scope=recorded_scope(events[action['source']['event_id']])
     for record in history['records']:
         if (record['actor'],record['trajectory_id'])!=(action['actor'],action['trajectory_id']):continue
         prior=[]
         for update in record['updates']:
             u=units[update['unit_id']];pos=source_order(run,u['source'])
+            if recorded_scope(events[u['source']['event_id']])!=scope:continue
             if (pos[0],pos[2])<=(current[0],current[1]):prior.append(update)
         if not prior:continue
         prior.sort(key=lambda r:source_order(run,units[r['unit_id']]['source']))
@@ -37,7 +40,7 @@ def candidates(run,doc,history,action,version=VERSION):
             for relation in doc['relations']:
                 if relation['type']!='recorded_with' or relation['from'] not in context_ids:continue
                 linked=units[relation['to']];pos=source_order(run,linked['source'])
-                if linked['kind']=='action' and (pos[0],pos[2])<=(current[0],current[2]):
+                if linked['kind']=='action' and recorded_scope(events[linked['source']['event_id']])==scope and (pos[0],pos[2])<=(current[0],current[2]):
                     support.append({'unit_id':linked['id'],'source':deepcopy(linked['source']),
                         'meaning':deepcopy(linked['content']),'evidence':[deepcopy(linked['source'])]})
             value['recorded_dispatch_context']=support

@@ -1,0 +1,478 @@
+{
+  "schema": "authored-method-context-control/1",
+  "provenance": "Authored unchanged-repeat control, frozen from the existing method comparison fixture; no model predictions or external data.",
+  "run": {
+    "schema": "jev-trace/1",
+    "adapter": "devai",
+    "adapter_version": "devai/1",
+    "metadata": {
+      "environment": "devai-openhands"
+    },
+    "events": [
+      {
+        "id": "e1",
+        "index": 0,
+        "kind": "instruction",
+        "actor": "user",
+        "text": "Read record A.",
+        "source_pointer": "/trajectory/0/user_message",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "332e1b79e6807308059a93aacb574c3af8dab874fb4c6ba66b9276bfaa93523e"
+      },
+      {
+        "id": "e2",
+        "index": 1,
+        "kind": "reasoning",
+        "actor": "agent",
+        "text": "I will work on this request.",
+        "source_pointer": "/trajectory/0/agent/thought",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "c29feccaf10f2322b58d3a094f78e67081fb19d8a0fb65dcbe424fa36c16041a"
+      },
+      {
+        "id": "e3",
+        "index": 2,
+        "kind": "action",
+        "actor": "agent",
+        "text": "read_record(\"A\")",
+        "source_pointer": "/trajectory/0/agent/action",
+        "tool": "devai_recorded_action",
+        "arguments": {},
+        "arguments_available": false,
+        "call_id": "devai-step-0",
+        "parent_id": "e2",
+        "source_action_format": "publisher description; native arguments unavailable",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "2f380de2837763595875999ac04f1f54a3fd85d359f61bf6fea4a040b6505e3d"
+      },
+      {
+        "id": "e4",
+        "index": 3,
+        "kind": "feedback",
+        "actor": "environment",
+        "text": "Temporary timeout.",
+        "source_pointer": "/trajectory/0/environment",
+        "source_call_id": "devai-step-0",
+        "source_binding": "publisher_step_pair",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "86e7d9f24a27a0d1be09473818ced5dcbebff86c1972d20d47da533f6a44398c"
+      },
+      {
+        "id": "e5",
+        "index": 4,
+        "kind": "reasoning",
+        "actor": "agent",
+        "text": "The read timed out, so I will try the same record again.",
+        "source_pointer": "/trajectory/1/agent/thought",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "45695d513965a781f5b0a258754ea15ff6caafb67ba5c9e8a4e4d9f0fc7d9229"
+      },
+      {
+        "id": "e6",
+        "index": 5,
+        "kind": "action",
+        "actor": "agent",
+        "text": "read_record(\"A\")",
+        "source_pointer": "/trajectory/1/agent/action",
+        "tool": "devai_recorded_action",
+        "arguments": {},
+        "arguments_available": false,
+        "call_id": "devai-step-1",
+        "parent_id": "e5",
+        "source_action_format": "publisher description; native arguments unavailable",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "2f380de2837763595875999ac04f1f54a3fd85d359f61bf6fea4a040b6505e3d"
+      },
+      {
+        "id": "e7",
+        "index": 6,
+        "kind": "feedback",
+        "actor": "environment",
+        "text": "WITHHELD_FUTURE_RESULT",
+        "source_pointer": "/trajectory/1/environment",
+        "source_call_id": "devai-step-1",
+        "source_binding": "publisher_step_pair",
+        "trajectory_id": "main",
+        "copied_context": false,
+        "content_hash": "7e85d8789a6d7e1c5d7bf1aed84c36db4d61e296f0ca1261941e6581a1f04318"
+      }
+    ],
+    "outcome": {
+      "recorded_steps": 2
+    },
+    "warnings": [
+      "DevAI action strings and terminal output are recorded evidence; no exit status, policy checkpoint or independent task-success judgment is inferred.",
+      "Task identity missing: excluded from paired checkpoint comparisons.",
+      "Policy version missing: policy identity cannot be verified. Rollout trends use explicit experiment and training_step when provided."
+    ],
+    "raw": {
+      "trajectory_format": "devai/1",
+      "trajectory": [
+        {
+          "step": 0,
+          "user_message": "Read record A.",
+          "agent": {
+            "thought": "I will work on this request.",
+            "action": "read_record(\"A\")"
+          },
+          "environment": "Temporary timeout."
+        },
+        {
+          "step": 1,
+          "agent": {
+            "thought": "The read timed out, so I will try the same record again.",
+            "action": "read_record(\"A\")"
+          },
+          "environment": "WITHHELD_FUTURE_RESULT"
+        }
+      ]
+    },
+    "id": "93995d54727927330d3a4305"
+  },
+  "document": {
+    "source_hash": "2d6bc4d715d55440115353a1c7e5d95f3c768ca87c37d401aefdef4acd578017",
+    "units": [
+      {
+        "id": "u-e1",
+        "actor": "user",
+        "trajectory_id": "main",
+        "kind": "semantic",
+        "activity": "orient",
+        "source": {
+          "event_id": "e1",
+          "start": 0,
+          "end": 14,
+          "text": "Read record A.",
+          "source_pointer": "/trajectory/0/user_message"
+        },
+        "content": {
+          "summary": {
+            "text": "Read record A.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 14,
+                "text": "Read record A.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          },
+          "target": {
+            "text": "Read record A.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 14,
+                "text": "Read record A.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e2",
+        "actor": "agent",
+        "trajectory_id": "main",
+        "kind": "semantic",
+        "activity": "orient",
+        "source": {
+          "event_id": "e2",
+          "start": 0,
+          "end": 28,
+          "text": "I will work on this request.",
+          "source_pointer": "/trajectory/0/agent/thought"
+        },
+        "content": {
+          "summary": {
+            "text": "I will work on this request.",
+            "evidence": [
+              {
+                "event_id": "e2",
+                "start": 0,
+                "end": 28,
+                "text": "I will work on this request.",
+                "source_pointer": "/trajectory/0/agent/thought"
+              }
+            ]
+          },
+          "target": {
+            "text": "Read record A.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 14,
+                "text": "Read record A.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e3",
+        "actor": "agent",
+        "trajectory_id": "main",
+        "kind": "action",
+        "activity": "construct",
+        "source": {
+          "event_id": "e3",
+          "start": 0,
+          "end": 16,
+          "text": "read_record(\"A\")",
+          "source_pointer": "/trajectory/0/agent/action"
+        },
+        "content": {
+          "summary": {
+            "text": "read_record(\"A\")",
+            "evidence": [
+              {
+                "event_id": "e3",
+                "start": 0,
+                "end": 16,
+                "text": "read_record(\"A\")",
+                "source_pointer": "/trajectory/0/agent/action"
+              }
+            ]
+          },
+          "target": {
+            "text": "Read record A.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 14,
+                "text": "Read record A.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e4",
+        "actor": "environment",
+        "trajectory_id": "main",
+        "kind": "feedback",
+        "activity": null,
+        "source": {
+          "event_id": "e4",
+          "start": 0,
+          "end": 18,
+          "text": "Temporary timeout.",
+          "source_pointer": "/trajectory/0/environment"
+        },
+        "content": {
+          "summary": {
+            "text": "Temporary timeout.",
+            "evidence": [
+              {
+                "event_id": "e4",
+                "start": 0,
+                "end": 18,
+                "text": "Temporary timeout.",
+                "source_pointer": "/trajectory/0/environment"
+              }
+            ]
+          },
+          "target": {
+            "text": "Read record A.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 14,
+                "text": "Read record A.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e5",
+        "actor": "agent",
+        "trajectory_id": "main",
+        "kind": "semantic",
+        "activity": "orient",
+        "source": {
+          "event_id": "e5",
+          "start": 0,
+          "end": 56,
+          "text": "The read timed out, so I will try the same record again.",
+          "source_pointer": "/trajectory/1/agent/thought"
+        },
+        "content": {
+          "summary": {
+            "text": "The read timed out, so I will try the same record again.",
+            "evidence": [
+              {
+                "event_id": "e5",
+                "start": 0,
+                "end": 56,
+                "text": "The read timed out, so I will try the same record again.",
+                "source_pointer": "/trajectory/1/agent/thought"
+              }
+            ]
+          },
+          "target": {
+            "text": "Read record A.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 14,
+                "text": "Read record A.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e6",
+        "actor": "agent",
+        "trajectory_id": "main",
+        "kind": "action",
+        "activity": "construct",
+        "source": {
+          "event_id": "e6",
+          "start": 0,
+          "end": 16,
+          "text": "read_record(\"A\")",
+          "source_pointer": "/trajectory/1/agent/action"
+        },
+        "content": {
+          "summary": {
+            "text": "read_record(\"A\")",
+            "evidence": [
+              {
+                "event_id": "e6",
+                "start": 0,
+                "end": 16,
+                "text": "read_record(\"A\")",
+                "source_pointer": "/trajectory/1/agent/action"
+              }
+            ]
+          },
+          "target": {
+            "text": "Read record A.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 14,
+                "text": "Read record A.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "u-e7",
+        "actor": "environment",
+        "trajectory_id": "main",
+        "kind": "feedback",
+        "activity": null,
+        "source": {
+          "event_id": "e7",
+          "start": 0,
+          "end": 22,
+          "text": "WITHHELD_FUTURE_RESULT",
+          "source_pointer": "/trajectory/1/environment"
+        },
+        "content": {
+          "summary": {
+            "text": "WITHHELD_FUTURE_RESULT",
+            "evidence": [
+              {
+                "event_id": "e7",
+                "start": 0,
+                "end": 22,
+                "text": "WITHHELD_FUTURE_RESULT",
+                "source_pointer": "/trajectory/1/environment"
+              }
+            ]
+          },
+          "target": {
+            "text": "Read record A.",
+            "evidence": [
+              {
+                "event_id": "e1",
+                "start": 0,
+                "end": 14,
+                "text": "Read record A.",
+                "source_pointer": "/trajectory/0/user_message"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "relations": [
+      {
+        "from": "u-e2",
+        "to": "u-e3",
+        "type": "recorded_with"
+      },
+      {
+        "from": "u-e4",
+        "to": "u-e3",
+        "type": "feedback_for"
+      },
+      {
+        "from": "u-e5",
+        "to": "u-e6",
+        "type": "recorded_with"
+      },
+      {
+        "from": "u-e7",
+        "to": "u-e6",
+        "type": "feedback_for"
+      },
+      {
+        "from": "u-e6",
+        "to": "u-e3",
+        "type": "same_action_target"
+      }
+    ],
+    "work_history": {
+      "available": true,
+      "streams": [
+        {
+          "groups": [
+            {
+              "id": "g",
+              "occurrences": [
+                {
+                  "unit_id": "u-e3"
+                },
+                {
+                  "unit_id": "u-e6"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "recurrences": [
+        {
+          "group_id": "g",
+          "previous_group_unit_id": "u-e3",
+          "unit_id": "u-e6"
+        }
+      ]
+    },
+    "origin": "Authored layer-isolation control; upstream grouping may deliberately be wrong"
+  }
+}

@@ -7,7 +7,8 @@ from .adapters import FORMATS
 
 GROUPS = [
     ('Common records', [
-        ('chat-messages', 'Conversation · messages, calls and results'),
+        ('chat-messages', 'Conversation · messages, sessions and tool calls'),
+        ('responses-items', 'Responses · recorded items and tool results'),
         ('environment-episode', 'Environment episode · actions and observations'),
         ('generation', 'Generation · prompt and completion'),
         ('atif', 'ATIF · structured agent trajectory'),

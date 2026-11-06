@@ -2,7 +2,8 @@
 
 This module does not activate a production harness on import. Both batched
 candidates remain unpromoted after observed off-target differences; the isolated
-candidate retains a retrieval/verification concern. Production stays at H1 1.4.
+candidate retains a retrieval/verification concern. These verification rules
+remain separate from the production activity reader.
 """
 from copy import deepcopy
 

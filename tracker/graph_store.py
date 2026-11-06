@@ -52,11 +52,11 @@ def build(run, bundle=None, *, include_requested=True):
     previous = {}
     for e in run['events']:
         identifier = 'event:' + e['id']; node(identifier, 'event', e, e)
-        trajectory = e['trajectory_id']
+        trajectory = (e['trajectory_id'], e.get('context_id'))
         if trajectory in previous:
             edge(previous[trajectory], identifier, 'next_record', {'basis': 'source_order', 'causal': False})
         previous[trajectory] = identifier
-    if run.get('adapter_version') == 'environment-episode/2':
+    if run.get('adapter_version') in {'environment-episode/2', 'environment-episode/2+contracts-1'}:
         for e in run['events']:
             parent = events.get(e.get('parent_id'))
             if (e['kind'] == 'action' and parent and parent['kind'] == 'message'

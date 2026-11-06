@@ -142,7 +142,7 @@ class RelationContextTests(unittest.TestCase):
             self.assertEqual(search.workspace_protocol(old)['schema'],search.TASK_CONTEXT_VERSION)
             args.directory=str(root/'new');args.audit_only=False
             with redirect_stdout(StringIO()),patch('tracker.jev.JevClient._post',side_effect=wire):cli.execute(args,store)
-            self.assertEqual(read(root/'new/input.json'),search.source_from_run(run,search.SCOPED_VERSION))
+            self.assertEqual(read(root/'new/input.json'),search.source_from_run(run,search.HARNESS_VERSION))
             args.audit_only=True
             with redirect_stdout(StringIO()):cli.execute(args,store)
 

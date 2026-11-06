@@ -60,15 +60,20 @@ def coverage(result):
         oversized_pairs=sum(len(r.get('oversized_pairs', [])) for r in rows))
 
 
-def build(run, extraction, decide, *, progress=None):
+def build(run, extraction, decide, *, progress=None, version=VERSION):
+    if version not in {VERSION,targets.INTERVAL_VERSION}:raise InputError('Unknown paged target protocol')
     if extraction['status'] != 'complete_local_extraction':
         raise InputError('Complete local selection is required before scope comparison')
+    interval_document=None
+    if version==targets.INTERVAL_VERSION:
+        from . import action_target_intervals as intervals
+        interval_document=intervals.local_document(run,extraction)
     ordering = Evidence({e['id']:e for e in run['events']})
     work = [(a, *candidate_scope(run, extraction, a, ordering))
             for a in extraction['units'] if a['kind']=='action' and a['status']=='selected']
-    result = dict(schema=VERSION, run_id=run['id'], source_hash=digest(run),
-        extraction_hash=digest(extraction), candidate_limit=pairs.LIMIT, page_byte_limit=MAX_BYTES,
-        evidence_layout=targets.SCOPED_LAYOUT, status='running', actions=[], relations=[],
+    result = dict(schema=version, run_id=run['id'], source_hash=digest(run),
+        extraction_hash=digest(extraction), candidate_limit=1 if interval_document else pairs.LIMIT, page_byte_limit=MAX_BYTES,
+        evidence_layout=intervals.EVIDENCE_LAYOUT if interval_document else targets.SCOPED_LAYOUT, status='running', actions=[], relations=[],
         identity_projection='Publish the most recent positive whole-target predecessor only after all eligible pairs for this action have been inspected. Retain every pair judgment.',
         limits='Source-ordered correspondence, not causal retry, progress, success or strategy. Uninspected and unresolved pairs are not negative results.')
     for action, pool, excluded in work:
@@ -88,7 +93,8 @@ def build(run, extraction, decide, *, progress=None):
                              else 'no_ordered_prior_action' if excluded else 'no_prior_selected_action')
             publish(); continue
         row['status'] = 'inspecting'
-        for chunk, req in pages(run, action, pool):
+        requests=(intervals.pages(run,interval_document,action,pool,max_bytes=MAX_BYTES) if interval_document else pages(run,action,pool))
+        for chunk, req in requests:
             if req is None:
                 row.setdefault('oversized_pairs', []).extend(p['unit_id'] for p in chunk)
                 publish(); continue

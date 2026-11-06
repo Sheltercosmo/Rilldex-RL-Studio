@@ -21,7 +21,7 @@ def check(environ=None):
     try:
         config = candidate.settings(env)
         proposal = dict(state='configured', endpoint=config['endpoint'], model=config['model'],
-                        credential_set=bool(config['key']), contract=candidate.VERSION)
+                        credential_set=bool(config['key']), contract=candidate.VERSION,json_mode=config['json_mode'])
     except ValueError as exc:
         proposal = dict(state='needs_configuration', detail=str(exc))
     decision = dict(provider='Jev / Typesafe', model=DEFAULT_MODEL,
@@ -47,15 +47,15 @@ def pilot(store, directory, run_id, *, candidate_calls=0, decision_calls=0, inpu
     from tracker.semantic_budget import limits, summary
     from tracker.semantic_catalog import register
     from tracker.jev import JevClient
-    from tracker.action_targets import PAGED_VERSION
-    from tracker.plan_relations import DIRECT_VERSION as PLAN_VERSION
+    from tracker.action_targets import INTERVAL_VERSION
+    from tracker.plan_relations import FOCUSED_VERSION as PLAN_VERSION
     from tracker.execution_reports import VERSION as REPORT_VERSION
-    from tracker.method_comparison import NATIVE_VERSION as METHOD_VERSION
+    from tracker.method_comparison import RELATED_VERSION as METHOD_VERSION
     cap = limits(dict(candidate_requests=candidate_calls, jev_requests=decision_calls, input_bytes=input_bytes))
     if type(inspect_feedback) is not bool:raise InputError('inspect_feedback must be a boolean')
     if type(inspect_approaches) is not bool:raise InputError('inspect_approaches must be a boolean')
     config = candidate.settings()
-    identity = dict(adapter=candidate.VERSION, endpoint=config['endpoint'], model=config['model'], decision_model=DEFAULT_MODEL)
+    identity = dict(candidate.identity(config), decision_model=DEFAULT_MODEL)
     root = Path(directory).resolve()
     # Serialize the lifetime calculation as well as execution. A different lock
     # from workspace.exclusive allows the existing execution lock to remain intact.
@@ -65,8 +65,11 @@ def pilot(store, directory, run_id, *, candidate_calls=0, decision_calls=0, inpu
         # Old pilots keep their original local-only protocol and request hashes.
         # New pilots include work correspondence within the same lifetime limits.
         saved=read(pin) if pin.exists() else None
+        from tracker.semantic_extraction import PURPOSE_ACTIVITY_ROUTING
+        if saved is None or saved.get('activity_routing'):
+            identity['activity_routing']=saved['activity_routing'] if saved else PURPOSE_ACTIVITY_ROUTING
         if saved is None or saved.get('action_target_version'):
-            identity['action_target_version']=PAGED_VERSION
+            identity['action_target_version']=saved['action_target_version'] if saved else INTERVAL_VERSION
         if saved is None or saved.get('plan_relation_version'):
             identity['plan_relation_version']=saved['plan_relation_version'] if saved else PLAN_VERSION
         if saved is None or saved.get('execution_report_version') or inspect_feedback:
@@ -74,7 +77,7 @@ def pilot(store, directory, run_id, *, candidate_calls=0, decision_calls=0, inpu
         if saved is None or saved.get('method_comparison_version') or inspect_approaches:
             if not identity.get('action_target_version'):
                 raise InputError('Approach comparison needs work-target links. Start a new pilot to add them.')
-            identity['method_comparison_version']=METHOD_VERSION
+            identity['method_comparison_version']=saved.get('method_comparison_version',METHOD_VERSION) if saved else METHOD_VERSION
         additive={'execution_report_version','method_comparison_version'}
         added={k:v for k,v in identity.items() if saved is not None and k not in saved}
         upgrade=bool(saved and added and set(added)<=additive and {k:v for k,v in identity.items() if k not in added}==saved)
@@ -96,7 +99,12 @@ def pilot(store, directory, run_id, *, candidate_calls=0, decision_calls=0, inpu
                     raise InputError('Saved inspection protocol differs')
                 write(work/'configuration-history'/f'{digest(previous)}.json',previous)
                 write(work/'workspace.json',{**previous,**added})
-        workspace.initialize(work, run,action_target_version=identity.get('action_target_version'),plan_relation_version=identity.get('plan_relation_version'),execution_report_version=identity.get('execution_report_version'),method_comparison_version=identity.get('method_comparison_version'))
+        from tracker.semantic_extraction import PURPOSE_ACTIVITY_ROUTING,ACTIVITY_ROUTING
+        # New pilots use the tested purpose distinction; a resume retains its
+        # original candidate and decision protocol.
+        previous=read(work/'workspace.json') if (work/'workspace.json').exists() else None
+        routing=previous.get('activity_routing',ACTIVITY_ROUTING) if previous else identity.get('activity_routing',ACTIVITY_ROUTING)
+        workspace.initialize(work, run,activity_routing=routing,action_target_version=identity.get('action_target_version'),plan_relation_version=identity.get('plan_relation_version'),execution_report_version=identity.get('execution_report_version'),method_comparison_version=identity.get('method_comparison_version'))
         write(pin, identity)
         usage = summary(work)['providers']
         used = dict(candidate_requests=usage.get('candidate', {}).get('attempts', 0),
@@ -148,7 +156,7 @@ def watch(store,directory,*,experiment,label=None,from_pilot=None,candidate_call
     if live_prefixes is not None and type(live_prefixes) is not bool:raise InputError('live_prefixes must be boolean or omitted')
     if type(refresh_worker) is not bool:raise InputError('refresh_worker must be boolean')
     config=candidate.settings()
-    identity=dict(adapter=candidate.VERSION,endpoint=config['endpoint'],model=config['model'],decision_model=DEFAULT_MODEL)
+    identity=dict(candidate.identity(config),decision_model=DEFAULT_MODEL)
     options=worker.behavior_options();caches=[]
     existing=worker.load(store,directory)[1] if (Path(directory)/'watch.json').exists() else None
     if existing:
@@ -157,13 +165,17 @@ def watch(store,directory,*,experiment,label=None,from_pilot=None,candidate_call
         if live_prefixes is None:live_prefixes=existing.get('live_prefixes',False)
     if from_pilot:
         origin=Path(from_pilot).resolve();saved=read(origin/'model.json')
-        if {k:saved.get(k) for k in identity}!=identity:
+        if ({k:saved.get(k) for k in identity}!=identity or
+                saved.get('json_mode','json_object')!=config['json_mode']):
             raise InputError('Pilot model configuration differs; use its candidate model and endpoint to continue')
         pinned,_=workspace.load(origin/'extraction')
         options={k:pinned[k] for k in ('include_user','context_policy','activity_routing','reading_protocol',
             'partition_standard','feedback_profile','requested_profile','action_target_version','plan_relation_version','execution_report_version','method_comparison_version') if k in pinned}
         for key in worker.behavior_options():
-            if saved.get(key)!=options.get(key):raise InputError('Pilot model and workspace protocols differ')
+            # Legacy model pins omitted the then-default activity routing.
+            from tracker.semantic_extraction import ACTIVITY_ROUTING
+            default=ACTIVITY_ROUTING if key=='activity_routing' else None
+            if saved.get(key,default)!=options.get(key,default):raise InputError('Pilot model and workspace protocols differ')
         identity=saved;caches=[origin/'extraction']
     else:identity.update({k:v for k,v in options.items() if k in worker.behavior_options()})
     command=[sys.executable,'-m','rilldex.candidate']

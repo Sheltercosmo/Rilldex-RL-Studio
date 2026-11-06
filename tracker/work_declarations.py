@@ -171,7 +171,8 @@ def build(run, document, decide, *, version=VERSION):
         row['declaration'] = choice; row['requests'].append(key)
         if choice in {'no_declaration', 'needs_target_revision', 'unresolved'}:
             row['status'] = choice; continue
-        pool = [r for r in result['records'] if (r['actor'], r['trajectory_id']) == (unit['actor'], unit['trajectory_id'])]
+        pool = [r for r in result['records'] if (r['actor'], r['trajectory_id']) == (unit['actor'], unit['trajectory_id'])
+                and checked_span(run,r['declarations'][-1]['source']).get('context_id')==event.get('context_id')]
         row['candidate_record_ids'] = [r['id'] for r in pool]
         if len(pool) > LIMIT:
             row['status'] = 'needs_record_retrieval'; continue

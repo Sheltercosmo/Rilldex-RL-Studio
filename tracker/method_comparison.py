@@ -18,7 +18,9 @@ VERSION = 'work-method-comparison/1'
 STAGED_VERSION = 'work-method-comparison/2'
 DISPATCH_VERSION = 'work-method-comparison/3'
 NATIVE_VERSION = 'work-method-comparison/4'
-VERSIONS = {VERSION, STAGED_VERSION, DISPATCH_VERSION, NATIVE_VERSION}
+RELATED_VERSION = 'work-method-comparison/5'
+WORKSPACE_VERSIONS = {NATIVE_VERSION, RELATED_VERSION}
+VERSIONS = {VERSION, STAGED_VERSION, DISPATCH_VERSION, *WORKSPACE_VERSIONS}
 MAX_CHARS = 120000
 MAX_RATIONALES = 32
 CHOICES = {
@@ -75,6 +77,20 @@ def base_document(document):
 
 
 def pair_request(run, document, previous_id, current_id, version=VERSION, work_request=None):
+    if version!=RELATED_VERSION:
+        return _pair_request(run,document,previous_id,current_id,version,work_request)
+    if document.get('source_hash')!=digest(run):raise InputError('Method comparison source differs')
+    from .recurrence_context import source_reader
+    reader_run,reader_document,excluded=source_reader(run,document,current_id)
+    if not any(u['id']==previous_id for u in reader_document['units']):
+        raise InputError('Previous dispatch is outside the visible recorded context')
+    result=_pair_request(reader_run,reader_document,previous_id,current_id,version,work_request)
+    result['state'].update(source_hash=digest(run),base_map_hash=digest(base_document(document)))
+    result['state']['omitted_source_events'].extend(excluded)
+    return result
+
+
+def _pair_request(run, document, previous_id, current_id, version=VERSION, work_request=None):
     if version not in VERSIONS:raise InputError('Unknown method-comparison version')
     if document.get('source_hash')!=digest(run):raise InputError('Method comparison source differs')
     units={u['id']:u for u in document['units']}
@@ -150,21 +166,21 @@ def pair_request(run, document, previous_id, current_id, version=VERSION, work_r
     result={'model':DEFAULT_MODEL,'state':state,'questions':{
         'comparison':{'type':'choice','instructions':RULE,'criteria':deepcopy(CHOICES)},
         'stated_basis':{'type':'choice','instructions':RATIONALE_RULE,'criteria':criteria}}}
-    if version in {STAGED_VERSION,DISPATCH_VERSION,NATIVE_VERSION}:
+    if version in {STAGED_VERSION,DISPATCH_VERSION,*WORKSPACE_VERSIONS}:
         if work_request:
             result['state']['work_instance_selection']={'choice':'same_work_instance','request':work_request}
             result['questions']['comparison']['criteria'].pop('different_work')
             result['questions']['comparison']['instructions']='Work-instance comparability was selected in the preceding decision. Now compare HOW the recorded operations seek that result: unchanged procedure, reconfiguration, an alternative mechanism, or unresolved procedure evidence. Do not infer method from an announced intention that the dispatch does not enact. '+CHOICES['reconfigured_procedure']+' '+CHOICES['alternative_procedure']
             result['questions']['stated_basis']['instructions']=STAGED_RATIONALE_RULE
-            if version in {DISPATCH_VERSION,NATIVE_VERSION}:
+            if version in {DISPATCH_VERSION,*WORKSPACE_VERSIONS}:
                 result['state']['rule']='Compare the dispatched procedure and its explicit configuration separately from intervening changes to stored artifacts, environment and work scope.'
                 result['questions']['comparison']['criteria']={k:v for k,v in DISPATCH_CHOICES.items() if k!='different_work'}
                 result['questions']['comparison']['instructions']='Work-instance comparability has been selected. Compare the observable mechanism and explicit instructions of these two dispatches. Use the comparison definitions exactly. The state of a file/environment referenced by an unchanged invocation belongs to intervening context, not dispatch reconfiguration. Added explicit settings are configuration changes, even if they restate defaults; no changed effective behavior is thereby established. Preserve announced versus executed differences.'
         else:
-            rule=DISPATCH_WORK_RULE if version in {DISPATCH_VERSION,NATIVE_VERSION} else WORK_RULE
+            rule=DISPATCH_WORK_RULE if version in {DISPATCH_VERSION,*WORKSPACE_VERSIONS} else WORK_RULE
             result['state']['rule']=rule
             result['questions']={'work_instance':{'type':'choice','instructions':rule,'criteria':deepcopy(WORK_CHOICES)}}
-    if version==NATIVE_VERSION:
+    if version in WORKSPACE_VERSIONS:
         from .action_comparison import recorded_fields
         result['state']['stage']='method_comparison'
         events={e['id']:e for e in run['events']}
@@ -180,6 +196,57 @@ def pair_request(run, document, previous_id, current_id, version=VERSION, work_r
     return result
 
 
+def candidate_pairs(run,doc,version):
+    """Recall related dispatches without changing any selected work identity."""
+    history=doc.get('work_history',{});pairs={}
+    for recurrence in history.get('recurrences',[]):
+        a,b=recurrence['previous_group_unit_id'],recurrence['unit_id']
+        if (a,b) in pairs:raise InputError('Duplicate method-comparison pair')
+        group=next((g for stream in history['streams'] for g in stream['groups'] if g['id']==recurrence['group_id']),None)
+        if group is None:raise InputError('Missing method-comparison work group')
+        members=[o['unit_id'] for o in group['occurrences']]
+        if b not in members or members.index(b)==0 or members[members.index(b)-1]!=a:
+            raise InputError('Method comparison requires consecutive occurrences within the same selected work group')
+        pairs[a,b]={**recurrence,'upstream_identity_disputed':group.get('disputed_identity',False),
+                    'candidate_basis':['selected_recurrence'],'candidate_relations':[]}
+    if version!=RELATED_VERSION:return list(pairs.values())
+    units={u['id']:u for u in doc['units']};events={e['id']:e for e in run['events']}
+    from .work_order import Evidence
+    ordering=Evidence(events)
+    def scope(u):return u['actor'],u['trajectory_id'],events[u['source']['event_id']].get('context_id')
+    def validate_pair(a,b):
+        before,after=units.get(a),units.get(b)
+        if not before or not after or before['kind']!='action' or after['kind']!='action':
+            raise InputError('Method candidates require two recorded actions')
+        if scope(before)!=scope(after) or source_order(run,before['source'])>=source_order(run,after['source']):
+            raise InputError('Method candidates require earlier work in the same actor, trajectory and context')
+        first=checked_span(run,before['source'],after['source']);last=checked_span(run,after['source'])
+        if (first.get('order_known') is False or last.get('order_known') is False or
+                first['id'] in ordering.groups.get(last['id'],[])):
+            raise InputError('Method candidates require established order outside the same dispatch batch')
+        return before,after
+    for edge in doc['relations']:
+        if edge['type'] not in {'different_work_same_subject','overlapping_work_scope'}:continue
+        a,b=edge['to'],edge['from'];before,after=validate_pair(a,b)
+        refs=edge.get('evidence',[])
+        if not refs:raise InputError('Related method candidate needs source evidence')
+        for ref in refs:checked_span(run,ref,after['source'])
+        row=pairs.setdefault((a,b),dict(previous_group_unit_id=a,unit_id=b,group_id=None,
+            upstream_identity_disputed=False,candidate_basis=[],candidate_relations=[]))
+        if edge['type'] not in row['candidate_basis']:row['candidate_basis'].append(edge['type'])
+        if edge not in row['candidate_relations']:row['candidate_relations'].append(deepcopy(edge))
+    for a,b in pairs:validate_pair(a,b)
+    return sorted(pairs.values(),key=lambda r:(source_order(run,units[r['unit_id']]['source']),
+                                             source_order(run,units[r['previous_group_unit_id']]['source'])))
+
+
+def work_counts(rows):
+    return dict(candidate_pairs=len(rows),
+        same_work_pairs=sum(r.get('work_instance')=='same_work_instance' for r in rows),
+        different_work_pairs=sum(r.get('work_instance')=='different_work' for r in rows),
+        unresolved_work_pairs=sum(r.get('work_instance') not in {None,'same_work_instance','different_work'} for r in rows))
+
+
 def build(run,document,decide,version=VERSION,progress=None):
     if version not in VERSIONS:raise InputError('Unknown method-comparison version')
     doc=base_document(document)
@@ -189,11 +256,14 @@ def build(run,document,decide,version=VERSION,progress=None):
             'available':bool(history.get('available')),'observations':[],
             'limits':'Procedure comparisons over selected recurrence pairs. Stated basis is an agent claim. No strategy, blind-retry, success, active-goal or training-improvement inference.'}
     if not result['available']:
-        if version==NATIVE_VERSION:
+        if version in WORKSPACE_VERSIONS:
             result['counts']={'eligible_pairs':0,'selected_pairs':0,'comparisons':{},'not_inspected_pairs':0}
+        if version==RELATED_VERSION:result['counts'].update(work_counts([]))
         if progress:progress(dict(schema=version,source_hash=digest(run),base_map_hash=digest(doc),status='complete',coverage=dict(eligible_pairs=0,inspected_pairs=0,pending_pairs=0,unavailable_pairs=0)))
         return result
-    total=len(history['recurrences'])
+    candidates=candidate_pairs(run,doc,version);total=len(candidates)
+    if version==RELATED_VERSION:
+        result['limits']='Recorded recurrence and related-work candidates, independently checked for the same work instance before procedure comparison. Relatedness is not identity. Stated basis is an agent claim; neither a change nor its rationale establishes success or causal benefit.'
     def report(status='running'):
         if progress:
             terminal=[r for r in result['observations'] if r.get('status')!='pending']
@@ -202,21 +272,14 @@ def build(run,document,decide,version=VERSION,progress=None):
                 coverage=dict(eligible_pairs=total,inspected_pairs=selected,pending_pairs=total-len(terminal),
                     unavailable_pairs=len(terminal)-selected),observations=deepcopy(result['observations'])))
     report()
-    seen=set()
-    for recurrence in history['recurrences']:
+    for recurrence in candidates:
         a,b=recurrence['previous_group_unit_id'],recurrence['unit_id']
-        if (a,b) in seen:raise InputError('Duplicate method-comparison pair')
-        seen.add((a,b))
-        # Verify the supplied pair belongs to the exact selected work group.
-        group=next((g for stream in history['streams'] for g in stream['groups'] if g['id']==recurrence['group_id']),None)
-        if group is None:raise InputError('Missing method-comparison work group')
-        members=[o['unit_id'] for o in group['occurrences']]
-        if b not in members or members.index(b)==0 or members[members.index(b)-1]!=a:
-            raise InputError('Method comparison requires consecutive occurrences within the same selected work group')
         req=pair_request(run,doc,a,b,version)
         row={'previous_unit_id':a,'current_unit_id':b,'group_id':recurrence['group_id'],
-             'cutoff':deepcopy(req['state']['cutoff']),'upstream_identity_disputed':group.get('disputed_identity',False),
+             'cutoff':deepcopy(req['state']['cutoff']),'upstream_identity_disputed':recurrence['upstream_identity_disputed'],
              'status':'pending','input_characters':len(dumps(req)),'rationale_candidate_ids':[u['unit_id'] for u in req['state']['rationale_candidates']]}
+        if version==RELATED_VERSION:
+            row.update(candidate_basis=deepcopy(recurrence['candidate_basis']),candidate_relations=deepcopy(recurrence['candidate_relations']))
         result['observations'].append(row)
         if row['input_characters']>MAX_CHARS:row['status']='needs_context_selection';report();continue
         if len(row['rationale_candidate_ids'])>MAX_RATIONALES:row['status']='needs_rationale_retrieval';report();continue
@@ -224,7 +287,7 @@ def build(run,document,decide,version=VERSION,progress=None):
         answers,key=decide(req)
         if set(answers)!=set(req['questions']) or any(v['value'] not in req['questions'][k]['criteria'] for k,v in answers.items()):
             raise InputError('Invalid method comparison selection')
-        if version in {STAGED_VERSION,DISPATCH_VERSION,NATIVE_VERSION}:
+        if version in {STAGED_VERSION,DISPATCH_VERSION,*WORKSPACE_VERSIONS}:
             value=answers['work_instance']['value'];row.update(work_instance=value,work_request=key)
             if value!='same_work_instance':
                 row.update(status='selected',comparison='different_work' if value=='different_work' else 'unresolved',
@@ -245,6 +308,7 @@ def build(run,document,decide,version=VERSION,progress=None):
         'selected_pairs':sum(r['status']=='selected' for r in result['observations']),
         'comparisons':dict(Counter(r['comparison'] for r in result['observations'] if r['status']=='selected')),
         'not_inspected_pairs':sum(r['status']!='selected' for r in result['observations'])}
+    if version==RELATED_VERSION:result['counts'].update(work_counts(result['observations']))
     return result
 
 
@@ -276,7 +340,7 @@ def load(run,document,directory):
     if not path.exists():
         return {'schema':STAGED_VERSION,'available':False,'reason':'No source-bound method comparison is saved for this observation.'}
     result=read(path);audit(run,document,result,directory)
-    view=deepcopy(result);view['definitions']=deepcopy(DISPATCH_CHOICES if result['schema'] in {DISPATCH_VERSION,NATIVE_VERSION} else CHOICES);view['review_notes']=[]
+    view=deepcopy(result);view['definitions']=deepcopy(DISPATCH_CHOICES if result['schema'] in {DISPATCH_VERSION,*WORKSPACE_VERSIONS} else CHOICES);view['review_notes']=[]
     reviews=directory/'source-review.json'
     if reviews.exists():
         saved=read(reviews)

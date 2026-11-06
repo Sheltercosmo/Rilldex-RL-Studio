@@ -21,6 +21,16 @@ def result(commands):
 
 
 class RepairPhaseTests(unittest.TestCase):
+    def test_context_reset_does_not_inherit_patch_attempt(self):
+        run=run_with(['str_replace_editor str_replace app.py --old_str a --new_str b','pytest test_app.py'])
+        actions=[e for e in run['events'] if e['kind']=='action']
+        actions[1]['context_id']='reset'
+        out=phases.project(run,'graph')
+        self.assertEqual([r['phase'] for r in out['records']],['patch','localization'])
+        self.assertIsNone(out['records'][1]['prior_patch_event_id'])
+        self.assertEqual(len(out['paths']),2)
+        self.assertEqual(out['pairs'],[])
+
     def test_activity_framework_and_programming_are_not_domain_activation(self):
         run = run_with(['pytest test_app.py'], family='report_generation')
         out = phases.project(run, 'graph')

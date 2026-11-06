@@ -23,6 +23,7 @@ from tracker.schema import InputError
 from tracker.source_discovery import discover
 from tracker.store import Store
 from test_portable import conversation
+from test_responses_items import fixture as responses_fixture
 
 
 def records():
@@ -40,6 +41,7 @@ def records():
         'episode': episode,
         'verl': {'input': 'What is 7 + 5?', 'output': '12', 'step': 4, 'score': 1},
         'airline-public': json.loads(public.read_text(encoding='utf-8')),
+        'responses-items': responses_fixture(),
     }
 
 

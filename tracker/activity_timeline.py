@@ -6,9 +6,10 @@ not run inference, bridge unknown units, or interpret an activity as a strategy.
 from collections import Counter, defaultdict
 
 from .schema import digest, InputError
+from .capabilities import recorded_scope
 
-VERSION = 'activity-timeline/1'
-DEFINITION = ('Each column is one eligible source unit, in recorded order within one actor and unit kind. '
+VERSION = 'activity-timeline/2'
+DEFINITION = ('Each column is one eligible source unit, in recorded order within one actor, recorded context and unit kind. '
               'Windows contain consecutive units, including unknowns; they are not time durations or phases. '
               'Model spans and dispatches have separate denominators. Tool enumeration does not establish execution order. '
               'Cells retain raw selected options; evidence/link limitations affect availability only. '
@@ -46,11 +47,11 @@ def build(annotated, taxonomy, measurement, *, window_size=20):
             profile = {**measurement, **{k: p[k] for k in ('model', 'harness', 'selection_policy')}}
             profile_id = digest(profile)
             profiles[profile_id] = profile
-        grouped[(unit['trajectory_id'], unit['kind'])].append({
+        grouped[(*recorded_scope(unit), unit['kind'])].append({
             **{k: unit[k] for k in ('id', 'event_id', 'event_index', 'start', 'end')},
             'profile_id': profile_id, 'states': {field: _state(unit, field) for field in taxonomy}})
     streams = []
-    for (actor, kind), rows in grouped.items():
+    for (actor, context, kind), rows in grouped.items():
         rows.sort(key=lambda u: (u['event_index'], u['start'], u['end'], u['id']))
         available_profiles = list(dict.fromkeys(u['profile_id'] for u in rows if u['profile_id'])) or [None]
         views = []
@@ -74,6 +75,6 @@ def build(annotated, taxonomy, measurement, *, window_size=20):
                     counts[field].update(denominator=len(selected), unknown_reasons=dict(unknown_reasons), selected_options=dict(raw))
                 windows.append({'start': start, 'end': start+len(selected), 'fields': counts})
             views.append({'profile_id': profile_id, 'windows': windows})
-        streams.append({'trajectory_id': actor, 'kind': kind, 'units': rows, 'views': views})
+        streams.append({'trajectory_id': actor, 'context_id':context, 'kind': kind, 'units': rows, 'views': views})
     return {'version': VERSION, 'window_size': window_size, 'field_order': list(taxonomy), 'definition': DEFINITION,
             'profiles': profiles, 'streams': streams}

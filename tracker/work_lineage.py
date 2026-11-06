@@ -8,6 +8,7 @@ from copy import deepcopy
 from .schema import InputError,digest
 from .semantic_extraction import checked_span
 from .work_correspondence import source_order
+from .capabilities import recorded_scope
 
 VERSION='requested-work-lineage/1'
 TYPES={'prepares_requested_work','attempts_requested_work','checks_requested_work'}
@@ -24,7 +25,12 @@ def build(run,document):
     units={u['id']:u for u in document['units']}
     if len(units)!=len(document['units']):raise InputError('Lineage requires unique source units')
     def order(uid):return source_order(run,units[uid]['source'])
-    def key(record):return record['trajectory_id'],record['actor'],record['id']
+    events={e['id']:e for e in run['events']}
+    def scope(uid):return recorded_scope(events[units[uid]['source']['event_id']])
+    def key(record):
+        old=(record['trajectory_id'],record['actor'],record['id'])
+        context=scope(record['source_unit_id'])[1]
+        return (*old,context) if context is not None else old
     context=document.get('work_context',{})
     frames={f['id']:f for f in context.get('frames',[])}
     selected_frames={fid for row in context.get('observations',[]) if row['status']=='selected' for fid in row['frame_ids']}
@@ -63,6 +69,7 @@ def build(run,document):
         if vid not in versions:raise InputError('Action correspondence has no selected work version')
         lineage,version=versions[vid];action=units.get(relation['from']);record=version['record']
         if (not action or action['kind']!='action' or action['trajectory_id']!=record['trajectory_id']
+                or scope(action['id'])!=scope(version['source_unit_id'])
                 or relation.get('requested_work_id')!=record['id'] or relation['to']!=version['source_unit_id']):
             raise InputError('Lineage correspondence has a wrong source, record or trajectory')
         origin=order(version['source_unit_id']);dispatch=order(action['id'])
@@ -82,7 +89,7 @@ def build(run,document):
             'version_id':vid,'relation':deepcopy(relation),'reviews':reviews})
     for lineage in records.values():
         last=lineage['versions'][-1];record=last['record'];end=source_order(run,last['source'])
-        later=[e['id'] for e in run['events'] if e['trajectory_id']==record['trajectory_id'] and
+        later=[e['id'] for e in run['events'] if recorded_scope(e)==scope(last['source_unit_id']) and
                e['actor']=='agent' and e['kind']=='action' and
                (e['index']>end[0] or e['index']==end[0] and len(e.get('text',''))>end[2])]
         lineage.update(text=record['text'],latest_status=record['status'],
