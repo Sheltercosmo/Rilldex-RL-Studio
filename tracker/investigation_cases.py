@@ -11,7 +11,7 @@ from .schema import InputError, digest
 
 VERSION = 'investigation-cases/1'
 FAMILIES = {
-    'recurrence': {'key':'episodes', 'schema':'work-episodes/5', 'legacy_schemas':('work-episodes/3','work-episodes/4'), 'items':'episodes',
+    'recurrence': {'key':'episodes', 'schema':'work-episodes/6', 'legacy_schemas':('work-episodes/3','work-episodes/4','work-episodes/5'), 'items':'episodes',
         'label':'Returns and repeated work',
         'statuses':{'continued':'Consecutive same-work recurrence', 'returned':'Return after other work',
                     'interrupted':'Recurrence across an observation gap'}},

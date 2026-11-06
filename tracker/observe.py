@@ -6,14 +6,14 @@ import shlex
 from collections import Counter, defaultdict
 
 from .schema import digest
-from .jev import selection_profile
+from .jev import selection_profile, JEV_HARNESS
 from .goals import track as track_goals
 from .evidence import inspect as inspect_evidence
 from .sequence import observe as observe_sequence
 from .capabilities import links, recorded_scope, feedback_support, withheld, inspect as inspect_capabilities
 from .work_order import Evidence as OrderEvidence
 
-HARNESS_VERSION = "macro/0.11.0"
+HARNESS_VERSION = "macro/0.12.0+" + JEV_HARNESS
 MODES = ("explore", "apply", "verify", "coordinate", "report", "unresolved")
 MODE_LABELS = {"explore": "Explore", "apply": "Apply approach", "verify": "Verify",
                "coordinate": "Coordinate", "report": "Report", "unresolved": "Unresolved"}
@@ -112,6 +112,8 @@ def analyze(run: dict, semantic: dict | None = None) -> dict:
         elif mode_obs:
             suggestion = feat["mode"]
             feat.update(mode="unresolved", mode_basis=f"{observer} abstained; heuristic suggestion was {suggestion}", observation_status="unresolved")
+            if mode_obs.get('source') == 'outdated_observation':
+                feat.update(mode_basis='Saved reading needs refresh', observation_status='outdated')
         exact_repeat = previous_occurrence is not None
         consecutive = bool(prior and prior["signature"] == feat["signature"]
                            and order.is_ordered(prior['event_id']) and order.is_ordered(e['id']))
@@ -188,18 +190,19 @@ def analyze(run: dict, semantic: dict | None = None) -> dict:
             if a["semantic"].get("feedback_response", {}).get("status") == "decided" else "unresolved"
             for a in actions if a["feedback_opportunity"])),
         "semantic_actions": sum(a["observation_status"] == "semantic" for a in actions),
+        "outdated_actions": sum(bool(a['semantic'].get('_outdated_observation')) for a in actions),
         "unresolved_actions": distribution["unresolved"],
     }
     profiles = sorted({(o["_provenance"].get("model"), o["_provenance"].get("harness"),
-                        selection_profile(o["_provenance"])) for o in (semantic or {}).values() if o.get("_provenance")})
+                        selection_profile(o["_provenance"])) for o in (semantic or {}).values() if o.get("_provenance") and not o.get('_outdated_observation')})
     reviewed = any(o.get("_reviews") for o in (semantic or {}).values())
     scope_labels = {"connected": "Task connected", "outside": "Outside task", "conflicting": "Conflicting", "unresolved": "Unresolved"}
     scope_transitions = Counter((by_event[p['from_event_id']]['macro']['goal_scope']['value'],
                                 by_event[p['to_event_id']]['macro']['goal_scope']['value'])
                                for p in sequence['pairs'])
-    return {"harness_version": HARNESS_VERSION, "inspector_signature": digest({"profiles": profiles, "review": "review/1" if reviewed else None}) if profiles or reviewed else "heuristic",
+    return {"harness_version": HARNESS_VERSION, "inspector_signature": digest({"profiles": profiles, "review": "review/1" if reviewed else None}) if profiles or reviewed else "outdated" if metrics['outdated_actions'] else "heuristic",
             "inspector_profiles": profiles,
-            "semantic_coverage": sum(bool(o.get("_provenance")) for o in (semantic or {}).values()),
+            "semantic_coverage": sum(bool(o.get("_provenance")) and not o.get('_outdated_observation') for o in (semantic or {}).values()),
             "reviewed_actions": sum(bool(o.get("_reviews")) for o in (semantic or {}).values()),
             "run_id": run["id"], "goals": goals, "goal_tracking": goal_tracking,
             "actions": actions, "episodes": episodes, "metrics": metrics, "sequence":sequence,

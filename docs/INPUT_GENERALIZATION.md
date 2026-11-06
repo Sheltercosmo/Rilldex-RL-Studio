@@ -180,6 +180,11 @@ including matched passages inside long results. It retains native policies and
 keeps source offsets, agent/context scope and later state updates. Clipping a
 policy no longer discards an otherwise supported action-purpose decision.
 
+After a reader update, resume inspection to refresh outdated readings. Exact
+saved requests are reused across purpose, activity, relationship and field
+analysis; compatible partial readings resume from their saved stage. Earlier
+readings and reviewer labels remain available in the evidence inspector.
+
 Live development checks use `jev-1.13.0` and retain exact requests/responses:
 
 | Check | Result |

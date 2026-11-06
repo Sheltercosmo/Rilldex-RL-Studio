@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 import threading
 import time
 import uuid
@@ -178,11 +179,11 @@ class Worker:
         status, error = "complete", None
         try:
             bundle = self.store.get(row["run_id"], raw=True)
-            cached = self.store.activity_observations(row["run_id"]) if self.activity else self.store.observations(row["run_id"])
-            if self.relations or self.entities or self.references or self.occurrences or self.frames:
-                with self.store.connect() as c:
-                    import json
-                    cached = {r['event_id']:json.loads(r['result']) for r in c.execute(f'SELECT event_id,result FROM {self.result_table} WHERE run_id=? ORDER BY created_at',(row['run_id'],))}
+            history = {}
+            with self.store.connect() as c:
+                for record in c.execute(f'SELECT event_id,result FROM {self.result_table} WHERE run_id=? ORDER BY created_at,rowid', (row['run_id'],)):
+                    history.setdefault(record['event_id'], []).append(json.loads(record['result']))
+            cached = {eid: records[-1] for eid, records in history.items()}
             subjects = [{"event_id":u["id"]} for u in bundle["activity"]["units"] if u["eligible"]] if self.activity or self.relations or self.entities else bundle["analysis"]["actions"]
             if self.entities:
                 self.client.activity = bundle['activity']
@@ -199,7 +200,17 @@ class Worker:
                 from .local_frames import sources as frame_sources
                 self.client.nodes=bundle['unit_graph']['nodes']
                 subjects=[{'event_id':u['id']} for u in self.client.nodes if frame_sources(bundle['run'],u)]
-            pending = [a for a in subjects if not self.client.cache_matches(cached.get(a["event_id"],{}),bundle["run"],a["event_id"])]
+            from .observation_history import select
+            partial = next((method for method in ('presence_matches', 'targets_match', 'membership_matches', 'heads_match')
+                            if hasattr(self.client, method)), None)
+            pending = []
+            for action in subjects:
+                eid = action['event_id']
+                saved = select(history.get(eid, []), bundle['run'], eid, lambda model: self.client, partial=partial)
+                if saved:
+                    cached[eid] = saved
+                if not self.client.cache_matches(saved or {}, bundle['run'], eid):
+                    pending.append(action)
             batch = pending if self.complete_run else pending[:self.max_actions]
             if not self._owned_update(row["id"],"total=?",(len(batch),)):
                 return

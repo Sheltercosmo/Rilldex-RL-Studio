@@ -67,6 +67,16 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(result["status"], "ok")
         self.assertEqual(len(result["excluded"]), 1)
 
+    def test_outdated_readings_are_not_a_measured_training_shift(self):
+        rows = [row('t', 'c0', 10), row('t', 'c1', 30)]
+        for r in rows:
+            r['inspector_signature'] = 'outdated'
+            r['metrics']['outdated_actions'] = 100
+        self.assertEqual(compare(rows)['status'], 'incomplete_observations')
+        for r in rows:
+            r['metrics']['outdated_actions'] = 0
+        self.assertEqual(compare(rows)['status'], 'ok')
+
     def test_missing_steps_do_not_create_a_training_axis(self):
         result = compare([row("t", "c0", 10, training_step=None), row("t", "c1", 30, training_step=None)])
         self.assertFalse(result["ordered_by_training_step"])

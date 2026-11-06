@@ -189,9 +189,12 @@ def frames(saved):
 
 
 def project_graph(run, graph, records):
-    latest = {r['event_id']: r['result'] for r in records}; counts = Counter(); client = FrameClient(nodes=graph['nodes'])
+    from .observation_history import by_subject, select
+    history = by_subject(records); counts = Counter(); client = FrameClient(nodes=graph['nodes'])
     for node in graph['nodes']:
-        eligible = bool(sources(run, node)); saved = latest.get(node['id']); current = False
+        eligible = bool(sources(run, node))
+        saved = select(history[node['id']], run, node['id'], lambda model: FrameClient(model=model, nodes=graph['nodes']), partial='heads_match')
+        current = False
         if eligible and saved:
             client.model = saved['_provenance']['model']; current = client.heads_match(saved, run, node['id'])
         complete = current and client.cache_matches(saved, run, node['id'])

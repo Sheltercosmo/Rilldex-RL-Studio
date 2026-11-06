@@ -184,9 +184,12 @@ def selections(saved):
 
 
 def project_graph(run,graph,records):
-    latest={r['event_id']:r['result'] for r in records};client=OccurrenceClient(nodes=graph['nodes']);counts=Counter()
+    from .observation_history import by_subject, select
+    history=by_subject(records);client=OccurrenceClient(nodes=graph['nodes']);counts=Counter()
     for n in graph['nodes']:
-        eligible=eligible_fields(n);saved=latest.get(n['id']);current=False
+        eligible=eligible_fields(n)
+        saved=select(history[n['id']],run,n['id'],lambda model: OccurrenceClient(model=model,nodes=graph['nodes']),partial='membership_matches')
+        current=False
         if eligible and saved:
             client.model=saved['_provenance']['model'];current=client.membership_matches(saved,run,n['id'])
         complete=bool(current and saved['_provenance']['completion']=='complete')

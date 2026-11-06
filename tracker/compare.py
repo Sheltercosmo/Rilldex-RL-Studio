@@ -136,8 +136,8 @@ def compare(runs: list[dict], *, experiment=None, environment=None, environment_
                     for r in eligible if r['metadata']['task_id']==task}
         if len(versions)>1:
             return _stop('task_context_changed', 'A matched task has changed task revision, recorded environment configuration or adapter version. Align these contexts before comparing behavior.', excluded)
-    if any(r.get('semantic_coverage', 0) not in (0, r['metrics']['actions']) for r in eligible):
-        return _stop('incomplete_observations', 'Finish semantic observation of matched runs before comparing mixed observation coverage.', excluded)
+    if any(r.get('semantic_coverage', 0) not in (0, r['metrics']['actions']) or r['metrics'].get('outdated_actions', 0) for r in eligible):
+        return _stop('incomplete_observations', 'Finish or refresh semantic observation of matched runs before comparing behavior.', excluded)
     if any(len(r.get('inspector_profiles', [])) > 1 for r in eligible):
         return _stop('mixed_inspector_profiles', 'Matched runs contain multiple observer profiles. Use one pinned harness, model and selection policy before comparing.', excluded)
     if any(r.get('reviewed_actions', 0) for r in eligible):

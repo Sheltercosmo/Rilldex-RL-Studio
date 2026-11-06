@@ -7,11 +7,12 @@ from pathlib import Path
 
 from tracker.adapters import normalize
 from tracker.goals import catalog, focus_candidates
-from tracker.jev import packet
+from tracker.jev import packet, JevClient
 from tracker.observe import analyze
 from tracker.reviews import options, validate
 from tracker.schema import InputError
 from tracker.store import ReviewConflict, Store
+from tests.test_tracker import response_for
 
 
 def planned_run():
@@ -121,8 +122,9 @@ class ReviewTests(unittest.TestCase):
                 "note": "Fixture review, not a real evaluation", "expected_revision": revision}
 
     def test_review_audit_preserves_model_source_and_clear_restores_original(self):
-        original = {"mode": {"value": "explore", "status": "decided", "probabilities": {"explore": .99}}}
-        self.store.record(self.run["id"], self.aid, "test", "fixture", "packet", original)
+        original = JevClient(transport=response_for).evaluate(self.run, self.aid)
+        p = original['_provenance']
+        self.store.record(self.run["id"], self.aid, p['harness'], p['model'], p['packet_hash'], original)
         result = self.store.review(self.run["id"], self.payload())
         bundle = self.store.get(self.run["id"], raw=True)
         action = bundle["analysis"]["actions"][0]

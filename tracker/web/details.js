@@ -189,6 +189,11 @@ window.trackerDetails = (() => {
   function probabilities(observation, name) {
     const detail = node('details', undefined, 'probability-detail');
     detail.append(node('summary', `${humanize(name)} · ${humanize(observation.value)} · ${humanize(observation.status)}`));
+    if (observation.source === 'outdated_observation') {
+      detail.append(node('p', observation.basis, 'muted'));
+      if (observation.previous_observation?.value) detail.append(probabilities(observation.previous_observation, 'Previous saved reading'));
+      return detail;
+    }
     if (observation.source === 'evidence_gate') {
       detail.append(node('p', observation.basis || 'Required evidence is unavailable.', 'muted'));
       detail.append(node('p', 'This status follows the recorded evidence requirements; it is not a model decision.', 'muted'));

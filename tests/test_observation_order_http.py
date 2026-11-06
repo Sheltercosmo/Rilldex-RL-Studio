@@ -4,9 +4,11 @@ import unittest
 from urllib.request import urlopen
 from unittest.mock import patch
 from tracker import observe
+from tracker.jev import JevClient
 from tracker.schema import dumps
 from test_observation_order_accuracy import fixture
 from test_goal_order_accuracy import fixture as goal_fixture
+from test_tracker import response_for
 import test_generation_cohort_transport as transport_fixture
 
 
@@ -20,7 +22,19 @@ class ObservationOrderHTTPTests(unittest.TestCase):
         actions[1]['order_known'] = False
         self.store.add([run])
         for eid, result in semantics.items():
-            self.store.record(run['id'], eid, 'test', 'fixture', 'packet', result)
+            target = result['focus_goal']['value']
+            def recorded_decision(request):
+                response = response_for(request)
+                criteria = request['questions']['focus_goal']['criteria']
+                self.assertIn(target, criteria)
+                response['answers']['focus_goal'].update(choice=target,
+                    probabilities={choice: float(choice == target) for choice in criteria})
+                return response
+            result = JevClient(transport=recorded_decision).evaluate(run, eid)
+            self.assertEqual(result['focus_goal']['value'], target)
+            semantics[eid] = result
+            provenance = result['_provenance']
+            self.store.record(run['id'], eid, provenance['harness'], provenance['model'], provenance['packet_hash'], result)
         old = observe.analyze(run, semantics)
         old['harness_version'] = 'macro/0.10.0'
         old['metrics']['goal_returns'] = 1

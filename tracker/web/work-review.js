@@ -10,7 +10,7 @@
  const responseTypes=new Set(['assesses','uses_evidence','responds_to']);
  function comparisonFor(data,observations,episode){
   const absent=reason=>({dispatch:'unavailable',feedback:'unavailable',record:null,reason});
-  if(!observations||observations.schema!=='repeated-work-comparisons/1'||!['graph_id','run_id','source_hash'].every(k=>data[k]&&data[k]===observations[k]))return absent('No recorded-input comparison for this saved graph.');
+  if(!observations||!['repeated-work-comparisons/1','repeated-work-comparisons/2'].includes(observations.schema)||!['graph_id','run_id','source_hash'].every(k=>data[k]&&data[k]===observations[k]))return absent('No recorded-input comparison for this saved graph.');
   const matches=observations.rows.filter(r=>r.episode?.id===episode?.id&&r.previous_node_id===episode?.previous_unit_id&&r.current_node_id===episode?.current_unit_id);
   if(matches.length!==1)return absent('This exact earlier/later pair has no unique saved comparison.');
   const record=matches[0];

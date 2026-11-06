@@ -291,10 +291,13 @@ class ReferenceClient(JevClient):
 
 
 def project_graph(run, graph, records):
-    latest = {r['event_id']:r['result'] for r in records}; counts = Counter(); links = []
+    from .observation_history import by_subject, select
+    history = by_subject(records); counts = Counter(); links = []
     client = ReferenceClient(nodes=graph['nodes'])
     for n in graph['nodes']:
-        eligible = subjects(n); saved = latest.get(n['id']); current = False
+        eligible = subjects(n)
+        saved = select(history[n['id']], run, n['id'], lambda model: ReferenceClient(model=model, nodes=graph['nodes']), partial='targets_match')
+        current = False
         if eligible and saved:
             client.model = saved['_provenance']['model']; current = client.targets_match(saved,run,n['id'])
         complete=bool(current and saved['_provenance']['completion']=='complete')

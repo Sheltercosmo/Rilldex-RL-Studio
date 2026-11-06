@@ -86,6 +86,19 @@ class CaseTests(unittest.TestCase):
         unsupported=saved.persist(self.store,value);r=cases.search(self.store,unsupported['id'])
         self.assertEqual(r['availability'],'not_recorded');self.assertEqual(r['coverage']['missing_projection_rollouts'],1)
 
+    def test_previous_projection_remains_readable_without_remeasurement(self):
+        doc=self.example();value={k:copy.deepcopy(v) for k,v in doc.items() if k!='id'}
+        projection=value['snapshot']['process']['episodes']
+        projection['schema']='work-episodes/5'
+        for record in projection['records']:record['schema']='work-episodes/5'
+        previous=saved.persist(self.store,value)
+        result=cases.search(self.store,previous['id'])
+        self.assertEqual(result['availability'],'available')
+        self.assertEqual(result['total_cases'],2)
+        self.assertEqual(result['inference_calls'],0)
+        self.assertEqual({r['projection_schema'] for r in result['cases']},{'work-episodes/5'})
+        self.assertEqual(saved.read(self.store,previous['id']),previous)
+
     def test_recovery_retrieval_keeps_complete_negatives_and_unknown_windows_separate(self):
         doc=self.save_run(recovery.captured([recovery.check(),recovery.check(),recovery.check(),recovery.check()]))
         result=cases.search(self.store,doc['id'],family='recovery')
@@ -106,7 +119,7 @@ class CaseTests(unittest.TestCase):
             'assessment':'supports','conclusion':'There is a recorded recurrence witness','evidence':[ref]}})
         attached=r['follow_up']['checks'][0]['results'][0]['evidence'][0]
         self.assertEqual(attached['record']['case']['id'],row['id'])
-        self.assertEqual(attached['record']['projection_schema'],'work-episodes/5')
+        self.assertEqual(attached['record']['projection_schema'],'work-episodes/6')
         self.assertEqual(follow.bundle(self.store,r['id'])['linked_comparisons'],[doc])
         with self.assertRaises(InputError):cases.resolve(self.store,{**ref,'case_id':'outside'})
         with self.assertRaises(InputError):cases.resolve(self.store,{**ref,'case':{'forged':True}})

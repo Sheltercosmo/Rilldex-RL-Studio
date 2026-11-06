@@ -17,6 +17,44 @@ class ReviewConflict(InputError):
     pass
 
 
+def current_macro_observations(run, history, reviews):
+    """Select exact saved requests before applying independent reviewer labels."""
+    from .jev import JevClient, JEV_HARNESS
+    actions = {e['id'] for e in run['events'] if e['kind'] == 'action' and not e.get('copied_context')}
+    selected, current = {}, set()
+    for row in history:
+        eid = row['event_id']
+        if eid not in actions:
+            continue
+        result = json.loads(row['result'])
+        p = result.get('_provenance', {})
+        matches = False
+        if p.get('model') and all(p.get(k) == row[k] for k in ('model', 'harness', 'packet_hash')):
+            try:
+                matches = JevClient(model=p['model']).cache_matches(result, run, eid)
+            except (InputError, KeyError):
+                pass
+        if matches:
+            selected[eid] = result
+            current.add(eid)
+        elif eid not in current:
+            selected[eid] = result
+    observed = review_logic.apply(selected, reviews)
+    for eid in selected.keys() - current:
+        result = observed[eid]
+        result.setdefault('mode', {})
+        for field, value in list(result.items()):
+            if field.startswith('_') or value.get('source') == 'review':
+                continue
+            result[field] = {'value': 'unresolved', 'status': 'unresolved',
+                'source': 'outdated_observation', 'probabilities': {},
+                'basis': 'Saved reading differs from the current reader or source context. Reinspect this action.',
+                'previous_observation': value}
+        result['_outdated_observation'] = {'current_harness': JEV_HARNESS,
+            'previous_harness': result.get('_provenance', {}).get('harness')}
+    return observed
+
+
 class ReadSnapshot:
     """Read-only connection facade; nested helpers never end the transaction."""
     def __init__(self, path, connection):
@@ -415,10 +453,10 @@ class Store:
             reviews = [{**json.loads(r["payload"]), "id": r["id"], "created_at": r["created_at"]}
                        for r in c.execute("SELECT * FROM reviews WHERE run_id=? ORDER BY id", (run_id,))]
             observations = {}
-            activities = {r["event_id"]: json.loads(r["result"]) for r in c.execute(
-                "SELECT event_id,result FROM activity_observations WHERE run_id=? ORDER BY created_at", (run_id,))}
-            relations = {r['event_id']: json.loads(r['result']) for r in c.execute(
-                'SELECT event_id,result FROM relation_observations WHERE run_id=? ORDER BY created_at', (run_id,))}
+            activity_history = [dict(r) | {'result': json.loads(r['result'])} for r in c.execute(
+                'SELECT * FROM activity_observations WHERE run_id=? ORDER BY created_at,rowid', (run_id,))]
+            relation_history = [dict(r) | {'result': json.loads(r['result'])} for r in c.execute(
+                'SELECT * FROM relation_observations WHERE run_id=? ORDER BY created_at,rowid', (run_id,))]
             entity_history = [dict(r) | {'result':json.loads(r['result'])} for r in c.execute(
                 'SELECT * FROM entity_observations WHERE run_id=? ORDER BY created_at', (run_id,))]
             reference_history = [dict(r) | {'result':json.loads(r['result'])} for r in c.execute(
@@ -429,10 +467,7 @@ class Store:
                 'SELECT * FROM frame_observations WHERE run_id=? ORDER BY created_at', (run_id,))]
             move_history = [dict(r) | {'result':json.loads(r['result'])} for r in c.execute(
                 'SELECT * FROM move_observations WHERE run_id=? ORDER BY created_at', (run_id,))]
-            entities = {r['event_id']:r['result'] for r in entity_history}
             if raw:
-                activity_history = [dict(r) | {"result": json.loads(r["result"])} for r in c.execute(
-                    "SELECT * FROM activity_observations WHERE run_id=? ORDER BY created_at", (run_id,))]
                 for record in c.execute("SELECT event_id,result FROM observations WHERE run_id=? ORDER BY created_at", (run_id,)):
                     observations[record["event_id"]] = json.loads(record["result"])
         if row is None:
@@ -447,9 +482,17 @@ class Store:
             run.pop("raw", None)
         bundle = {"run": run, "analysis": analysis, "imported_at": row["imported_at"],
                   "review_revision": revision, "reviews": reviews, "ingestion": self.lineage(run_id)}
-        from .activity import analyze as analyze_activity
+        from .observation_history import by_subject, select
+        from .activity import analyze as analyze_activity, ActivityClient
+        activities = {uid: select(history, run, uid, lambda model: ActivityClient(model=model))
+                      for uid, history in by_subject(activity_history).items()}
         bundle["activity"] = analyze_activity(run, activities)
-        from .unit_graph import build as build_unit_graph
+        from .unit_graph import build as build_unit_graph, RelationClient
+        from .entity_extraction import EntityClient
+        relations = {uid: select(history, run, uid, lambda model: RelationClient(model=model))
+                     for uid, history in by_subject(relation_history).items()}
+        entities = {uid: select(history, run, uid, lambda model: EntityClient(model=model, activity=bundle['activity']),
+                                partial='presence_matches') for uid, history in by_subject(entity_history).items()}
         bundle['unit_graph'] = build_unit_graph(run, bundle['activity'], relations, entities)
         from .entity_extraction import historical_summary
         history_by_unit = {}
@@ -469,6 +512,7 @@ class Store:
         if raw:
             bundle["model_observations"] = observations
             bundle["activity_observation_history"] = activity_history
+            bundle['relation_observation_history'] = relation_history
             bundle['entity_observation_history'] = entity_history
             bundle['reference_observation_history'] = reference_history
             bundle['occurrence_observation_history'] = occurrence_history
@@ -747,12 +791,10 @@ class Store:
             if row is None:
                 raise KeyError(run_id)
             run = json.loads(row["document"])
-            observations = {}
-            for row in c.execute("SELECT event_id,result FROM observations WHERE run_id=? ORDER BY created_at", (run_id,)):
-                observations[row["event_id"]] = json.loads(row["result"])
+            history = c.execute("SELECT * FROM observations WHERE run_id=? ORDER BY created_at,rowid", (run_id,)).fetchall()
             reviews = [{**json.loads(r["payload"]), "id": r["id"], "created_at": r["created_at"]}
                        for r in c.execute("SELECT * FROM reviews WHERE run_id=? ORDER BY id", (run_id,))]
-            analysis = analyze(run, review_logic.apply(observations, reviews))
+            analysis = analyze(run, current_macro_observations(run, history, reviews))
             analysis["review_revision"] = reviews[-1]["id"] if reviews else 0
             analysis["review_queue"] = review_logic.queue(run, analysis)
             c.execute("UPDATE runs SET analysis=? WHERE id=?", (dumps(analysis), run_id))

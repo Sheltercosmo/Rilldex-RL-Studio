@@ -78,7 +78,7 @@ async function load(id,observer){
   if(nextStrategy&&nextStrategy.run_id!==id)throw Error('This episode belongs to a different rollout.');
   const nextRevisit=!valueId&&!profileId&&params.has('revisit')?await api('/api/work-state/'+encodeURIComponent(params.get('revisit'))):null;
   if(nextRevisit){
-   if(nextRevisit.schema!=='repeated-work-comparisons/1'||nextRevisit.run_id!==id)throw Error('This attempt comparison belongs to a different rollout or analysis.');
+   if(!['repeated-work-comparisons/1','repeated-work-comparisons/2'].includes(nextRevisit.schema)||nextRevisit.run_id!==id)throw Error('This attempt comparison belongs to a different rollout or analysis.');
    if(!nextRevisit.rows.some(r=>r.id===params.get('revisit_case')))throw Error('Attempt pair not found in this saved comparison.');
    if(params.has('graph')&&params.get('graph')!==nextRevisit.graph_id)throw Error('This attempt pair belongs to a different saved graph.');
    params.set('graph',nextRevisit.graph_id);

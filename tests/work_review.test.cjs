@@ -14,7 +14,7 @@ function fixture(){
  return {data,graph};
 }
 function inputs(data,feedback='unchanged'){
- const episode=data.episodes[0];return {schema:'repeated-work-comparisons/1',graph_id:data.graph_id,run_id:data.run_id,source_hash:data.source_hash,
+ const episode=data.episodes[0];return {schema:'repeated-work-comparisons/2',graph_id:data.graph_id,run_id:data.run_id,source_hash:data.source_hash,
   rows:[{id:'pair-receipt',episode,previous_node_id:episode.previous_unit_id,current_node_id:episode.current_unit_id,inputs_changed:false,
    dispatch:{status:'unchanged',basis:'recorded_text',changes:[]},feedback:{status:feedback},input_reasons:[]}]};
 }
@@ -28,6 +28,13 @@ test('complete repeated-work sequence keeps intervening actions and exact edge w
 test('previews do not replace saved comparisons',()=>{
  const {data,graph}=fixture();graph.nodes.find(n=>n.id==='f1').properties.source.text='ERROR: x\nmetadata one';graph.nodes.find(n=>n.id==='f2').properties.source.text='ERROR: x\nmetadata two';
  const t=project(data,graph).targets[0];assert.equal(t.steps[0].responses[0].preview.text,t.steps[1].responses[0].preview.text);assert.equal(t.pairs[0].feedback,'unavailable');assert.equal(t.count.exact_repeats,0);
+});
+
+test('earlier saved comparison versions retain their original receipt',()=>{
+ const {data,graph}=fixture(),saved=inputs(data);saved.schema='repeated-work-comparisons/1';
+ const before=JSON.stringify(saved),target=project(data,graph,null,null,saved).targets[0];
+ assert.equal(target.count.exact_repeats,1);assert.equal(target.pairs[0].input_comparison,saved.rows[0]);
+ assert.equal(JSON.stringify(saved),before);
 });
 test('error text alone never creates a return-after-error classification',()=>{
  const {data,graph}=fixture();graph.edges=graph.edges.filter(e=>e.id!=='error');for(const n of graph.nodes.filter(n=>n.properties.kind==='feedback'))n.properties.source.text='ERROR: boom';
@@ -148,7 +155,7 @@ test('work-navigation passes saved procedure observations to the review at the a
 });
 
 test('missing, duplicate, stale and wrong-pair comparisons remain unavailable',()=>{
- for(const change of [c=>null,c=>({...c,graph_id:'old'}),c=>({...c,rows:[...c.rows,...c.rows]}),c=>({...c,rows:[{...c.rows[0],previous_node_id:'other'}]})]){
+ for(const change of [c=>null,c=>({...c,schema:'repeated-work-comparisons/unknown'}),c=>({...c,graph_id:'old'}),c=>({...c,rows:[...c.rows,...c.rows]}),c=>({...c,rows:[{...c.rows[0],previous_node_id:'other'}]})]){
   const {data,graph}=fixture(),t=project(data,graph,null,null,change(inputs(data))).targets[0];
   assert.equal(t.count.dispatch_compared,0);assert.equal(t.count.exact_repeats,0);assert.equal(t.pairs[0].input_comparison,null);
  }

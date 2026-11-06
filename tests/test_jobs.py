@@ -175,6 +175,26 @@ class JobTests(unittest.TestCase):
         self.finished(job_id)
         self.assertEqual(self.row(job_id)["status"],"complete")
 
+    def test_resume_reuses_exact_historical_requests_when_latest_record_is_incompatible(self):
+        import copy
+        calls = []
+        client = JevClient(transport=lambda request: (calls.append(request), response_for(request))[1])
+        for action in self.store.get(self.run_id)['analysis']['actions']:
+            current = client.evaluate(self.run, action['event_id'])
+            p = current['_provenance']
+            self.store.record(self.run_id, action['event_id'], p['harness'], p['model'], p['packet_hash'], current)
+            stale = copy.deepcopy(current)
+            stale['_provenance']['packet_hash'] = 'old-context'
+            self.store.record(self.run_id, action['event_id'], p['harness'], p['model'], 'old-context', stale)
+        calls.clear()
+        worker = self.worker(client=client)
+        job_id = worker.submit(self.run_id)
+        self.finished(job_id)
+        self.assertEqual(self.row(job_id)['status'], 'complete')
+        self.assertEqual(self.row(job_id)['total'], 0)
+        self.assertEqual(calls, [])
+        self.assertEqual(self.store.get(self.run_id)['analysis']['semantic_coverage'], 3)
+
     def test_old_database_migration_retains_jobs_and_marks_unknown_ownership(self):
         old=Path(self.temp.name)/"old.sqlite"
         with sqlite3.connect(old) as c:
