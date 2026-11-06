@@ -46,17 +46,19 @@
   const all=new Map(graph.nodes.map(n=>[n.id,n])),nodes=layout.nodes,byId=layout.byId,edges=layout.edges;
   const event=n=>all.get(n.kind==='event'?n.id:'event:'+n.properties.source?.event_id);
   const actor=n=>n.properties.actor||event(n)?.properties.actor||'';
-  const key=n=>JSON.stringify([n.trajectory_id,actor(n)]);
+  const contextId=n=>event(n)?.properties.context_id??n.properties.context_id??null;
+  const scope=n=>JSON.stringify([n.trajectory_id,contextId(n)]);
+  const key=n=>JSON.stringify([n.trajectory_id,contextId(n),actor(n)]);
   const isAction=n=>n.properties.kind==='action',isFeedback=n=>n.lane===2;
   const isRequest=n=>actor(n)==='user'||n.kind==='event'&&n.properties.kind==='instruction';
   const requests=nodes.filter(isRequest),context=nodes.filter(n=>n.kind==='event'&&['system','developer'].includes(actor(n)));
   const actions=nodes.filter(isAction),owner=new Map(),moments=[],byBatch=new Map();
   // Only an explicit source parent groups sibling dispatches. Display order is not execution order.
   for(const n of actions){const parent=event(n)?.properties.parent_id,batch=parent?JSON.stringify([key(n),parent]):n.id;
-   let m=byBatch.get(batch);if(!m){m={id:n.id,trajectory:n.trajectory_id,actor:actor(n),actions:[],contributions:[],feedback:[],extras:[],links:[]};byBatch.set(batch,m);moments.push(m);}
+   let m=byBatch.get(batch);if(!m){m={id:n.id,trajectory:n.trajectory_id,context:contextId(n),scope:scope(n),actor:actor(n),actions:[],contributions:[],feedback:[],extras:[],links:[]};byBatch.set(batch,m);moments.push(m);}
    m.actions.push(n);owner.set(n.id,m);
   }
-  function attach(n,targets,bucket){const owners=[...new Set(targets.map(id=>owner.get(id)).filter(Boolean))];if(owners.length!==1||owners[0].trajectory!==n.trajectory_id)return false;const m=owners[0];m[bucket].push(n);owner.set(n.id,m);return true;}
+  function attach(n,targets,bucket){const owners=[...new Set(targets.map(id=>owner.get(id)).filter(Boolean))];if(owners.length!==1||owners[0].scope!==scope(n))return false;const m=owners[0];m[bucket].push(n);owner.set(n.id,m);return true;}
   for(const n of nodes.filter(isFeedback)){
    const targets=edges.filter(e=>['feedback_for','response_to'].includes(e.type)&&e.source===n.id).map(e=>e.target);
    attach(n,targets,'feedback');
@@ -68,8 +70,8 @@
   for(const n of nodes){if(owner.has(n.id)||requests.includes(n)||context.includes(n))continue;
    // A plan step stays alongside its declared plan, never becomes an attempted action.
    const parent=edges.find(e=>e.type==='contains_plan_step'&&e.target===n.id);
-   if(parent&&owner.has(parent.source)){const m=owner.get(parent.source);m.extras.push(n);owner.set(n.id,m);continue;}
-   const m={id:n.id,trajectory:n.trajectory_id,actor:actor(n),actions:[],contributions:[],feedback:isFeedback(n)?[n]:[],extras:isFeedback(n)?[]:[n],links:[]};moments.push(m);owner.set(n.id,m);
+   if(parent&&owner.get(parent.source)?.scope===scope(n)){const m=owner.get(parent.source);m.extras.push(n);owner.set(n.id,m);continue;}
+   const m={id:n.id,trajectory:n.trajectory_id,context:contextId(n),scope:scope(n),actor:actor(n),actions:[],contributions:[],feedback:isFeedback(n)?[n]:[],extras:isFeedback(n)?[]:[n],links:[]};moments.push(m);owner.set(n.id,m);
   }
   const members=m=>[...m.actions,...m.contributions,...m.feedback,...m.extras];
   moments.sort((a,b)=>Math.min(...members(a).map(n=>n.ordinal??Infinity))-Math.min(...members(b).map(n=>n.ordinal??Infinity)));
@@ -88,7 +90,7 @@
    m.title=m.actions.length>1?m.actions.map(n=>n.target||n.summary).join(' / '):m.actions[0]?.target||m.actions[0]?.summary||m.extras[0]?.target||m.extras[0]?.summary||(m.feedback.length?(m.callLinked?'Captured response · unit pairing unresolved':'Unpaired response'):'Recorded contribution');
    m.displayTitle=headingText(m.title);
    m.responses=m.feedback.map(n=>({node:n,...preview(n.properties.source?.text||n.properties.text),reactions:relations
-    .filter(e=>reactionTypes.has(e.type)&&e.target===n.id&&byId.get(e.source)?.trajectory_id===n.trajectory_id)
+    .filter(e=>reactionTypes.has(e.type)&&e.target===n.id&&byId.has(e.source)&&scope(byId.get(e.source))===scope(n))
     .map(e=>({edge:e,node:byId.get(e.source),momentId:owner.get(e.source).id,actor:actor(byId.get(e.source))}))}));
    m.attempts=m.actions.map(n=>({node:n,operation:operation(n),repetition:repetitions.get(n.id)||null,responses:m.responses.filter(r=>edges.some(e=>['feedback_for','response_to'].includes(e.type)&&e.source===r.node.id&&e.target===n.id)),capturedResponses:mapAPI.capturedResponses(layout,n.id).filter(r=>r.action_card_ids.includes(n.id)).map(r=>({...r,...preview(r.response.properties.text)}))}));
    m.checks=m.nodes.flatMap(n=>mapAPI.stateEvidence(graph,n.id).checks).filter((n,i,a)=>a.findIndex(v=>v.id===n.id)===i);
@@ -198,7 +200,7 @@
   }
   for(const m of data.moments){
    const card=node('article',null,'rs-moment'+(m.hasSignal?' has-signal':''));card.tabIndex=-1;card.dataset.moment=m.id;cards.set(m.id,card);
-   const top=node('header'),num=node('span',String(m.number).padStart(2,'0'),'rs-number'),title=node('div');title.append(node('small',`${m.actor||'Source'} · ${m.trajectory||'main'} · ${m.basis}`),node('h3',m.displayTitle));top.append(num,title);card.append(top);
+   const top=node('header'),num=node('span',String(m.number).padStart(2,'0'),'rs-number'),title=node('div');title.append(node('small',`${m.actor||'Source'} · ${m.trajectory||'main'}${m.context!==null?' · '+m.context:''} · ${m.basis}`),node('h3',m.displayTitle));top.append(num,title);card.append(top);
    if(m.actions.length>1)card.append(node('p','Grouped dispatches · execution order is not established','rs-batch-note'));
    if(m.contributions.length){const context=node('div');for(const c of m.contributions)context.append(content(c,c.activity.toUpperCase()));card.append(disclosure('Agent context · '+m.contributions.map(c=>c.activity).join(', '),context));}
    const grid=node('div',null,'rs-attempts');

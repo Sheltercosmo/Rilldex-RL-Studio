@@ -139,6 +139,8 @@ Select a **Training run** in the sidebar. **Overview** summarizes current signal
 
 Select an agent step in the map and choose **Scan context** to inspect its input mixture, repeated blocks and captured instruction changes. [Context scan →](docs/CONTEXT_SCAN.md)
 
+Open **Action reading** on a dispatched action to read its purpose and response to earlier feedback with Jev. Follow the evidence links or reuse a saved reading, including on source-only maps. Rollout Story keeps separate agent contexts apart.
+
 Open a rollout, then **Plans & attempts → Structure & flow** to compare branch structure and event flow. Select a revision to inspect its trigger, target, implementation and follow-up, with gains and regressions together. Add measures and alerts there. Missing follow-up stays unknown; recorded changes do not establish causality. **Structure lines** provides the larger foldable map. [Structure and revision guide →](docs/WORK_STRUCTURE_MEASURES.md)
 
 In **Behavior → Distributions**, choose a behavior view and two windows. Select a category to inspect matching cases. **Save latest comparison** retains observations and membership; **Capture latest evidence** revisits those windows without changing the original.

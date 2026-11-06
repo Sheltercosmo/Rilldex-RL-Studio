@@ -53,6 +53,7 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
         raise InputError("This version is a local research application; bind to loopback only")
     snapshot_lock = threading.Lock()
     context_review_lock = threading.Lock()
+    action_reading_lock = threading.Lock()
     from .model_pilot import ModelPilotService
     model_pilot = ModelPilotService(store)
     import uuid
@@ -98,12 +99,16 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
             path = unquote(urlsplit(self.path).path)
             params = parse_qs(urlsplit(self.path).query)
             try:
-                if path in {'/context-mix.js','/context-mix.css'}:
+                if path in {'/context-mix.js','/context-mix.css','/action-reading.js','/action-reading.css'}:
                     return self.response(200,(WEB/path[1:]).read_bytes(),'text/css; charset=utf-8' if path.endswith('.css') else 'text/javascript; charset=utf-8')
                 if path == '/api/context-mix':
                     from .context_mix import load
                     return self.response(200,load(store,params.get('run',[''])[0],params.get('event',[''])[0]),
                         download_name='context-mix.json' if params.get('download')==['1'] else None)
+                if path == '/api/action-reading':
+                    from .action_reading import inspect
+                    result = inspect(store, params.get('run',[''])[0], params.get('event',[''])[0], client=worker.client)
+                    return self.response(200, {**result, 'configured': bool(os.environ.get('JEV_API_KEY'))})
                 if path == '/data-access.js':
                     return self.response(200,(WEB/'data-access.js').read_bytes(),'text/javascript; charset=utf-8')
                 if path == '/native-analysis.js':
@@ -751,6 +756,16 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
                     try:
                         return self.response(200,review(store,body.get('run'),body.get('event'),body.get('block')))
                     finally: context_review_lock.release()
+                if self.path == '/api/action-reading':
+                    from .action_reading import read
+                    if set(body) != {'run', 'event'}:
+                        raise InputError('Provide one rollout and one action to read')
+                    if not action_reading_lock.acquire(blocking=False):
+                        return self.response(409, {'error': 'An action reading is running. Try again after it finishes.'})
+                    try:
+                        result = read(store, body['run'], body['event'], client=worker.client)
+                        return self.response(200, {**result, 'configured': bool(os.environ.get('JEV_API_KEY'))})
+                    finally: action_reading_lock.release()
                 if self.path.startswith('/api/workspaces/') and workspace_manager is None:
                     return self.response(503,{'error':'Workspace picker unavailable: '+str(workspace_error)})
                 if self.path == '/api/workspaces/open':

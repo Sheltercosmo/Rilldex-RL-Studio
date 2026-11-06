@@ -183,6 +183,11 @@ Recent long results retain their beginning, ending and relevant middle passages.
 The response reader distinguishes routine next steps from changed settings or
 methods, including algorithms selected through a parameter of the same tool.
 
+In the behavior map, select a dispatched action and open **Action reading**.
+Read that action with Jev, inspect its purpose and response to feedback, or follow
+the links to earlier evidence. This also works on source-only maps. Saved readings
+are reused; reviewer choices remain in place when a model reading is refreshed.
+
 After a reader update, resume inspection to refresh outdated readings. Exact
 saved requests are reused across purpose, activity, relationship and field
 analysis; compatible partial readings resume from their saved stage. Earlier

@@ -19,6 +19,18 @@ test('shared parent groups sibling calls but actor and trajectory boundaries rem
  const s=story([a,b,c,d]);assert.equal(s.moments.length,3);assert.equal(s.moments[0].actions.length,2);
  assert.equal(s.moments[0].title,'event:a / event:b');
 });
+
+test('context resets separate dispatch groups, repeated calls and response attachments',()=>{
+ const a=n('event:a',1,'action',{parent_id:'p',context_id:'first',tool:'lookup',arguments:{id:7},text:'lookup 7'}),
+ b=n('event:b',2,'action',{parent_id:'p',context_id:'reset',tool:'lookup',arguments:{id:7},text:'lookup 7'}),
+ r=n('event:r',3,'feedback',{context_id:'reset'});
+ const s=story([a,b,r],[edge(r.id,a.id,'response_to')]);
+ assert.equal(s.moments.length,3);
+ assert.equal(s.repetitionGroups.length,0);
+ assert.equal(s.moments.find(m=>m.id===a.id).feedback.length,0);
+ assert.equal(s.moments.find(m=>m.id===r.id).title,'Unpaired response');
+ assert.deepEqual(s.moments.map(m=>m.context),['first','reset','reset']);
+});
 test('thinking attaches only through a source link, not adjacency or textual similarity',()=>{
  const thought=n('event:t',0,'message'),action=n('event:a',1,'action');
  assert.equal(story([thought,action]).moments.length,2);

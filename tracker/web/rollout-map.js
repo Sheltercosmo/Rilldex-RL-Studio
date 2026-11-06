@@ -685,6 +685,7 @@ function select(id,scroll=false,scrollBehavior='smooth'){const n=layout.byId.get
  body.append(el('p',RolloutStory.excerpt(summary),'selected-unit-summary'));
  const nativeRecord=n.kind==='event'?n.properties:payload.graph.nodes.find(row=>row.id==='event:'+n.properties?.source?.event_id)?.properties;
  window.ContextMix?.attach(body,payload.run.id,nativeRecord);
+ window.ActionReading?.attach(body,payload.run.id,nativeRecord,{onSource:eventId=>{const target=layout.nodes.find(row=>row.kind==='unit'&&row.properties?.source?.event_id===eventId)||layout.byId.get('event:'+eventId);if(target)select(target.id,true);else location.assign('/semantic-map?'+new URLSearchParams({run:payload.run.id,observer:'source',level:'units',focus_unit:'event:'+eventId}));}});
  if(nativeRecord?.native_call_id){
   const trace=el('section',undefined,'selected-source-call');trace.append(el('h3','Weave call'));
   if(nativeRecord.call_status)trace.append(el('p',human(nativeRecord.call_status)+' · '+human(nativeRecord.behavior_scope)));

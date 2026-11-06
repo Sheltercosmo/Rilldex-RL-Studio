@@ -347,6 +347,7 @@ body.workspace.canvas-focus{padding-left:0}.canvas-focus .workspace-nav,.canvas-
 .map-page #map-inspector>#map-reading-controls{flex:0 1 auto;max-height:35dvh;overflow:auto;border-bottom:1px solid var(--line)}
 .map-page #map-inspector #map-reading-controls .connection-toolbar{flex-wrap:wrap}
 .map-page #map-inspector #map-reading-controls .connection-toolbar span{flex-basis:100%}
+.map-page #map-inspector .map-key:not(:has(#map-display-options[open])) :is(.card-key,.edge-legend,.edge-key-heading,.map-key-direction){display:none}
 #map-foundation-status{margin:10px 2px;font-size:12px;line-height:1.6;color:var(--ink-muted,#526176)}
 #map-foundation-status details{padding:0;border:0;background:none}
 #map-foundation-status summary{cursor:pointer;font-weight:500}
