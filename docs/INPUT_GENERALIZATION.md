@@ -179,6 +179,9 @@ The macro reader retrieves relevant earlier call results alongside recent steps,
 including matched passages inside long results. It retains native policies and
 keeps source offsets, agent/context scope and later state updates. Clipping a
 policy no longer discards an otherwise supported action-purpose decision.
+Recent long results retain their beginning, ending and relevant middle passages.
+The response reader distinguishes routine next steps from changed settings or
+methods, including algorithms selected through a parameter of the same tool.
 
 After a reader update, resume inspection to refresh outdated readings. Exact
 saved requests are reused across purpose, activity, relationship and field
@@ -201,6 +204,8 @@ Live development checks use `jev-1.13.0` and retain exact requests/responses:
 | Target relationships with source intervals and recorded operation definitions | 13/17 → 16/17 against the original labels; three encoded-operation and four explicit-identity controls passed |
 | Reward checks with each operation beside its own definitions | 12/14 → 14/14; eight earlier code-flow and artifact controls also passed |
 | Custom requirement checks | 15/15 controlled outcomes, including partial traces, unverified completion claims and five cases with fresh requirement extraction |
+| Response to feedback in long results | 0/18 → 18/18 across six authored scenarios in three formats |
+| Routine progression versus revision | 9/18 → 18/18 across six additional controls; two selected public follow-ups improved from 0/2 to 2/2 |
 
 These are development controls and selected public examples, not a deployment
 accuracy estimate. Paired serializations are not independent samples. Repeat the
@@ -213,6 +218,14 @@ check; rejected pairs do not alter other work groups. Accepted comparisons reach
 the action inspector and behavior measurements without merging the original paths.
 Saved live evidence is under `tests/fixtures/*generalization*.json` and
 `tests/fixtures/environment_reading_evidence.json`.
+
+Feedback-reading trials are retained in `tests/fixtures/feedback_reading_evidence.json`,
+including the first definition's regressions. Repeat with
+`python scripts/evaluate_feedback_reading.py --output outputs/feedback --arms production --live --prompt-key`.
+The final trial matches all 38 response references, but purpose still differs on
+six parser cases (apply versus verify). The formats repeat 12 authored scenarios;
+the two public actions come from one trace. Historical evaluation replays use
+their saved requests; live evaluation uses current readers and preserves references.
 
 The remaining target disagreement concerns a fallback booking: one customer
 request versus two concrete reservation attempts. An independent review found

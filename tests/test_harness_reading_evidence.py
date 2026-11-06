@@ -1,5 +1,6 @@
 """Replay saved live Jev receipts; transformations are paired, not new samples."""
 import json
+from copy import deepcopy
 from pathlib import Path
 import unittest
 
@@ -14,13 +15,19 @@ class HarnessReadingEvidenceTests(unittest.TestCase):
     def setUpClass(cls):
         cls.saved=json.loads((Path(__file__).parent/'fixtures/harness_reading_evidence.json').read_text(encoding='utf8'))['sets']
 
-    def test_live_harness_receipts_match_current_requests_and_reference(self):
+    def test_current_source_and_purpose_match_historical_receipts(self):
         current={(r['case_id'],r['format'],r['layer']):r for r in requests()}
         self.assertEqual(len(current),96)
         for row in self.saved['harness']:
             with self.subTest(case=row['case_id'],format=row['format'],layer=row['layer']):
                 now=current[(row['case_id'],row['format'],row['layer'])]
-                self.assertEqual(now['request'],row['request'])
+                current_request = deepcopy(now['request'])
+                if row['layer'] == 'macro':
+                    self.assertIn('feedback_reading_scope', current_request['state'])
+                    current_request['state'].pop('feedback_reading_scope')
+                # Source and purpose stay identical. The added feedback-reading
+                # instruction means these old responses are not current accuracy.
+                self.assertEqual(current_request,row['request'])
                 answer=validate_answers(row['response'],row['request'])[row['answer_key']]
                 self.assertEqual(answer['value'],row['reference'])
 

@@ -16,7 +16,7 @@ from .environment_contracts import READING_RULE, excerpt_contracts, reading_cont
 from .action_context import older_feedback, visible_before
 from .readable_context import project as project_text, CONTEXT_VERSION
 
-JEV_HARNESS = "macro-semantics/0.6.2"
+JEV_HARNESS = "macro-semantics/0.6.4"
 DEFAULT_MODEL = "jev-1.13.0"
 ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 SELECTION_POLICY = "argmax/1"
@@ -73,15 +73,15 @@ QUESTIONS = {
     },
     "feedback_response": {
         "type": "choice",
-        "instructions": "Compare `current_action` with the most recent prior action and its recorded feedback in this same agent trajectory. What observable response follows that feedback? Do not label repetition as failure; do not assume absent environment state is unchanged. Consider `parent_expression` only as supporting evidence.",
+        "instructions": "Compare current_action with the most recent prior action and its visible feedback in this same agent trajectory. Classify the observable response using operation definitions and local purpose, not tool names or argument differences alone. An unchanged operation is repeat, without implying failure or unchanged environment state. Reading another source to decide what to do is gather_information even during an ongoing investigation. Distinguish replacing a procedure from adjusting only its settings: a parameter can encode an entirely different algorithm or mechanism. A planned next execution step or verification check is continue when no adjustment to address feedback is established. Do not infer an unexpressed causal reason or successful recovery.",
         "criteria": {
-            "repeat": "Repeats the same operation with unchanged arguments.",
-            "parameter_change": "Changes parameters or target within the same approach.",
-            "method_change": "Changes the approach or mechanism in response to feedback.",
-            "gather_information": "Seeks additional evidence about the feedback or next step.",
-            "continue": "Continues the existing approach after feedback without an observed revision.",
-            "not_applicable": "There is no prior action with feedback to respond to.",
-            "unresolved": "The relationship cannot be established from supplied evidence."
+            "repeat": "Repeat the same operation with unchanged arguments; polling or reconfirmation can also repeat.",
+            "parameter_change": "Adjust only settings or inputs within the same procedure to address feedback. The procedure itself stays the same; a parameter selecting a different algorithm or mechanism is not this category.",
+            "method_change": "Replace the procedure, algorithm, route or operational mechanism to address feedback, including when this change is encoded by a parameter of the same tool.",
+            "gather_information": "Read, inspect or probe to learn facts for deciding what to do next, including continuing investigation into another source. This is not a check against an already specified expected result.",
+            "continue": "Perform the next execution step or verification check within the existing approach, without an established adjustment. Excludes exploratory information gathering.",
+            "not_applicable": "No prior action with visible feedback is available.",
+            "unresolved": "The response relationship or the nature of an adjustment cannot be established."
         }
     },
     "expressed_plan_followed": {
@@ -112,7 +112,7 @@ def packet(run, action_id):
         before = len(truncated)
         projection = {}
         text = e['text'][:limit]
-        if retained_ranges:
+        if retained_ranges is not None:
             view = project_text(e, {'schema':CONTEXT_VERSION, 'recent_events':1,
                 'max_event_chars':limit, 'extra_ranges':retained_ranges}, {'event_id':action['id']})
             text = view['text']
@@ -139,13 +139,16 @@ def packet(run, action_id):
     def history_entry(e, required_for, ranges=None):
         replies = [f for f in linked["by_action"].get(e["id"], []) if visible_before(f, action) and not f.get('copied_context')]
         return {"action": excerpt(e, 3000, required_for),
-                "feedback": [excerpt(f, 3000, required_for, (ranges or {}).get(f['id'])) for f in replies]}
-    history = [history_entry(e, ('feedback_response',)) for e in prior]
+                "feedback": [excerpt(f, 3000, (), (ranges or {}).get(f['id'], [])) for f in replies]}
     parent = ids.get(action.get("parent_id"))
     if parent and not visible_before(parent, action):parent = None
     older, lookback = older_feedback(run, action, linked, prior,
         action['text'] + '\n' + (parent['text'] if parent else ''))
     lookback_ranges = {row['feedback_event_id']: row['ranges'] for row in lookback.get('retrieval', {}).get('selected', [])}
+    # Only the adjacent dispatch is a required comparison subject. Longer
+    # response context retains its beginning, ending and matched passages;
+    # omitted diagnostics do not invalidate an otherwise visible change.
+    history = [history_entry(e, ('feedback_response',) if e is prior[-1] else (), lookback_ranges) for e in prior]
     candidates = focus_candidates(run, action_id)
     # The full source stays in the registry, while requests have bounded text.
     # Record truncation even when the duplicated root description is shortened.
@@ -169,6 +172,7 @@ def packet(run, action_id):
                  visible_before(e,action) and not e.get('copied_context') and e['text'].strip()][-3:]],
              "expression_scope": "Earlier visible dialogue provides context, not a native parent link, promise of execution or proof of success.",
              "prior_actions": history,
+             "feedback_reading_scope": "Long results retain their beginning, ending and selected relevant passages with source offsets. Omitted text is not evidence of absence. Describe only the response supported by the visible dispatches and feedback; choose unresolved when omitted material could change that relationship. A response category does not establish task success or causal recovery.",
              "earlier_relevant_actions": [history_entry(e, (), lookback_ranges) for e in older],
              "context_retrieval": lookback,
              "harness_context": [excerpt(e, 24000 if e.get('actor') in {'system','developer'} or e.get('context_kind') == 'recorded_environment_policy' else 3000,

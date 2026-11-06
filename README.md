@@ -8,7 +8,7 @@
 
 ## Highlights
 
-- **See how an agent works.** Follow actions, feedback, plans and branches. Compare rollout structures and inspect what changed after a revision.
+- **See how an agent works.** Follow actions, feedback, plans and branches. Distinguish routine next steps from changed settings or methods, then inspect what followed a revision.
 - **Compare training runs.** Align reward, policy mismatch, loss, entropy, KL, clipping, tokens and throughput; select one interval across the charts.
 - **Connect training to behavior.** Follow worker activity, learner updates and their linked rollouts; inspect recovery, verification and unresolved work.
 - **Keep evidence within reach.** Chart values and saved investigations link to source records, relationships, coverage and definitions.

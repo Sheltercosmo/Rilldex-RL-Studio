@@ -9,6 +9,7 @@ from scripts.evaluate_environment_reading import evaluate as definitions
 from scripts.evaluate_reading_context import evaluate as context
 from scripts.evaluate_harness_generalization import evaluate as formats
 from scripts.evaluate_purpose_boundary import evaluate as purpose
+from scripts.evaluate_feedback_reading import evaluate as feedback
 from tracker.schema import dumps
 
 if __name__=='__main__':
@@ -19,4 +20,5 @@ if __name__=='__main__':
     print(dumps(formats(root/'harness-generalization-final',a.live)),flush=True)
     print(dumps(definitions(root/'environment-reading-generalized',live=a.live)),flush=True)
     print(dumps(context(root/'reading-context-generalized',live=a.live,arms=('current',))),flush=True)
+    print(dumps(feedback(root/'feedback-reading-generalized',live=a.live,arms=('production',))),flush=True)
     if a.live:purpose(root/'purpose-boundary')

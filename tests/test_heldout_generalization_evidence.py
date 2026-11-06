@@ -34,7 +34,7 @@ class HeldoutGeneralizationEvidenceTests(unittest.TestCase):
     def source(self, case_id):
         return self.fixture["sources"][self.fixture["case_source_views"][case_id]]
 
-    def test_current_readers_regenerate_exact_historical_requests_and_replay_real_responses(self):
+    def test_frozen_requests_replay_real_responses_without_relabeling_them_as_current(self):
         matches = Counter()
         with patch("urllib.request.urlopen", side_effect=AssertionError("Offline replay must not call a provider")):
             generated = list(requests(self.fixture))
@@ -50,6 +50,25 @@ class HeldoutGeneralizationEvidenceTests(unittest.TestCase):
                     self.assertTrue(score["reference_match"])
                     matches[row["layer"]] += 1
         self.assertEqual(matches, Counter(macro=10, activity=10, executor_report=2))
+
+    def test_live_evaluation_uses_current_requests_and_keeps_historical_references(self):
+        old = {row['id']: request for row, request in requests(self.fixture)}
+        current = list(requests(self.fixture, current=True))
+        for row, request in current:
+            if row['layer'] == 'macro':
+                self.assertNotEqual(request, old[row['id']])
+                self.assertIn('feedback_reading_scope', request['state'])
+            else:
+                self.assertEqual(request, old[row['id']])
+        with tempfile.TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            report = evaluate(directory, live=True, max_calls=0)
+            self.assertEqual(report['request_origin'], 'current_readers')
+            self.assertEqual(report['status'], 'pending')
+            result = read(Path(directory) / 'report.json')
+            expected = {row['id']: digest(request) for row, request in current}
+            for row in result['results']:
+                self.assertEqual(row['request_hash'], expected[row['id']])
+                self.assertEqual(row['reference_request_hash'], digest(old[row['id']]))
 
     def test_pre_live_review_and_exact_event_provenance_survive_without_private_state(self):
         self.assertEqual(digest(self.fixture["review"]), self.fixture["pre_live_review_hash"])

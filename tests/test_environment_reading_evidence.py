@@ -14,6 +14,10 @@ def comparable(request):
     result=deepcopy(request)
     # SQLite's version is provenance; the selected passages must still match.
     result.get('state',{}).get('context_retrieval',{}).get('retrieval',{}).pop('sqlite_version',None)
+    # Compare unchanged source evidence and purpose; feedback instructions now
+    # have their own exact-request live replay in test_feedback_reading_evidence.
+    result.get('state',{}).pop('feedback_reading_scope',None)
+    result.get('questions',{}).pop('feedback_response',None)
     return result
 
 
@@ -28,7 +32,7 @@ class EnvironmentReadingEvidenceTests(unittest.TestCase):
                 self.assertEqual(key,digest(receipt['request']))
                 self.assertEqual(receipt['response']['model'],run['model'])
 
-    def test_current_context_requests_replay_all_delivered_decisions(self):
+    def test_current_source_matches_historical_context_and_saved_decisions_replay(self):
         saved=self.data['runs']['reading-context-final']
         actual={r['case_id']:r for r in requests(saved['model'],['current'])}
         self.assertEqual(len(actual),len(saved['results']))

@@ -10,6 +10,7 @@ from tracker.adapters import normalize
 from tracker.jev import packet, validate_answers
 from tracker.schema import InputError, digest, dumps
 from test_tracker import response_for
+from scripts.evaluate_feedback_reading import cases as feedback_cases
 
 
 def distant():
@@ -19,6 +20,48 @@ def distant():
 
 
 class ActionContextTests(unittest.TestCase):
+    def test_long_recent_results_retain_endings_without_blocking_the_next_response(self):
+        for case in feedback_cases():
+            if case['kind'] != 'authored':continue
+            with self.subTest(case=case['id'], format=case['format']):
+                run=normalize(case['document'])[0]
+                action=[e for e in run['events'] if e['kind']=='action'][-1]
+                req=packet(run,action['id'])
+                result=validate_answers(response_for(req),req)
+                self.assertEqual(result['feedback_response']['status'],'decided')
+                for entry in req['state']['prior_actions']:
+                    for feedback in entry['feedback']:
+                        source=next(e for e in run['events'] if e['id']==feedback['event_id'])
+                        if len(source['text'])<=3000:continue
+                        self.assertIn(source['text'][-200:],feedback['text'])
+                        self.assertTrue(feedback['omitted_text_ranges'])
+                        self.assertLess(len(feedback['text']),5000)
+                        for ref in feedback['source_text_ranges']:
+                            self.assertEqual(source['text'][ref['source_start']:ref['source_end']],
+                                feedback['text'][ref['view_start']:ref['view_end']])
+
+    def test_recent_result_keeps_matched_middle_and_later_correction(self):
+        case=next(c for c in feedback_cases() if c['id']=='navigation-immediate' and c['format']=='chat')
+        run=normalize(case['document'])[0]
+        action=[e for e in run['events'] if e['kind']=='action'][-1]
+        feedback=next(e for e in run['events'] if e['kind']=='feedback')
+        marker='parcel P7 destination pier B bridge is closed'
+        feedback['text']='diagnostic sample 0\n'*300+marker+'\n'+'diagnostic sample 1\n'*300+'Correction: bridge is open now.'
+        req=packet(run,action['id'])
+        viewed=req['state']['prior_actions'][-1]['feedback'][0]
+        self.assertIn(marker,viewed['text'])
+        self.assertIn('Correction: bridge is open now.',viewed['text'])
+
+    def test_only_adjacent_dispatch_clipping_blocks_its_response_comparison(self):
+        case=next(c for c in feedback_cases() if c['id']=='service-older' and c['format']=='chat')
+        for previous in (0,1):
+            run=normalize(case['document'])[0]
+            actions=[e for e in run['events'] if e['kind']=='action']
+            actions[previous]['text']+=' x'*2000
+            req=packet(run,actions[-1]['id'])
+            result=validate_answers(response_for(req),req)
+            self.assertEqual(result['feedback_response']['status'],'decided' if previous==0 else 'unresolved')
+
     def test_retrieves_distant_state_without_rewriting_recent_action_order(self):
         run, action = distant(); original = deepcopy(run)
         req = packet(run, action['id'])

@@ -50,13 +50,19 @@ def source_request(run, event_id, layer, model):
     raise InputError("Unknown reading layer")
 
 
-def requests(fixture):
+def requests(fixture, *, current=False):
     cases = {case["case_id"]: case for case in fixture["review"]["cases"]}
     for row in fixture["observations"]:
         case = cases[row["case_id"]]
         source = fixture["sources"][fixture["case_source_views"][case["case_id"]]]
         if digest(source["run"]) != source["projection_hash"]:
             raise InputError("Frozen event projection changed")
+        if not current and "request" in row:
+            request = deepcopy(row["request"])
+            if digest(request) != row["request_hash"]:
+                raise InputError("Frozen request changed: " + row["id"])
+            yield row, request
+            continue
         request = source_request(source["run"], case["event_id"], row["layer"], fixture["model"])
         if row["layer"] == "executor_report":
             # This field identifies the original full recording, not the model's
@@ -64,7 +70,7 @@ def requests(fixture):
             # Preserve the historical source binding rather than mislabeling the
             # original live receipt as having consumed the new projection digest.
             request["state"]["source_hash"] = source["original_source_hash"]
-        if digest(request) != row["request_hash"]:
+        if not current and digest(request) != row["request_hash"]:
             raise InputError("Current reader differs from frozen request: " + row["id"])
         yield row, request
 
@@ -80,8 +86,10 @@ def evaluate(directory="outputs/heldout-generalization-replay", *, live=False, c
     if model.model != fixture["model"]:
         raise InputError("Client model differs from frozen protocol")
     rows, groups, calls = [], {}, 0
-    for original, request in requests(fixture):
+    for original, request in requests(fixture, current=live):
         row = {key: deepcopy(original[key]) for key in ("id", "case_id", "layer", "answer_keys", "request_hash")}
+        row["reference_request_hash"] = original["request_hash"]
+        row["request_hash"] = digest(request)
         receipt = root / "receipts" / (row["request_hash"] + ".json")
         response = None
         if not live:
@@ -127,7 +135,8 @@ def evaluate(directory="outputs/heldout-generalization-replay", *, live=False, c
         status="complete" if all(row["status"] == "complete" for row in rows) else "pending",
         new_calls_this_invocation=calls, fixture_hash=digest(fixture),
         pre_live_review_hash=fixture["pre_live_review_hash"], groups=groups, results=rows,
-        scope=fixture["review"]["scope"], reader_protocols=fixture["review"]["reader_protocols"])
+        scope=fixture["review"]["scope"], reference_reader_protocols=fixture["review"]["reader_protocols"],
+        request_origin="current_readers" if live else "frozen_live_requests")
     write(root / "report.json", report)
     return {key: value for key, value in report.items() if key != "results"}
 
