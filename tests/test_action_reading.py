@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -88,7 +89,11 @@ class ActionReadingTests(unittest.TestCase):
 
     def test_http_serves_saved_choices_without_keys_and_only_reads_selected_action(self):
         action_reading.read(self.store, self.run['id'], self.action, client=self.client)
-        endpoint = self.start_server()
+        import test_generation_cohort_transport as transport
+        # Reproduce a child runtime with different metadata even on the same OS.
+        bootstrap = "import sqlite3\nsqlite3.sqlite_version = 'different-runtime'\n" + transport.SERVER
+        with patch.object(transport, 'SERVER', bootstrap):
+            endpoint = self.start_server(sqlite_metadata=sqlite3.sqlite_version)
         path = '/api/action-reading?run=' + self.run['id'] + '&event=' + self.action
         with urlopen(endpoint + path, timeout=10) as response:
             result = json.load(response)

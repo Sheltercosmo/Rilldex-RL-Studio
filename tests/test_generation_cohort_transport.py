@@ -34,6 +34,10 @@ def population_packet(producer='scheduler', experiment='exp', rows=None):
 
 SERVER = '''
 import sys, threading
+if len(sys.argv) > 2:
+    import sqlite3
+    # Exact receipt replay freezes the metadata string, never the engine.
+    sqlite3.sqlite_version = sys.argv[2]
 from tracker import server
 from tracker.store import Store
 original = server.LocalServer
@@ -56,10 +60,11 @@ class GenerationCohortTransportTests(unittest.TestCase):
         self.db = self.root / 'workspace.sqlite'
         self.store = Store(self.db)
 
-    def start_server(self):
+    def start_server(self, *, sqlite_metadata=None):
         log = self.root / 'server.log'
         stream = log.open('w', encoding='utf-8')
-        process = subprocess.Popen([sys.executable, *(['-I'] if sys.flags.isolated else []), '-c', SERVER, str(self.db)],
+        process = subprocess.Popen([sys.executable, *(['-I'] if sys.flags.isolated else []), '-c', SERVER, str(self.db),
+                                    *([sqlite_metadata] if sqlite_metadata is not None else [])],
             stdin=subprocess.PIPE, stdout=stream, stderr=stream, text=True,
             env=dict(os.environ, PYTHONUTF8='1'),
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
