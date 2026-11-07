@@ -28,7 +28,10 @@ MAX_BODY = 20 * 1024 * 1024
 
 
 class LocalServer(ThreadingHTTPServer):
-    allow_reuse_address = False
+    # POSIX needs SO_REUSEADDR to reopen a stopped collector while completed
+    # connections are in TIME_WAIT. Windows needs exclusive binding instead.
+    allow_reuse_address = os.name != 'nt'
+    allow_reuse_port = False
     # Browsers open concurrent asset/API connections. The stdlib backlog of five
     # can refuse one script during navigation bursts on Windows, leaving a page
     # at its loading placeholder without any application-level error handler.

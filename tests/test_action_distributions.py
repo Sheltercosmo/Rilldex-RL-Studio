@@ -148,10 +148,12 @@ class ActionDistributionTests(unittest.TestCase):
         self.assertEqual(link['lens'],['action_purpose'])
 
     def test_pinned_public_trace_retains_exact_two_readings_and_all_unread_actions(self):
+        from receipt_replay import recorded_sqlite_metadata
         from scripts.evaluate_feedback_reading import cases
         case = next(c for c in cases() if c['id']=='public-universe-e31')
         run = normalize(case['document'])[0]; self.store.add([run])
         evidence = json.loads(Path('tests/fixtures/feedback_reading_evidence.json').read_text(encoding='utf8'))
+        self.enterContext(recorded_sqlite_metadata(evidence))
         def replay(request):
             receipt = evidence['receipts'][digest(request)]
             self.assertEqual(receipt['request'],request); return receipt['response']

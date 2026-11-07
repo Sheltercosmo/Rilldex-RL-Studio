@@ -13,6 +13,7 @@ from tracker.adapters import normalize
 from tracker.jev import JevClient
 from tracker.schema import digest
 from tracker.store import Store
+from receipt_replay import recorded_sqlite_metadata
 
 
 class FeedbackReadingEvidenceTests(unittest.TestCase):
@@ -20,6 +21,7 @@ class FeedbackReadingEvidenceTests(unittest.TestCase):
     def setUpClass(cls):
         path = Path(__file__).parent / 'fixtures/feedback_reading_evidence.json'
         cls.evidence = json.loads(path.read_text(encoding='utf8'))
+        cls.enterClassContext(recorded_sqlite_metadata(cls.evidence))
 
     def test_all_saved_trials_reproduce_scores_including_failed_definitions(self):
         for key, receipt in self.evidence['receipts'].items():

@@ -12,6 +12,7 @@ from tracker.adapters import normalize
 from tracker.jev import JevClient
 from tracker.schema import InputError, dumps
 from test_generation_cohort_transport import GenerationCohortTransportTests
+from receipt_replay import recorded_sqlite_metadata
 
 
 class ActionReadingTests(unittest.TestCase):
@@ -28,6 +29,7 @@ class ActionReadingTests(unittest.TestCase):
         row = next(r for r in evidence['phases']['purpose-combined']['results']
                    if r['id'] == self.case['id'] and r['format'] == self.case['format'])
         self.receipt = evidence['receipts'][row['request_hash']]
+        self.enterContext(recorded_sqlite_metadata(self.receipt))
         self.calls = 0
 
         def replay(request):

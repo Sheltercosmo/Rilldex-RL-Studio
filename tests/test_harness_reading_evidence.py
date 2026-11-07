@@ -8,12 +8,14 @@ from scripts.evaluate_harness_generalization import requests, evaluation_cases, 
 from scripts.evaluate_long_context import records
 from tracker.jev import validate_answers
 from tracker.schema import digest
+from receipt_replay import recorded_sqlite_metadata
 
 
 class HarnessReadingEvidenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.saved=json.loads((Path(__file__).parent/'fixtures/harness_reading_evidence.json').read_text(encoding='utf8'))['sets']
+        cls.enterClassContext(recorded_sqlite_metadata(cls.saved))
 
     def test_current_source_matches_historical_receipts(self):
         current={(r['case_id'],r['format'],r['layer']):r for r in requests()}

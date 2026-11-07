@@ -56,7 +56,10 @@ def main():
                 catalog=get('/api/analysis/catalog')
                 assert {t['name'] for t in catalog['tables']}=={'rollouts','revisions','sources','graphs','nodes','edges',
                     'measurements','monitor_values','monitor_definitions','training_records','executions',
-                    'generation_cohorts','evaluations','trainer_telemetry'}
+                    'generation_cohorts','evaluations','trainer_telemetry','run_capture',
+                    'content_extractions','work_contents','work_attachments','work_content_relations'}
+                for table in ('content_extractions','work_contents','work_attachments','work_content_relations'):
+                    assert get('/api/analysis/tables/'+table)['rows']==[]
                 telemetry=packet({'loss':.25,'entropy':.6},producer='smoke/learner',experiment='smoke',
                     framework='trl-grpo',framework_version='synthetic-control',objective='grpo/control',
                     session='start-1',step=7)

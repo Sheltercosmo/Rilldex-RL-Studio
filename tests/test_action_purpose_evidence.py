@@ -13,12 +13,14 @@ from tracker.jev import JevClient, QUESTIONS
 from tracker.observe import analyze
 from tracker.schema import digest
 from tracker.store import Store
+from receipt_replay import recorded_sqlite_metadata
 
 
 class ActionPurposeEvidenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.data=json.loads(Path('tests/fixtures/action_purpose_evidence.json').read_text(encoding='utf8'))
+        cls.enterClassContext(recorded_sqlite_metadata(cls.data))
         cls.sources={r['id']:r for r in cls.data['sources']}
 
     def test_failed_trials_and_original_ambiguous_references_remain_reproducible(self):
