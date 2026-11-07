@@ -62,7 +62,7 @@ window.BehaviorDistributions=(()=>{
   const windowDraft=renderedScope===renderScope&&oldWindows?.open?Object.fromEntries([...oldWindows.querySelectorAll('input')].map(input=>[input.name,input.value])):null;
   renderedScope=renderScope;writeLocation();host.classList.add('behavior-distributions');host.replaceChildren();
   host.append(comparisonActions(d));
-  const lenses=n('div',undefined,'bd-view-selector');lenses.setAttribute('aria-label','Behavior views');const lensOrder=[...new Set(['work_visits','recurrence','revisit','procedure','work','feedback','failure','outcome',...Object.keys(d.lenses)])];
+  const lenses=n('div',undefined,'bd-view-selector');lenses.setAttribute('aria-label','Behavior views');const lensOrder=[...new Set(['action_purpose','task_connection','work_visits','recurrence','revisit','procedure','work','feedback','failure','outcome',...Object.keys(d.lenses)])];
   lenses.append(select('Behavior view',lensOrder.filter(k=>d.lenses[k]).map(k=>[k,d.lenses[k].label]),d.lens,key=>{state.lens=key;if(key==='work_visits')state.recurrence_order='bracketed-parallel/1';else delete state.recurrence_order;delete state.observer;delete state.cohort_id;selected=null;resetWindows();casesOpen=false;load(host,scope);}));host.append(lenses);
   const controls=n('div',undefined,'bd-controls');if(d.lens==='work')controls.append(select('Category grouping',d.groupings.map(g=>[g.id,g.name]),d.grouping,v=>{state.grouping=v;selected=null;load(host,scope);}),button('Edit grouping',()=>editor(d),'bd-configure'));
   if(d.population_mode)controls.append(select('Comparison population',[['task','One task'],['task_mix','Across tasks']],d.population_mode||'task',v=>{state.population_mode=v;delete state.cohort_id;resetWindows();load(host,scope);}));
@@ -74,6 +74,7 @@ window.BehaviorDistributions=(()=>{
   const methodNotes=n('div',undefined,'bd-method-notes');
   if(d.distribution.total){const stats=n('div',undefined,'bd-stats');for(const [value,label]of [[d.observed_rollouts+' / '+d.population,'cohort rollouts observed'],[d.distribution.total,d.definition.grain],d.lens==='work_visits'?[d.points.reduce((n,p)=>n+(p.switches?.unknown||0),0),'uncertain switches']:[d.bins.filter(b=>b.eligible_rollouts).length,'observed progress positions']]){const cell=n('div');cell.append(n('strong',value),n('span',label));stats.append(cell);}host.append(stats);}
   if(d.observation_readiness)host.append(coverageSummary(d));
+  if(d.reading_coverage){const r=d.reading_coverage;host.append(n('p',`${r.inspected} / ${r.actions} actions inspected · ${r.decided} identified · ${r.uninspected} unread${r.outdated?' · '+r.outdated+' need refresh':''}. Unknown actions stay in each rollout’s share.`,'bd-reading-coverage'));}
   methodNotes.append(n('p','Experimental observations · '+caption(d.metadata)+'. This cohort contains '+d.population+' of '+d.scope_population.toLocaleString()+' imported rollouts in scope.','bd-sample'));
   if(d.metadata?.source_selection?.note)methodNotes.append(n('p','Source sampling: '+d.metadata.source_selection.note,'bd-note'));
   if(['recurrence','procedure'].includes(d.lens)){
@@ -238,7 +239,7 @@ window.BehaviorDistributions=(()=>{
   for(const item of v.rows){
    const preview=DistributionEvidence.preview(item),row=n('article',undefined,'bd-case bd-evidence-case'),header=n('div',undefined,'bd-case-heading');
    header.append(n('strong',preview.positions?'Actions '+preview.positions.join(' → '):(item.step==null?'Saved case':'Step '+item.step+' · '+windowNames[item.window])),n('span',c.label+' · '+item.rollout_category_count+' / '+item.rollout_total+' in this rollout'));
-   row.append(header,link(preview.later?.label||item.text?.trim()||'Open selected evidence',item.map_url+'&return_to='+encodeURIComponent(location.pathname+location.search)));
+   row.append(header,link(preview.later?.label||item.label||item.text?.trim()||'Open selected evidence',item.map_url+'&return_to='+encodeURIComponent(location.pathname+location.search)));
    const info=n('div',undefined,'bd-case-meta');info.append(n('span','Rollout '+item.run_id.slice(0,12)));
    if(item.task?.task_id)info.append(n('span',item.task.task_id));
    const e=item.episode;if(preview.positions)info.append(n('span',item.step==null?'No recorded step':'Step '+item.step+' · '+windowNames[item.window]));else if(e?.previous_unit_id&&e?.current_unit_id)info.append(n('span','Exact earlier / later pair'));
@@ -246,6 +247,7 @@ window.BehaviorDistributions=(()=>{
    if(item.procedure_reason)info.append(n('span',item.procedure_reason));
    if(item.correction_location&&item.correction_location!=='not_established')info.append(n('span','Correction: '+item.correction_location.replaceAll('_',' ')));
    row.append(info);
+   if(item.reading){const reading=n('details',undefined,'bd-reading');reading.append(n('summary',`Reading in this comparison · ${item.reading.source==='review'?'reviewed':item.status==='current'?'saved model reading':item.status==='outdated'?'needs refresh':'not read'}`));const evidence=n('div');evidence.append(n('strong',c.label));if(item.reading.basis)evidence.append(n('p',item.reading.basis));if(item.reading.reviewer)evidence.append(n('p','Reviewed by '+item.reading.reviewer));if(item.reader)evidence.append(n('small',item.reader.model+' · '+item.reader.harness));const raw=n('details');raw.append(n('summary','Recorded reading'),n('pre',JSON.stringify(item.reading,null,2)));evidence.append(raw,n('small','This reading is captured with the comparison. The rollout inspector shows the latest workspace reading.'));reading.append(evidence);row.append(reading);}
    if(item.error_followup&&item.error_followup.category!=='unknown')row.append(n('p',item.error_followup.label+' · executor diagnostics, not a task-success verdict','bd-report-state'));
    if(preview.reason){const reason=n('div',undefined,'bd-stated-reason'),text=preview.reason.text.replace(/\s+/g,' ');reason.append(n('small',"Agent's stated reason"),n('p',text.slice(0,260)+(text.length>260?'…':'')));const url=new URL(item.map_url,location.href);url.searchParams.set('level','units');url.searchParams.delete('work_episode');url.searchParams.set('focus_unit',preview.reason.node_id);url.searchParams.set('return_to',location.pathname+location.search);reason.append(link('Inspect stated reason →',url.pathname+url.search));row.append(reason);}
    if(preview.responses.length){const text=DistributionEvidence.displayText(preview.responses[0].text);if(text)row.append(n('p','Earlier response: '+text.replace(/\s+/g,' ').slice(0,200)+(text.replace(/\s+/g,' ').length>200?'…':''),'bd-response-preview'));}

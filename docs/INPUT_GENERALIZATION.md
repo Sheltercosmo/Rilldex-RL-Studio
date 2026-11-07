@@ -188,6 +188,16 @@ Read that action with Jev, inspect its purpose and response to feedback, or foll
 the links to earlier evidence. This also works on source-only maps. Saved readings
 are reused; reviewer choices remain in place when a model reading is refreshed.
 
+**Rollout Story → How the agent works** shows current purpose readings by agent
+context, with method changes, matching calls and task-relationship markers.
+Select a tile to open its evidence. **Read next** resumes pending model readings;
+coverage updates as each action is saved. Unread actions remain visible.
+Saved returns to earlier work appear here too, including reasoning-only traces.
+Select a return to open its evidence in **Work path**; missing evidence stays visible.
+**Across training** opens the same task in Behavior. Compare **Action purpose** or
+**Task connection**, then open the actions behind a change. Reader models stay
+separate; saved comparisons retain their readings and unread-action counts.
+
 After a reader update, resume inspection to refresh outdated readings. Exact
 saved requests are reused across purpose, activity, relationship and field
 analysis; compatible partial readings resume from their saved stage. Earlier

@@ -260,6 +260,20 @@ function openPlanSource(id){
  $('#selection-count').textContent='Source record '+(record.event_index+1)+' · open a derived unit below';
 }
 let feedbackTrailCache=new Map(),requestEvidenceCache=new Map();
+function workReadingOrder(graph){
+ return graph.semantic_context?.work_subjects?(params.get('recurrence_order')||(!params.has('value')&&!params.has('work_episode')&&!params.has('work_visit')&&graph.semantic_context.work_subjects.document.schema==='work-subject-bindings/4'?'bracketed-parallel/1':null)):null;
+}
+function openWorkFromOverview(episode,order){
+ if((workNavigation?.recurrence_order||null)!==order){workNavigation=null;workRequest=null;}
+ if(order)params.set('recurrence_order',order);else params.delete('recurrence_order');
+ for(const key of ['work_episode','work_visit','focus_unit','work_focus'])params.delete(key);
+ if(episode)params.set('work_episode',episode);params.set('graph',payload.graph.id);showWorkLevel();
+}
+function openActionRecord(eventId,reading=false){
+ const target=layout.nodes.find(row=>row.kind==='unit'&&row.properties?.source?.event_id===eventId)||layout.byId.get('event:'+eventId);
+ if(target){setMapLevel('units');select(target.id,true);if(reading){const box=$('#map-inspector').querySelector('.action-reading');if(box){box.open=true;box.scrollIntoView({block:'nearest'});}}}
+ else location.assign('/semantic-map?'+new URLSearchParams({run:payload.run.id,observer:'source',level:'units',focus_unit:'event:'+eventId,...(reading?{action_reading:'1'}:{})}));
+}
 async function showStoryLevel(){
  if(!payload?.graph)return;setMapLevel('story');$('#map-inspector').hidden=true;
  const graph=payload.graph,token=loadToken;let trail=feedbackTrailCache.get(graph.id),trailError=null,requestEvidence=requestEvidenceCache.get(graph.id),requestEvidenceError=null;
@@ -267,14 +281,14 @@ async function showStoryLevel(){
   await Promise.all([!trail?(async()=>{try{trail=await api('/api/feedback-followthrough?graph='+encodeURIComponent(graph.id));feedbackTrailCache.set(graph.id,trail);if(feedbackTrailCache.size>4)feedbackTrailCache.delete(feedbackTrailCache.keys().next().value);}catch(e){trailError='Feedback comparison unavailable. Saved story and source evidence remain available.';}})():null,
    !requestEvidence?(async()=>{try{requestEvidence=await api('/api/request-evidence?graph='+encodeURIComponent(graph.id));requestEvidenceCache.set(graph.id,requestEvidence);if(requestEvidenceCache.size>4)requestEvidenceCache.delete(requestEvidenceCache.keys().next().value);}catch(e){requestEvidenceError='Requested-check evidence unavailable. Do not infer coverage from missing links.';}})():null]);}
  if(token!==loadToken||payload.graph.id!==graph.id||params.get('level')!=='story')return;
- RolloutStory.render($('#rollout-story'),RolloutStory.project(graph,payload.run,layout),graph,id=>{setMapLevel('units');select(id,true);},{feedbackTrail:trail,feedbackTrailError:trailError,requestEvidence,requestEvidenceError,query:params.get('story_query'),filter:params.get('story_filter'),moment:params.get('story_moment'),onChange:state=>{for(const key of ['query','filter','moment']){if(state[key]&&state[key]!=='all')params.set('story_'+key,state[key]);else params.delete('story_'+key);}params.set('graph',payload.graph.id);history.replaceState(history.state,'','/semantic-map?'+params);}});
+ RolloutStory.render($('#rollout-story'),RolloutStory.project(graph,payload.run,layout),graph,id=>{setMapLevel('units');select(id,true);},{actionFlowRun:payload.run.id,workFlow:{graph:graph.id,recurrence_order:workReadingOrder(graph),onWork:openWorkFromOverview},onAction:eventId=>openActionRecord(eventId,true),feedbackTrail:trail,feedbackTrailError:trailError,requestEvidence,requestEvidenceError,query:params.get('story_query'),filter:params.get('story_filter'),moment:params.get('story_moment'),onChange:state=>{for(const key of ['query','filter','moment']){if(state[key]&&state[key]!=='all')params.set('story_'+key,state[key]);else params.delete('story_'+key);}params.set('graph',payload.graph.id);history.replaceState(history.state,'','/semantic-map?'+params);}});
 }
 async function showWorkLevel(){
  if(!payload?.graph)return;setMapLevel('work');$('#map-inspector').hidden=true;const token=loadToken,graph=payload.graph;
  if(workNavigation){renderWorkRoute();return;}
  $('#work-route').replaceChildren(el('p','Loading source-bound work relationships…','wn-loading'));$('#work-level-status').textContent='No model calls';
  try{
-  const recurrenceOrder=graph.semantic_context?.work_subjects?(params.get('recurrence_order')||(!params.has('value')&&!params.has('work_episode')&&!params.has('work_visit')&&graph.semantic_context.work_subjects.document.schema==='work-subject-bindings/4'?'bracketed-parallel/1':null)):null;
+  const recurrenceOrder=workReadingOrder(graph);
   if(recurrenceOrder){params.set('recurrence_order',recurrenceOrder);history.replaceState(history.state,'','/semantic-map?'+params);}
   if(!workRequest)workRequest=Promise.all([
    fetch('/api/investigation-plans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({schema:'investigation-plan/1',nodes:(graph.semantic_context?.work_subjects?[['navigation','work_navigation']]:[['navigation','work_navigation'],['procedures','adaptation_patterns'],['comparisons','repeated_work']]).map(([name,op])=>({name,op,inputs:[],params:{run_id:graph.run_id,source_hash:graph.source_hash,graph_id:graph.id,...(op==='work_navigation'&&recurrenceOrder?{recurrence_order:recurrenceOrder}:{}),...(op==='work_navigation'&&graph.semantic_context?.work_subjects?.document?.schema==='work-subject-bindings/4'?{target_relations:'contribution-scope-pairs/2'}:{})}}))})}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Work path unavailable');return d.outputs;}),
@@ -685,7 +699,8 @@ function select(id,scroll=false,scrollBehavior='smooth'){const n=layout.byId.get
  body.append(el('p',RolloutStory.excerpt(summary),'selected-unit-summary'));
  const nativeRecord=n.kind==='event'?n.properties:payload.graph.nodes.find(row=>row.id==='event:'+n.properties?.source?.event_id)?.properties;
  window.ContextMix?.attach(body,payload.run.id,nativeRecord);
- window.ActionReading?.attach(body,payload.run.id,nativeRecord,{onSource:eventId=>{const target=layout.nodes.find(row=>row.kind==='unit'&&row.properties?.source?.event_id===eventId)||layout.byId.get('event:'+eventId);if(target)select(target.id,true);else location.assign('/semantic-map?'+new URLSearchParams({run:payload.run.id,observer:'source',level:'units',focus_unit:'event:'+eventId}));}});
+ window.ActionReading?.attach(body,payload.run.id,nativeRecord,{onSource:openActionRecord});
+ if(params.get('action_reading')==='1'&&params.get('focus_unit')===id){const reading=body.querySelector('.action-reading');if(reading)reading.open=true;}
  if(nativeRecord?.native_call_id){
   const trace=el('section',undefined,'selected-source-call');trace.append(el('h3','Weave call'));
   if(nativeRecord.call_status)trace.append(el('p',human(nativeRecord.call_status)+' · '+human(nativeRecord.behavior_scope)));

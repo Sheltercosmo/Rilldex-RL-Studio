@@ -99,12 +99,19 @@ def serve(store, host="127.0.0.1", port=8765, *, open_browser=False, container=F
             path = unquote(urlsplit(self.path).path)
             params = parse_qs(urlsplit(self.path).query)
             try:
-                if path in {'/context-mix.js','/context-mix.css','/action-reading.js','/action-reading.css'}:
+                if path in {'/context-mix.js','/context-mix.css','/action-reading.js','/action-reading.css','/action-flow.js','/action-flow.css'}:
                     return self.response(200,(WEB/path[1:]).read_bytes(),'text/css; charset=utf-8' if path.endswith('.css') else 'text/javascript; charset=utf-8')
                 if path == '/api/context-mix':
                     from .context_mix import load
                     return self.response(200,load(store,params.get('run',[''])[0],params.get('event',[''])[0]),
                         download_name='context-mix.json' if params.get('download')==['1'] else None)
+                if path == '/api/action-reading/flow':
+                    from .action_reading import flow
+                    from .graph_store import read as read_graph
+                    graph = read_graph(store, params['graph'][0]) if params.get('graph') else None
+                    result = flow(store, params.get('run',[''])[0], client=worker.client, profile=worker.profile, limit=worker.max_actions,
+                                  graph=graph, recurrence_order=params.get('recurrence_order',[None])[0])
+                    return self.response(200, {**result, 'configured': bool(os.environ.get('JEV_API_KEY'))})
                 if path == '/api/action-reading':
                     from .action_reading import inspect
                     result = inspect(store, params.get('run',[''])[0], params.get('event',[''])[0], client=worker.client)

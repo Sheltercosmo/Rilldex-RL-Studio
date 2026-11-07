@@ -141,6 +141,7 @@
   if(last)root.SourceEvidence?.append(result,graph,last);
   for(const r of data.recorded)result.append(node('span',r.label+': '+r.value,'rs-outcome'));
   result.append(node('small',annotatedReport?'Agent report; inspect checks for verification.':'Unclassified recorded text; it may be reasoning or an interim update. It does not establish completion.'));overview.append(request,result);host.append(overview);
+  if(options.actionFlowRun&&options.onAction)root.ActionFlow?.mount(host,options.actionFlowRun,options.onAction,options.workFlow);
   if(options.requestEvidence&&root.RequestEvidence)root.RequestEvidence.render(host,options.requestEvidence,openUnit);
   else if(options.requestEvidence)host.append(node('p','Requested-check view could not load. Coverage is unavailable here.','rs-missing'));
   else if(options.requestEvidenceError)host.append(node('p',options.requestEvidenceError,'rs-missing'));

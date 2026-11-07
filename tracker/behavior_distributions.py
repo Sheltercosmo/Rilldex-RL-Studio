@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 from .schema import InputError, digest, dumps
 from . import strategy_profiles as profiles
 from . import investigation_plans, work_episodes, adaptation_patterns, work_visits, work_order, task_mix, work_consistency
-from . import distribution_readiness, repeated_work
+from . import distribution_readiness, repeated_work, action_distributions
 
 VERSION = 'behavior-distribution/1'
 COMPARISON_VERSION = 'behavior-comparison/1'
@@ -62,6 +62,8 @@ FIXED = {
     'failure': [('adjustment','Linked adjustment → retry'),('retry','Retry; adjustment path unresolved'),('unknown','Return not established')],
     'outcome': [('completed','Completed'),('failed','Failed'),('partial','Partial'),('unknown','Outcome unresolved')],
 }
+LENSES.update(action_distributions.LENSES)
+FIXED.update(action_distributions.CATEGORIES)
 
 
 def initialize(c):
@@ -218,6 +220,8 @@ def work_inputs(store,lens,run_ids=None,recurrence_order=None,*,cache_store=None
 
 
 def inputs(store,lens,run_ids=None,recurrence_order=None,*,cache_store=None):
+    if lens in action_distributions.LENSES:
+        with store.read_snapshot() as saved:return action_distributions.inputs(saved,lens,run_ids)
     if lens in WORK_LENSES:return work_inputs(store,lens,run_ids,recurrence_order,cache_store=cache_store)
     with store.read_snapshot() as saved:
         return saved_inputs(saved,lens,run_ids)
@@ -384,6 +388,8 @@ def _snapshot(store,*,cache_store,lens='work',grouping='work-default',observer=N
     if lens=='revisit':
         for category in categories:
             if category['id']=='feedback_unknown':category['color']='#a27a2a'
+    if lens in action_distributions.LENSES:
+        for category,color in zip(categories,action_distributions.COLORS[lens]):category['color']=color
     from .monitoring import population,scoped
     population_rows=scoped(population(store),experiment,environment); runs={r['id']:r for r in population_rows}
     with store.connect() as c:
@@ -428,6 +434,7 @@ def _snapshot(store,*,cache_store,lens='work',grouping='work-default',observer=N
                        'policy_version':m.get('policy_version'),'checkpoint':m.get('checkpoint'),'task':task_mix.identity(m),
                        'counts':{k:counts[k] for k in keys},'total':sum(counts.values()),
                        'agent_records':d.get('agent_records'),'records_with_units':d.get('records_with_units'),
+                       **({'reading_coverage':d['reading_coverage']} if 'reading_coverage' in d else {}),
                        **({'switches':d['switches']} if lens=='work_visits' else {}),
                        **({'work_coverage':d['coverage'],'analysis_plan_id':d['analysis_plan_id']} if lens in WORK_LENSES else {})})
     points.sort(key=lambda p:(p['step'] is None,p['step'] or 0,p['run_id']))
@@ -471,6 +478,11 @@ def _snapshot(store,*,cache_store,lens='work',grouping='work-default',observer=N
     basis=(chosen['metadata'].get('training_step_basis') if chosen else None)
     result['axis']={'basis':basis,'label':str(basis).replace('_',' ').capitalize()+' index' if basis else 'Recorded step · basis unspecified',
                     'meaning':'Source-declared progress coordinate. Generation batches, optimizer updates and checkpoint evaluations are different clocks.'}
+    if lens in action_distributions.LENSES:
+        result['schema']=action_distributions.VERSION
+        result['reader_profile']=selected[0]['reader_profile'] if selected else None
+        result['reading_coverage']={k:sum(d['reading_coverage'][k] for d in selected)
+            for k in ('actions','inspected','current','reviewed','outdated','uninspected','decided')}
     if lens=='work_visits':
         result['recurrence_order']=recurrence_order
         result['scope_consistency']=work_consistency.POLICY

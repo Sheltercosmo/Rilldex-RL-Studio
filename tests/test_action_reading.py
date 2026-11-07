@@ -95,7 +95,12 @@ class ActionReadingTests(unittest.TestCase):
         request = Request(endpoint + '/api/action-reading', data=dumps({'run': self.run['id'], 'event': self.action}).encode(), headers={'Content-Type':'application/json'})
         with urlopen(request, timeout=10) as response:
             self.assertTrue(json.load(response)['reused'])
-        for path in ['/action-reading.js', '/action-reading.css']:
+        with urlopen(endpoint + '/api/action-reading/flow?run=' + self.run['id'], timeout=10) as response:
+            flow = json.load(response)
+        self.assertEqual(flow['coverage']['current'], 1)
+        self.assertEqual(flow['coverage']['uninspected'], 1)
+        self.assertEqual(flow['actions'][-1]['fields']['feedback_response']['value'], 'method_change')
+        for path in ['/action-reading.js', '/action-reading.css', '/action-flow.js', '/action-flow.css']:
             with urlopen(endpoint + path, timeout=10) as response:
                 self.assertEqual(response.status, 200)
         invalid = Request(endpoint + '/api/action-reading', data=dumps({'run':self.run['id'],'event':self.action,'all':True}).encode(), headers={'Content-Type':'application/json'})
