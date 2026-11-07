@@ -246,6 +246,33 @@ observer. The registry retains versioned results and reuses an exact query on
 the same source revision. The Python method computes locally without persisting
 an investigation.
 
+### Read long context with a model
+
+`Workspace.select_dispatch_evidence()` lets a configured local/API worker search
+earlier records, read long policies in pages and retain exact quotes. It returns
+focused requirement comparisons for decision-model review; it does not change
+saved annotations or infer that an unselected rule was satisfied.
+
+```python
+import sys
+from tracker.candidate_worker import CommandCandidates
+
+worker = CommandCandidates("reading/worker", [sys.executable, "-m", "rilldex.candidate"],
+                           producer="my-model/version")
+result = workspace.select_dispatch_evidence(
+    run_id, "e101", "reading/session", provider=worker,
+    max_rounds=12, max_bytes=32000, page_chars=1800,
+)
+comparisons = result.get("requests", [])  # exact source-bound decision requests
+```
+
+Use the existing [model settings](../README.md#model-setup). Raise `max_rounds`
+to resume the same session; completed reads are reused. Without `provider`, the
+session writes requests for an external worker and reports `needs_candidates`.
+Read coverage counts supplied source ranges, not interpretation accuracy. The
+byte limit applies to each request, not model tokens; the current model output
+must fit. Missing media, unestablished order and other agent contexts stay separate.
+
 ### Continue with an explicit budget
 
 Use the returned cursor with the same anchor, questions, method and budgets.

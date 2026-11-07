@@ -44,6 +44,27 @@ def native_dispatch(run, event_id):
             'order': 'Native message content and calls are co-issued; serialized positions do not establish execution order.'}
 
 
+def dispatch_prefix(run, event_id):
+    """Visible earlier context plus the complete captured native model output."""
+    dispatch = native_dispatch(run, event_id)
+    current = next(e for e in run['events'] if e['id'] == event_id)
+    members = set(dispatch['action_ids'] + dispatch['message_ids'])
+    return [e for e in run['events'] if visible_record(e) and recorded_scope(e) == recorded_scope(current)
+            and (e['id'] in members or current.get('order_known') is not False
+                 and e['index'] < dispatch['first_source_index'] and e.get('order_known') is not False)]
+
+
+def native_definitions(event):
+    """Preserve recorded action/observation meanings, with media still unread."""
+    from .readable_context import project, VERSION as TEXT_VERSION
+    fields = {k: event[k] for k in ('tool_contract', 'observation_contract') if k in event}
+    if not fields: return {}
+    view = project({'id': event['id'], 'kind': event['kind'], 'actor': event['actor'], 'text': '', **fields},
+                   {'schema': TEXT_VERSION, 'max_event_chars': 128, 'extra_ranges': []},
+                   {'event_id': event['id']})
+    return {k: view[k] for k in (*fields, 'unobserved_auxiliary_media') if k in view}
+
+
 def visible_before(event, current):
     return (recorded_scope(event) == recorded_scope(current) and event['index'] < current['index'] and
             not event['kind'].startswith('external_') and event.get('agent_visible') is not False and

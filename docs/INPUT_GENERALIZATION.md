@@ -276,7 +276,8 @@ separate harness evidence.
 Focused dispatch review accepts exact rule and context quotes from a local or API
 candidate worker. It preserves parallel calls, prior state and excerpt boundaries.
 This Python workflow supplements the existing reader; selected rules are not a
-full-policy audit. Oversized prefixes require a larger configured selection budget.
+full-policy audit. For longer traces, [bounded source reading](SOURCE_EVIDENCE.md#read-long-context-with-a-model)
+lets the worker search, read adjacent ranges and retain exact quotes across requests.
 
 On 25 development comparisons from eight public airline/telecom dispatches, native
 context improved agreement with the original unambiguous model references from
@@ -284,6 +285,13 @@ context improved agreement with the original unambiguous model references from
 ambiguous; both reference sets and all 75 valid trial receipts are retained.
 These are development results, not held-out or human-rated accuracy. Replay with
 `python scripts/evaluate_dispatch_reading.py`.
+
+The bounded reader also replays 32 accepted source-reading requests across two
+public cases and one long-context control, within 16 KB per request. Independent
+review still found missing identity links, comparison prices and applicable
+troubleshooting rules. These subagent trials validate source retrieval and binding;
+they do not establish detector accuracy or an isolated model-context limit.
+Replay with `python scripts/evaluate_dispatch_reader.py`.
 
 The remaining target disagreement concerns a fallback booking: one customer
 request versus two concrete reservation attempts. An independent review found

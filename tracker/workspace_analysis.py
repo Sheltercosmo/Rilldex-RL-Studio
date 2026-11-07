@@ -670,6 +670,23 @@ Each call sees fresh committed data; joins within one call share a read snapshot
         if cursor is not None: query['cursor'] = cursor
         return search(run, query)
 
+    def select_dispatch_evidence(self, run_id, event_id, directory, *, provider=None, max_rounds=8, **settings):
+        """Read long source context with a local/API worker or an external file queue.
+
+        Returns source-bound requirement comparisons for explicit decision-model
+        review. It does not publish annotations or overwrite the action reader.
+        Increasing max_rounds resumes saved reads in the same directory.
+        """
+        from .dispatch_reading import collect
+        with self.data.snapshot() as saved:
+            if saved.frozen:
+                raise InputError('Dispatch reading requires original sources in a live or restored workspace')
+            rows = self._query(saved, 'SELECT run_id FROM rollouts WHERE run_id=?', [run_id], limit=1)
+            if not rows.rows:
+                raise InputError('Rollout is outside this workspace scope or unavailable')
+            run = json.loads(saved.c.execute('SELECT document FROM runs WHERE id=?', (run_id,)).fetchone()[0])
+        return collect(run, event_id, directory, provider=provider, max_rounds=max_rounds, **settings)
+
     def review_conditions(self, run_id, graph_id, *, anchor, question_ids=None,
                           source_types=None, strategy='source', limit=8, max_chars=16000, cursor=None):
         """List saved terms at a cutoff, or retrieve candidates for selected terms.

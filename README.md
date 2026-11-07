@@ -222,6 +222,8 @@ loss = ws.sql("""
 
 Add your own analyses and publish code-defined monitors into the UI. [Python guide](docs/CODE_FIRST_ANALYSIS.md) · [Custom monitor example](examples/live_custom_monitor.py)
 
+For long policies and traces, let a local or API model search earlier records, retain exact quotes and resume saved reads. [Source-reading workflow](docs/SOURCE_EVIDENCE.md#read-long-context-with-a-model)
+
 ## Integrations
 
 Use native adapters where available, or portable conversation, generation and environment-episode records for your own stack. Configuration readers, file importers and executed capture hooks have different coverage; the [integration matrix](docs/INTEGRATION_COVERAGE.md) identifies each route.
