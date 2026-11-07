@@ -114,6 +114,8 @@ def inspect(store, run_id, event_id, *, client=None):
     fields = {k: v for k, v in action['semantic'].items() if not k.startswith('_')}
     reviewed = any(value.get('source') == 'review' for value in fields.values())
     reusable = any(_matches(client, row, run, event_id) for row in history)
+    from .action_context import native_dispatch
+    dispatch = native_dispatch(run, event_id)
     return {'schema': 'action-reading/1', 'run_id': run_id, 'source_hash': digest(run),
             'event_id': event_id, 'source_pointer': event['source_pointer'],
             'status': _status(reading, fields, bool(history)),
@@ -124,6 +126,7 @@ def inspect(store, run_id, event_id, *, client=None):
             'previous_action': previous[0]['action']['event_id'] if previous else None,
             'previous_feedback': [f['event_id'] for f in previous[0]['feedback']] if previous else [],
             'feedback_support': action['feedback_support'],
+            'native_dispatch': dispatch,
             'scope': 'Immediate action purpose and its response to preceding feedback. A method change does not establish improvement or successful recovery.'}
 
 

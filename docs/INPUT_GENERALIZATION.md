@@ -268,6 +268,23 @@ Requirement scans also read explicitly captured environment policies and workflo
 rules, scoped to their recorded agent context. Existing saved scans retain their
 original protocol and can resume unchanged.
 
+In a map, select an action and expand **Action reading**. **Same model output**
+opens companion messages and tool calls using native message identities. These
+links show what was recorded together; delivery and execution order require
+separate harness evidence.
+
+Focused dispatch review accepts exact rule and context quotes from a local or API
+candidate worker. It preserves parallel calls, prior state and excerpt boundaries.
+This Python workflow supplements the existing reader; selected rules are not a
+full-policy audit. Oversized prefixes require a larger configured selection budget.
+
+On 25 development comparisons from eight public airline/telecom dispatches, native
+context improved agreement with the original unambiguous model references from
+17/19 to 18/19. A separate routing review marked the remaining disagreement
+ambiguous; both reference sets and all 75 valid trial receipts are retained.
+These are development results, not held-out or human-rated accuracy. Replay with
+`python scripts/evaluate_dispatch_reading.py`.
+
 The remaining target disagreement concerns a fallback booking: one customer
 request versus two concrete reservation attempts. An independent review found
 the reference ambiguous; the original failed score remains saved. Explicit

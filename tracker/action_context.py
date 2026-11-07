@@ -1,8 +1,47 @@
 """Retrieve older source feedback for a current dispatch, without domain labels."""
 from .capabilities import recorded_scope
 from .feedback_retrieval import FeedbackIndex, CONTEXT_VERSION
+from .schema import InputError
+from .work_order import Evidence
 
 VERSION = 'action-lookback/1'
+DISPATCH_VERSION = 'recorded-dispatch/1'
+
+
+def visible_record(event):
+    return (not event.get('copied_context') and not event['kind'].startswith('external_') and
+            event.get('agent_visible') is not False and event.get('agent_visibility') != 'not_established')
+
+
+def native_dispatch(run, event_id):
+    """Retain native co-issued calls and message content, without ordering siblings.
+
+    This describes the captured dispatch, not a claim that the export contains
+    every call or that any call executed. No names or text infer membership.
+    """
+    events = {e['id']: e for e in run['events']}
+    selected = events.get(event_id)
+    if not selected or selected['actor'] != 'agent' or selected['kind'] != 'action' or not visible_record(selected):
+        raise InputError('Select an original agent-visible action')
+    lane = {eid: e for eid, e in events.items() if recorded_scope(e) == recorded_scope(selected)
+            and e['actor'] == selected['actor'] and visible_record(e)}
+    order = Evidence(lane)
+    actions = sorted((lane[eid] for eid in order.groups[event_id]), key=lambda e: e['index'])
+    parents = {e['parent_id'] for e in actions if e.get('parent_id')}
+    message_indices = {e['source_message_index'] for e in actions if e.get('source_message_index') is not None}
+    messages = sorted((e for e in lane.values() if e['kind'] == 'message' and
+                       (e['id'] in parents or e.get('source_message_index') in message_indices)),
+                      key=lambda e: e['index'])
+    declared = max((e.get('batch_size') or 0 for e in actions), default=0)
+    return {'schema': DISPATCH_VERSION, 'selected_action_id': event_id,
+            'action_ids': [e['id'] for e in actions], 'message_ids': [e['id'] for e in messages],
+            'message_with_text_ids': [e['id'] for e in messages if e['text'].strip()],
+            'recorded_action_count': len(actions), 'declared_action_count': declared or None,
+            'declared_members_missing': max(0, declared - len(actions)),
+            'first_source_index': min(e['index'] for e in [*actions, *messages]),
+            'last_source_index': max(e['index'] for e in [*actions, *messages]),
+            'membership_basis': 'native parent/message identity' if parents or message_indices else 'selected action only',
+            'order': 'Native message content and calls are co-issued; serialized positions do not establish execution order.'}
 
 
 def visible_before(event, current):

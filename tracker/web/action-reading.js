@@ -29,8 +29,13 @@
     if(!data.configured){const link=el('a','Open model setup');link.href='/connections#model-section';content.append(link);}
     action.onclick=async()=>{if(busy)return;busy=true;action.disabled=true;status.textContent='Reading action and preceding feedback…';try{const value=await api(run,event.id,true);if(box.isConnected)render(value);}catch(error){if(box.isConnected){status.textContent=error.message;action.disabled=false;}}finally{busy=false;}};
    }
+   const dispatch=data.native_dispatch,links=dispatchLinks(dispatch,event.id);
+   if(links.length&&onSource){const group=el('div',undefined,'ar-sources');group.append(el('span','Same model output','ar-note'));
+    for(const link of links){const button=el('button',link.label);button.type='button';button.onclick=()=>onSource(link.id);group.append(button);}content.append(group);
+   }
   }
   box.addEventListener('toggle',async()=>{if(!box.open||loaded)return;loaded=true;content.textContent='Loading saved reading…';try{const data=await api(run,event.id);if(box.isConnected)render(data);}catch(error){if(box.isConnected)content.textContent=error.message;loaded=false;}});
  }
- const exports={attach,display};if(typeof module!=='undefined'&&module.exports)module.exports=exports;else root.ActionReading=exports;
+ function dispatchLinks(dispatch,selected){if(!dispatch)return [];return [...(dispatch.message_with_text_ids||[]).map(id=>({id,label:'Message '+id})),...(dispatch.action_ids||[]).filter(id=>id!==selected).map(id=>({id,label:'Tool call '+id}))];}
+ const exports={attach,display,dispatchLinks};if(typeof module!=='undefined'&&module.exports)module.exports=exports;else root.ActionReading=exports;
 })(typeof window!=='undefined'?window:globalThis);
