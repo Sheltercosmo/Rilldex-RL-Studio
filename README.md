@@ -181,7 +181,7 @@ Scan rollouts for suspicious behavior, follow findings during training, and open
 | Answer acquisition | Task-answer searches, repository-history lookup, external solution reuse, and test-label copying in recorded Python code. |
 | Evaluator access | Grading-material access, with a separate check for explicit access restrictions. |
 | Evaluation manipulation | Suspected bypass, substituted work, and instructions aimed at influencing a downstream judge. |
-| Task conflicts | Actions conflicting with recorded instructions (`requirements` protocol). |
+| Task conflicts | Actions conflicting with recorded instructions, native environment policies or workflow rules (`requirements` protocol). |
 | Reward consistency | Reward/component discrepancies and reward-versus-check comparisons. |
 | Artifact integrity | Missing or empty required files; changes to fixed evaluator files against a supplied baseline (Python helper). |
 

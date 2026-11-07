@@ -252,6 +252,22 @@ their original labels remain. The final definition preserves all 38 feedback
 references. Replay with `python -m unittest discover -s tests -p test_action_purpose_evidence.py`.
 The independent controls were used during refinement, not held out from the final choice.
 
+Six additional public airline/telecom episodes cover all 30 recorded tool actions.
+Against an independent blinded model review, unambiguous agreement was 29/29 for
+purpose, 18/27 for task connection and 22/26 for feedback response; eight ambiguous
+fields remain separate. The report retains differences between action, message and
+completed-dispatch scope. A missed expired-contract restriction persisted with
+more context and simpler wording; one exact-clause, compact-evidence diagnostic
+recognized it. These findings have not changed the production reader.
+All 59 trial receipts remain in `tests/fixtures/public_episode_reading_evidence.json`.
+Replay their recorded requests offline with
+`python scripts/evaluate_public_episodes.py --output outputs/public-episodes`.
+Use `--live --prompt-key --max-calls 30` to evaluate fresh requests.
+
+Requirement scans also read explicitly captured environment policies and workflow
+rules, scoped to their recorded agent context. Existing saved scans retain their
+original protocol and can resume unchanged.
+
 The remaining target disagreement concerns a fallback booking: one customer
 request versus two concrete reservation attempts. An independent review found
 the reference ambiguous; the original failed score remains saved. Explicit

@@ -194,7 +194,7 @@ def _structured_regions(text, *, normalized_roles=False):
         return chains._regions(text)
 
 
-def _nested_regions(text):
+def _nested_regions(text, *, include_policies=False):
     """Decode envelope structure, never parse JSON or role markers in strings."""
     try:
         parsed = json.loads(text)
@@ -205,7 +205,9 @@ def _nested_regions(text):
         def walk(value, start, stop):
             if isinstance(value, dict):
                 actor = value.get('actor', value.get('role', value.get('src')))
-                if actor in actors and not ({'obs', 'tools'} & set(value)):
+                policy = (include_policies and actor == 'context' and value.get('kind') == 'context'
+                          and value.get('context_kind') == 'recorded_environment_policy')
+                if (actor in actors or policy) and not ({'obs', 'tools'} & set(value)):
                     metadata = {'actor': actor, 'event_id': value.get('id', value.get('step'))}
                     if value.get('kind'): metadata['kind'] = value['kind']
                     regions.append((start, stop, metadata)); return
@@ -256,7 +258,8 @@ def index(source, version=VERSION):
             from .diagnostic_payloads import source_boundaries
             payload_spans = source_boundaries(text, maximum=PAGE_CHARS)
         regions = (_structured_regions(text, normalized_roles=version == DIRECT_VERSION) if version in {CURRENT_VERSION, DIRECT_VERSION} else chains._regions(text)) if origin == 'trace' else [(0, len(text), {})]
-        if origin == 'trace' and version in {NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}: regions = _nested_regions(text)
+        if origin == 'trace' and version in {NESTED_VERSION, MECHANISM_VERSION, LATEST_VERSION, CONTEXT_VERSION, TASK_CONTEXT_VERSION, SCOPED_VERSION, LINKED_VERSION, ACCESS_VERSION, PAYLOAD_VERSION, FLOW_PROBE_VERSION, FLOW_VERSION}:
+            regions = _nested_regions(text, include_policies=source.get('provenance', {}).get('policy_capture') == 'recorded-environment-policy/1')
         # Serialized event separators carry no behavior but still belong to the
         # original source. Include them so the coverage ledger has no gaps.
         cursor, contiguous = 0, []

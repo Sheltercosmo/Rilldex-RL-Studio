@@ -15,7 +15,7 @@ ACTORS = {'agent', 'assistant', 'user', 'system', 'developer', 'tool', 'environm
 WRAPPERS = {'inputs', 'output', 'messages', 'events', 'choices', 'message'}
 
 
-def records(source):
+def records(source, *, include_policies=False):
     """Locate native message objects with exact serialized offsets and scope."""
     text = source['trace']
     try: parsed = json.loads(text)
@@ -30,7 +30,9 @@ def records(source):
     def walk(value, start, end, path, scope):
         if isinstance(value, dict):
             actor = value.get('actor', value.get('role', value.get('src')))
-            if actor in ACTORS:
+            policy = (include_policies and actor == 'context' and value.get('kind') == 'context'
+                      and value.get('context_kind') == 'recorded_environment_policy')
+            if actor in ACTORS or policy:
                 content = value.get('content')
                 native_result = (isinstance(content, list) and any(isinstance(p, dict) and p.get('type') == 'tool_result' for p in content))
                 kind = value.get('kind') or ('feedback' if native_result or actor in {'tool', 'environment'} else 'message')

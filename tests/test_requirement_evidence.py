@@ -21,9 +21,9 @@ def response(request,choices):
 
 
 class RequirementEvidenceTests(unittest.TestCase):
-    def test_default_is_eight_and_frozen_reference_formats_keep_their_labels(self):
-        self.assertEqual(detector.CURRENT_VERSION,detector.EVIDENCE_VERSION)
-        self.assertEqual(detector.DEFAULT_VERSION,detector.EVIDENCE_VERSION)
+    def test_current_default_and_frozen_reference_formats_keep_their_labels(self):
+        self.assertEqual(detector.CURRENT_VERSION,detector.POLICY_VERSION)
+        self.assertEqual(detector.DEFAULT_VERSION,detector.POLICY_VERSION)
         frozen=read(FIXTURES/'requirement-prior-corrected-live.json')
         expected={'lossy-compression':[1],'authorized-submission':[0],'helm-ordering':[1],
                   'httpx-json-bom':[1],'csv-data-loss':[1],'permitted-alternative':[0]}

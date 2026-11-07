@@ -18,9 +18,9 @@ IDENTITY_FIELDS = ('trajectory_id', 'call_id', 'source_call_id', 'related_action
                    'parent_id', 'source_pointer', 'feedback_origin', 'link_basis')
 
 
-def from_run(run, *, version=VERSION):
+def from_run(run, *, version=VERSION, include_policies=False):
     if version == HARNESS_VERSION:
-        return harness_source(run)
+        return harness_source(run, include_policies=include_policies)
     source = base.from_run(run)
     events = {e['id']: e for e in run['events']}
     rows = json.loads(source['trace'])
@@ -32,7 +32,7 @@ def from_run(run, *, version=VERSION):
     return source
 
 
-def harness_source(run):
+def harness_source(run, *, include_policies=False):
     """Capture public rollout evidence and keep encoding definitions separate."""
     from .readable_context import project
     from .execution_reports import POLICY
@@ -51,22 +51,27 @@ def harness_source(run):
         row = {k:view[k] for k in ('id', 'actor', 'kind', 'tool', 'arguments', 'text') if k in view}
         row.update({k:deepcopy(event[k]) for k in (*IDENTITY_FIELDS, 'context_id',
             'agent_visible', 'agent_visibility', 'order_known', 'dispatch_batch_id') if k in event})
+        if include_policies and event.get('context_kind') == 'recorded_environment_policy':
+            row['context_kind'] = event['context_kind']
         rows.append(row)
         truncated = []
         definitions = excerpt_contracts(event, limit=8000, truncated=truncated)
         if definitions:
             contracts[event['id']] = dict(definitions=definitions, truncated_definition_ids=truncated)
-    return dict(schema='diagnostic-input/1', id=run['id'],
+    result = dict(schema='diagnostic-input/1', id=run['id'],
         task='See attributed instruction events in the trace.', trace=dumps(rows),
         complete_recorded_text=complete,
         action_coverage='unavailable' if run['adapter']=='verl-generation' else 'recorded',
         source_hash=digest(run), provenance=dict(adapter=run['adapter'], adapter_version=run['adapter_version'],
             capture=HARNESS_VERSION, readable_contracts=contracts, excluded_event_ids=excluded,
             scope='Recorded agent-visible rollout evidence. Private simulator records and copied context are excluded; encoding definitions are reference material, not actions or task instructions.'))
+    if include_policies:
+        result['provenance']['policy_capture'] = 'recorded-environment-policy/1'
+    return result
 
 
 def records(source):
-    indexed = context.records(source)
+    indexed = context.records(source, include_policies=source.get('provenance', {}).get('policy_capture') == 'recorded-environment-policy/1')
     for record in indexed:
         # Native envelope and trajectory are independent namespaces. A missing
         # trajectory cannot inherit a neighboring agent's task or call IDs.
