@@ -59,3 +59,16 @@ class DispatchReaderEvidenceTests(unittest.TestCase):
         context = [r['quote'] for r in final['context']]
         self.assertTrue(any('"legal_hold":false' in q for q in context))
         self.assertTrue(any('"legal_hold":true' in q for q in context))
+
+    def test_fresh_agent_per_request_retains_rule_exception_and_latest_state(self):
+        evidence = json.loads(FIXTURE.with_name('dispatch_reader_stateless_evidence.json').read_text(encoding='utf8'))
+        report = replay(evidence); case = evidence['cases'][0]
+        self.assertEqual(report['generation']['mode'], 'fresh_subagent_per_request')
+        self.assertEqual(report['cases'][0]['rounds'], 3)
+        self.assertEqual(len({turn['agent'] for turn in case['turns']}), 3)
+        self.assertLessEqual(report['cases'][0]['max_request_bytes'], 16000)
+        selection = case['turns'][-1]['response']['finish']['selections'][0]
+        self.assertIn('Exception: an active legal hold prohibits freezing.', selection['criterion']['quote'])
+        quotes = [r['quote'] for r in selection['context']]
+        self.assertTrue(any('"legal_hold":false' in q for q in quotes))
+        self.assertTrue(any('"legal_hold":true' in q for q in quotes))

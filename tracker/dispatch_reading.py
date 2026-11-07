@@ -6,17 +6,22 @@ and propose requirement comparisons. It never creates the resulting verdict.
 from copy import deepcopy
 
 from .action_context import dispatch_prefix, native_dispatch, native_definitions
-from .criterion_review import make_dispatch_request
+from .criterion_review import make_dispatch_request, MAX_BYTES
 from .jev import DEFAULT_MODEL
-from .readable_context import DATA_URI, VERSION as TEXT_VERSION, merged, resolve_quote, subtract
+from .readable_context import DATA_URI, VERSION as TEXT_VERSION, merged, resolve_quote, subtract, edge_ranges
 from .schema import InputError, digest, dumps
 from .semantic_extraction import read, write
 from .semantic_workspace import exclusive
 from .source_evidence import search
 
 VERSION = 'dispatch-source-reader/1'
+PREVIEW_VERSION = 'dispatch-source-reader/2'
 FIELDS = ('id', 'index', 'actor', 'kind', 'trajectory_id', 'context_id', 'source_pointer',
           'tool', 'parent_id', 'source_message_index', 'call_id', 'source_call_id', 'context_kind')
+
+
+class ReaderBudgetError(InputError):
+    """A valid reading operation needs a smaller working set."""
 
 
 def _is_rule(event):
@@ -27,23 +32,37 @@ def _is_rule(event):
 
 class Reader:
     """One fixed dispatch, with a replaceable working set of exact source quotes."""
-    def __init__(self, run, event_id, *, max_bytes=32000, page_chars=3000, max_criteria=6, model=DEFAULT_MODEL):
+    def __init__(self, run, event_id, *, max_bytes=32000, page_chars=3000, max_criteria=6, model=DEFAULT_MODEL,
+                 record_context=True, review_max_bytes=MAX_BYTES, protocol=PREVIEW_VERSION):
         if type(max_bytes) is not int or max_bytes < 8000:
             raise InputError('Dispatch request budget must be at least 8000 bytes')
         if type(page_chars) is not int or not 256 <= page_chars <= 12000:
             raise InputError('Read pages must contain 256–12000 source characters')
         if type(max_criteria) is not int or not 1 <= max_criteria <= 20:
             raise InputError('Select between 1 and 20 criteria')
+        if type(record_context) is not bool:
+            raise InputError('record_context must be a boolean')
+        if type(review_max_bytes) is not int or review_max_bytes < 1:
+            raise InputError('Review byte budget must be a positive integer')
+        if protocol not in {VERSION, PREVIEW_VERSION}:
+            raise InputError('Unknown dispatch reading protocol')
         self.run = deepcopy(run); self.event_id = event_id
         self.dispatch = native_dispatch(self.run, event_id)
         self.events = {e['id']: e for e in dispatch_prefix(self.run, event_id)}
         self.members = set(self.dispatch['action_ids'] + self.dispatch['message_ids'])
         self.history = sorted((e for e in self.events.values() if e['id'] not in self.members), key=lambda e: e['index'])
         self.max_bytes, self.page_chars, self.max_criteria, self.model = max_bytes, page_chars, max_criteria, model
+        self.record_context = record_context
+        self.review_max_bytes = review_max_bytes
+        self.protocol = protocol
         self.source_hash = digest(self.run)
         self.retained = []; self.view = []; self.seen = {}; self.round = 0; self.result = None
         self.operation = {'instructions': self.catalog('instructions', 0),
                           'recent_records': [self.metadata(e) for e in self.history[-3:]]}
+        if self.protocol == PREVIEW_VERSION:
+            catalog_ids = [r['id'] for r in self.operation['instructions']['records']]
+            self.view = self.fit_previews([*catalog_ids, *[e['id'] for e in self.history[-3:]]],
+                                          retained=[], operation=self.operation, round_number=0)
         self.request()  # Check the fixed model output before running a provider.
 
     @staticmethod
@@ -66,6 +85,32 @@ class Reader:
         if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(event['text']):
             raise InputError('Read range is outside the source')
         return {'event_id': eid, 'start': start, 'end': end}
+
+    def fit_previews(self, event_ids, *, retained, operation, round_number):
+        """Supply exact head/tail ranges for each listed record within the budget.
+
+        Preview clipping is explicit in prefix mappings; it is not a summary or
+        a claim that the source has been fully read. No media bytes become text.
+        """
+        ids = list(dict.fromkeys(event_ids))
+        def previews(chars):
+            refs = []
+            for eid in ids:
+                text = self.events[eid]['text']
+                readable = subtract([(0, len(text))], [(m.start(), m.end()) for m in DATA_URI.finditer(text)])
+                ranges = merged(edge_ranges(readable, chars//2) + edge_ranges(readable, chars-chars//2, True))
+                refs.extend({'event_id': eid, 'start': a, 'end': b} for a,b in ranges)
+            return refs
+        # Fit the actual serialized request, including retained quotes/metadata.
+        # A list should remain usable even when little text fits its budget.
+        low, high, best = 0, 320, []
+        self.request(view=[], retained=retained, operation=operation, round_number=round_number)
+        while low <= high:
+            middle = (low+high)//2; candidate = previews(middle)
+            try: self.request(view=candidate, retained=retained, operation=operation, round_number=round_number)
+            except InputError: high = middle-1
+            else: best = candidate; low = middle+1
+        return best
 
     def prefix(self, ranges):
         by_event = {}
@@ -92,7 +137,7 @@ class Reader:
     def request(self, *, view=None, retained=None, operation=None, round_number=None):
         view = self.view if view is None else view
         retained = self.retained if retained is None else retained
-        body = {'schema': VERSION, 'stage': 'dispatch_source_reading', 'run_id': self.run['id'],
+        body = {'schema': self.protocol, 'stage': 'dispatch_source_reading', 'run_id': self.run['id'],
                 'source_hash': self.source_hash, 'selected_action_id': self.event_id,
                 'round': self.round if round_number is None else round_number,
                 'native_dispatch': self.dispatch, 'prefix': self.prefix([*retained, *view]),
@@ -115,8 +160,17 @@ class Reader:
                     'A request byte budget is not a model token budget. Co-recorded text does not establish delivery or execution. '
                     'Finish with exact criterion/context quotes from this request; never issue a verdict. An empty selection is '
                     'not a clean bill of health, and selected criteria are not full-policy coverage.')}
+        if self.protocol == PREVIEW_VERSION:
+            body['instructions'] += (
+                ' Listed records have exact previews in prefix when the byte budget permits; omitted_text_chars '
+                'and source_text_ranges show gaps. Use next_offset to browse consecutive list pages and read '
+                'a record to fill its gaps. For broad claims about all available options or completed troubleshooting, '
+                'browse earlier instructions and reports for declined options, changed constraints and object identity. '
+                'An agent summary cannot replace that history. Retain evidence and counterevidence before moving on.')
+        if self.review_max_bytes != MAX_BYTES:
+            body['limits']['review_request_bytes'] = self.review_max_bytes
         if len(dumps(body).encode('utf8')) > self.max_bytes:
-            raise InputError('Dispatch working context exceeds request budget; reduce retained quotes/page_chars or increase max_bytes')
+            raise ReaderBudgetError('Dispatch working context exceeds request budget; reduce retained quotes/page_chars or increase max_bytes')
         return body
 
     def _search(self, operation):
@@ -133,6 +187,30 @@ class Reader:
         return refs, {'query': operation, 'pagination': result['pagination'],
                       'records': [self.metadata(self.events[row['event_id']]) for row in result['records']],
                       'scope': 'Strictly prior visible records; lexical matches are context candidates, not findings.'}
+
+    def fit_search(self, ranges, operation, retained):
+        """Keep whole search fragments that fit, with exact deferred read ranges."""
+        try:
+            self.request(view=ranges, retained=retained, operation=operation, round_number=self.round+1)
+            return ranges, operation
+        except InputError:
+            pass
+        report = deepcopy(operation)
+        report['budget_deferred_ranges'] = deepcopy(ranges)
+        report['budget_note'] = ('These source ranges did not fit with the retained quotes and native definitions. '
+                                 'Read an event at its start offset; release retained quotes if needed. '
+                                 'They are not negative findings or exhausted search results.')
+        kept = []
+        self.request(view=kept, retained=retained, operation=report, round_number=self.round+1)
+        for ref in ranges:
+            report['budget_deferred_ranges'].remove(ref)
+            try:
+                self.request(view=[*kept, ref], retained=retained, operation=report, round_number=self.round+1)
+            except InputError:
+                report['budget_deferred_ranges'].append(deepcopy(ref))
+            else:
+                kept.append(ref)
+        return kept, report
 
     def advance(self, response, *, validate_only=False):
         if self.result is not None: raise InputError('Dispatch reading is already finished')
@@ -151,6 +229,9 @@ class Reader:
         if kind == 'list':
             if not isinstance(value, dict) or set(value) != {'kind', 'offset'}: raise InputError('List needs kind and offset')
             operation = self.catalog(**value)
+            if self.protocol == PREVIEW_VERSION:
+                view = self.fit_previews([r['id'] for r in operation['records']], retained=retained,
+                                         operation=operation, round_number=self.round+1)
         elif kind == 'read':
             if not isinstance(value, dict) or set(value) != {'event_id', 'start'}: raise InputError('Read needs event_id and start')
             event = self.events.get(value['event_id'])
@@ -175,10 +256,12 @@ class Reader:
                     try: self.request(view=candidate, retained=retained, operation=meta, round_number=self.round+1)
                     except InputError: high = middle-1
                     else: best = (candidate, meta); low = middle+1
-                if best is None: raise InputError('Retained quotes and native output leave no room for a source page')
+                if best is None: raise ReaderBudgetError('Retained quotes and native output leave no room for a source page')
                 view, operation = best
         elif kind == 'search':
             view, operation = self._search(value)
+            if self.protocol == PREVIEW_VERSION:
+                view, operation = self.fit_search(view, operation, retained)
         else:
             if not isinstance(value, dict) or set(value) != {'selections'} or not isinstance(value['selections'], list):
                 raise InputError('Finish needs a list of source selections')
@@ -189,17 +272,52 @@ class Reader:
                     raise InputError('Each selection needs criterion and context quotes')
                 term = resolve_quote(self.run, request['prefix'], selection['criterion'])
                 context = [resolve_quote(self.run, request['prefix'], ref) for ref in selection['context']]
-                checks.append(make_dispatch_request(self.run, self.event_id, term, context=context, model=self.model))
+                check = make_dispatch_request(self.run, self.event_id, term, context=context, model=self.model)
+                if self.record_context:
+                    from .dispatch_context import expand
+                    check = expand(self.run, check, max_bytes=self.review_max_bytes)
+                elif len(dumps(check).encode('utf8')) > self.review_max_bytes:
+                    raise InputError('Selected comparison exceeds the review byte budget')
+                checks.append(check)
             operation = None
             result = {'status': 'ready_for_review', 'requests': checks,
                       'scope': 'Selected requirement comparisons only. No verdict or whole-policy coverage is established.'}
         if result is None: self.request(view=view, retained=retained, operation=operation, round_number=self.round+1)
         if validate_only: return
         self.retained, self.view, self.operation, self.result = retained, view, operation, result
+        self.consumed(request)
+
+    def consumed(self, request):
         for event in request['prefix']:
             spans = [(r['source_start'], r['source_end']) for r in event['source_text_ranges']]
             self.seen[event['id']] = merged(self.seen.get(event['id'], [])+spans)
         self.round += 1
+
+    def consume(self, response, *, validate_only=False):
+        """Give the worker budget feedback without spending an unbounded retry."""
+        request = self.request()
+        try:
+            return self.advance(response, validate_only=validate_only)
+        except ReaderBudgetError as error:
+            if self.protocol != PREVIEW_VERSION:
+                raise
+            # advance has checked the source quotes and operation before fitting
+            # its next view; no partial read or retention change was committed.
+            kind = next(k for k in response if k in {'list','read','search','finish'})
+            report = {'operation_error': {'operation': kind, 'message': str(error),
+                'retry': 'Keep fewer or shorter exact quotes in retain, then retry. The current native dispatch is always included; it need not be retained.'}}
+            if kind in {'read','list'}:
+                report['operation_error']['arguments'] = deepcopy(response[kind])
+            view = self.view
+            try:
+                self.request(view=view, operation=report, round_number=self.round+1)
+            except ReaderBudgetError:
+                view = []
+                report['operation_error']['preview'] = 'The previous unretained preview is omitted; read it again if needed.'
+                self.request(view=view, operation=report, round_number=self.round+1)
+            if validate_only: return
+            self.view, self.operation = view, report
+            self.consumed(request)
 
     def progress(self):
         return {'rounds': self.round, 'eligible_events': len(self.events), 'source_events_presented': len(self.seen),
@@ -216,10 +334,18 @@ def collect(run, event_id, directory, *, provider=None, max_rounds=8, **settings
     """
     if type(max_rounds) is not int or max_rounds < 1: raise InputError('max_rounds must be positive')
     with exclusive(directory) as root:
-        reader = Reader(run, event_id, **settings)
-        pin = {'schema': VERSION, 'request_hash': digest(reader.request()),
-               'decision_model': reader.model, 'provider': getattr(provider, 'producer', None)}
         manifest = root/'dispatch-reader.json'
+        if manifest.exists() and 'record_context' not in settings:
+            # Existing sessions keep their comparison protocol across upgrades.
+            settings = {**settings, 'record_context': bool(read(manifest).get('record_context'))}
+        if manifest.exists() and 'protocol' not in settings:
+            settings = {**settings, 'protocol': read(manifest)['schema']}
+        reader = Reader(run, event_id, **settings)
+        pin = {'schema': reader.protocol, 'request_hash': digest(reader.request()),
+               'decision_model': reader.model, 'provider': getattr(provider, 'producer', None)}
+        if reader.record_context:
+            from .dispatch_context import VERSION as RECORD_CONTEXT_VERSION
+            pin['record_context'] = RECORD_CONTEXT_VERSION
         if manifest.exists() and read(manifest) != pin:
             raise InputError('Dispatch source, reader settings or provider changed; use the original workspace or a new directory')
         write(manifest, pin)
@@ -233,16 +359,16 @@ def collect(run, event_id, directory, *, provider=None, max_rounds=8, **settings
                 saved_response = provider.directory/'responses'/f'{key}.json'
                 if saved_response.exists():
                     response = read(saved_response)
-                    reader.advance(response, validate_only=True)
+                    reader.consume(response, validate_only=True)
                 else:
                     failed = provider.directory/'receipts'/f'{key}.json'
                     if failed.exists():
                         raise InputError('A prior provider attempt has no reusable response; inspect its receipt before retrying in a new provider directory')
-                    response = provider.generate(run, req, validator=lambda body: reader.advance(body, validate_only=True))
+                    response = provider.generate(run, req, validator=lambda body: reader.consume(body, validate_only=True))
                 write(path, response)
-            reader.advance(response)
+            reader.consume(response)
             write(root/'progress.json', reader.progress())
-        result = {'schema': VERSION, 'run_id': run['id'], 'source_hash': reader.source_hash,
+        result = {'schema': reader.protocol, 'run_id': run['id'], 'source_hash': reader.source_hash,
                   'selected_action_id': event_id, 'coverage': reader.progress(),
                   **(reader.result or {'status': 'needs_candidates' if reader.round < max_rounds else 'round_limit',
                      'request': reader.request(), 'request_hash': digest(reader.request())})}

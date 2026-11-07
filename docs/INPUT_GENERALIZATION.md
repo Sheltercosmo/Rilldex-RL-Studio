@@ -293,6 +293,23 @@ troubleshooting rules. These subagent trials validate source retrieval and bindi
 they do not establish detector accuracy or an isolated model-context limit.
 Replay with `python scripts/evaluate_dispatch_reader.py`.
 
+A separate long-context control used a fresh subagent for each of three requests
+(at most 8,593 source-request bytes). It retained the rule, exception and opposing
+old/new states without prior conversation memory. Replay with
+`--evidence tests/fixtures/dispatch_reader_stateless_evidence.json`. This is one authored
+retrieval control, not a cross-environment accuracy estimate.
+
+Enclosing-record comparisons restore payment ownership and the returned flight
+comparison set in the public airline case. Independent paired review still found
+missing caller/line mapping and a declined plan change in the telecom case.
+Original and expanded requests remain separately hashed; replay with
+`python scripts/evaluate_dispatch_record_context.py`.
+
+A recorded OpenHands trace exposed two request-budget failures: large tool
+definitions in search results and retained quotes crowding out the next page.
+Regression tests now check deferred source ranges, budget feedback and resume
+without repeating worker calls. These are transport checks, not accuracy scores.
+
 The remaining target disagreement concerns a fallback booking: one customer
 request versus two concrete reservation attempts. An independent review found
 the reference ambiguous; the original failed score remains saved. Explicit

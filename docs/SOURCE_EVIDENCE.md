@@ -252,6 +252,10 @@ an investigation.
 earlier records, read long policies in pages and retain exact quotes. It returns
 focused requirement comparisons for decision-model review; it does not change
 saved annotations or infer that an unselected rule was satisfied.
+History lists include short source previews; open a record to read the omitted text.
+Comparisons retain the selected quotes and add enclosing records and linked calls
+to preserve identities, alternatives and exceptions. Records that exceed the
+comparison budget are listed by source ID.
 
 ```python
 import sys
@@ -261,7 +265,7 @@ worker = CommandCandidates("reading/worker", [sys.executable, "-m", "rilldex.can
                            producer="my-model/version")
 result = workspace.select_dispatch_evidence(
     run_id, "e101", "reading/session", provider=worker,
-    max_rounds=12, max_bytes=32000, page_chars=1800,
+    max_rounds=12, max_bytes=32000, page_chars=1800, review_max_bytes=60000,
 )
 comparisons = result.get("requests", [])  # exact source-bound decision requests
 ```
@@ -269,9 +273,14 @@ comparisons = result.get("requests", [])  # exact source-bound decision requests
 Use the existing [model settings](../README.md#model-setup). Raise `max_rounds`
 to resume the same session; completed reads are reused. Without `provider`, the
 session writes requests for an external worker and reports `needs_candidates`.
+Existing sessions keep their original comparison format when resumed.
 Read coverage counts supplied source ranges, not interpretation accuracy. The
 byte limit applies to each request, not model tokens; the current model output
 must fit. Missing media, unestablished order and other agent contexts stay separate.
+`review_max_bytes` sets the separate budget for each final comparison.
+If a page exceeds the reading budget, the worker can shorten its retained quotes
+and retry within the same round allowance. Unread search hits keep their source
+offsets so they can be opened later.
 
 ### Continue with an explicit budget
 

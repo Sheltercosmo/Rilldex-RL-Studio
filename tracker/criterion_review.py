@@ -161,10 +161,12 @@ def make_dispatch_request(run, event_id, criterion, *, context=(), model=DEFAULT
 
 
 def resolve_dispatch(request, response):
-    if request['state'].get('harness') != DISPATCH_VERSION or response.get('model') != request['model']:
+    from .dispatch_context import VERSION as RECORD_CONTEXT_VERSION
+    version = request['state'].get('harness')
+    if version not in {DISPATCH_VERSION, RECORD_CONTEXT_VERSION} or response.get('model') != request['model']:
         raise InputError('Dispatch review model or protocol differs')
     reading = validate_answers(response, request)['alignment']
-    return {'schema': DISPATCH_VERSION, 'request_hash': digest(request), 'run_id': request['state']['run_id'],
+    return {'schema': version, 'request_hash': digest(request), 'run_id': request['state']['run_id'],
             'source_hash': request['state']['source_hash'], 'selected_action_id': request['state']['selected_action_id'],
             'criterion': deepcopy(request['state']['criterion']), 'native_dispatch': deepcopy(request['state']['native_dispatch']),
             'reading': reading, 'coverage': request['state']['coverage']}

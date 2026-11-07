@@ -141,6 +141,8 @@ Select an agent step in the map and choose **Scan context** to inspect its input
 
 **Rollout Story → How the agent works** shows action purposes, changes of method, matching calls and supported returns to earlier work, grouped by agent context. Select an action to open its reading and evidence; **Read next** continues inspection with Jev.
 
+For long histories, the [Python source reader](docs/SOURCE_EVIDENCE.md#read-long-context-with-a-model) searches and pages through earlier records with your chosen model. It keeps exact quotes, enclosing records and linked calls, and resumes within your configured budget.
+
 Choose **Across training** to compare action purposes and task connections in **Behavior**. Open the actions behind a change or save the comparison with its readings. Unread actions stay visible in the coverage counts.
 
 Open a rollout, then **Plans & attempts → Structure & flow** to compare branch structure and event flow. Select a revision to inspect its trigger, target, implementation and follow-up, with gains and regressions together. Add measures and alerts there. Missing follow-up stays unknown; recorded changes do not establish causality. **Structure lines** provides the larger foldable map. [Structure and revision guide →](docs/WORK_STRUCTURE_MEASURES.md)

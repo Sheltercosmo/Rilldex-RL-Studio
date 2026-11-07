@@ -10,7 +10,7 @@ from rilldex import Workspace
 from tracker.adapters import normalize
 from tracker.candidate_worker import CommandCandidates
 from tracker.criterion_review import selection_request, make_dispatch_request
-from tracker.dispatch_reading import Reader, collect
+from tracker.dispatch_reading import Reader, collect, VERSION, PREVIEW_VERSION
 from tracker.readable_context import resolve_quote
 from tracker.schema import InputError, digest, dumps
 from tracker.store import Store
@@ -78,15 +78,98 @@ class DispatchReaderTests(unittest.TestCase):
             for e in reader.request()['prefix'] for r in e['source_text_ranges']))
 
     def test_unseen_and_omitted_quotes_cannot_become_evidence(self):
-        run, eid, rule = long_run(); reader = Reader(run, eid)
+        run, eid, rule = long_run()
+        run['events'][0]['text'] = 'Other procedure. '*1000 + rule + 'Appendix. '*1000
+        reader = Reader(run, eid)
         original = reader.request()
-        with self.assertRaisesRegex(InputError, 'omitted'):
+        with self.assertRaisesRegex(InputError, 'omitted|missing or ambiguous'):
             reader.advance({'finish': {'selections': [{'criterion': {'event_id': 'e1', 'quote': rule}, 'context': []}]}})
         self.assertEqual(reader.request(), original)
         reader.advance({'read': {'event_id': 'e1', 'start': 0}})
         with self.assertRaisesRegex(InputError, 'missing or ambiguous'):
             reader.advance({'list': {'kind': 'all', 'offset': 0}, 'retain': [{'event_id': 'e1', 'quote': rule}]})
         self.assertEqual(reader.round, 1)
+
+    def test_catalog_previews_expose_short_user_constraints_and_exact_long_record_gaps(self):
+        messages = [{'role': 'system', 'content': 'Policy beginning. ' + '中🔎'*2000 + ' Policy ending.'}]
+        messages += [{'role': 'user', 'content': f'Constraint {i}: do not change option {i}.'} for i in range(12)]
+        messages += [{'role': 'assistant', 'tool_calls': [{'id': 'a', 'type': 'function',
+                     'function': {'name': 'dispatch', 'arguments': '{}'}}]}]
+        run = normalize({'messages': messages})[0]
+        eid = next(e['id'] for e in run['events'] if e.get('call_id') == 'a')
+        reader = Reader(run, eid, max_bytes=16000)
+        seen = set(); offset = 0
+        while offset is not None:
+            reader.advance({'list': {'kind': 'instructions', 'offset': offset}})
+            request = reader.request()
+            self.assertEqual(request['schema'], PREVIEW_VERSION)
+            self.assertLessEqual(len(dumps(request).encode('utf8')), 16000)
+            for event in request['prefix']:
+                original = next(e for e in run['events'] if e['id'] == event['id'])
+                for r in event['source_text_ranges']:
+                    self.assertEqual(event['text'][r['view_start']:r['view_end']], original['text'][r['source_start']:r['source_end']])
+                if original['actor'] == 'user':
+                    self.assertEqual(event['text'], original['text']); seen.add(event['id'])
+                if original['actor'] == 'system':
+                    self.assertGreater(event['omitted_text_chars'], 0)
+                    self.assertIn('Policy beginning.', event['text']); self.assertIn('Policy ending.', event['text'])
+            offset = request['source_result']['next_offset']
+        self.assertEqual(len(seen), 12)
+
+    def test_catalog_preview_byte_fitting_does_not_read_embedded_media(self):
+        run = fixture()
+        run['events'][0]['text'] = 'Head.' + '界🔎'*1000 + 'data:image/png;base64,YQ==' + 'Tail.'
+        reader = Reader(run, 'e3', max_bytes=8000)
+        self.assertLessEqual(len(dumps(reader.request()).encode('utf8')), 8000)
+        self.assertNotIn('YQ==', dumps(reader.request()['prefix']))
+        event = next(e for e in reader.request()['prefix'] if e['id'] == 'e1')
+        self.assertGreater(event['omitted_text_chars'], 0)
+        reader.advance({'list': {'kind': 'all', 'offset': 0}, 'retain': [{'event_id': 'e1', 'quote': 'Head.'}]})
+        self.assertLessEqual(len(dumps(reader.request()).encode('utf8')), 8000)
+
+    def test_preview_offsets_and_native_meaning_survive_different_capture_routes(self):
+        covered = set()
+        for name, document in records().items():
+            run = normalize(document)[0]
+            actions = [e for e in run['events'] if e['kind']=='action' and e['actor']=='agent']
+            if not actions: continue
+            reader = Reader(run, actions[-1]['id'], max_bytes=32000)
+            reader.advance({'list': {'kind': 'all', 'offset': 0}})
+            events = {e['id']: e for e in run['events']}
+            for e in reader.request()['prefix']:
+                for r in e['source_text_ranges']:
+                    self.assertEqual(events[e['id']]['text'][r['source_start']:r['source_end']],
+                                     e['text'][r['view_start']:r['view_end']])
+                if 'tool_contract' in events[e['id']]:
+                    self.assertEqual(e['tool_contract'], events[e['id']]['tool_contract'])
+            covered.add(name)
+        self.assertEqual(covered, {'conversation','episode','airline-public','responses-items'})
+
+    def test_real_coding_search_fits_native_definitions_and_exposes_deferred_records(self):
+        fixtures = Path(__file__).parent/'fixtures'
+        case = json.loads((fixtures/'dispatch_reader_budget_case.json').read_text(encoding='utf8'))
+        run = normalize(json.loads((fixtures/case['source']['path']).read_text(encoding='utf8')))[0]
+        self.assertEqual(digest(run), case['source_hash'])
+        reader = Reader(run, case['event_id'], **case['settings'])
+        larger = Reader(run, case['event_id'], **{**case['settings'], 'max_bytes':64000})
+        for turn in case['turns']:
+            self.assertEqual(digest(reader.request()), turn['request_hash'])
+            reader.advance(turn['response']); larger.advance(turn['response'])
+        request = reader.request()
+        self.assertEqual(digest(request), case['fixed_request_hash'])
+        self.assertLessEqual(len(dumps(request).encode('utf8')), 16000)
+        self.assertGreater(len(dumps(larger.request()).encode('utf8')), 16000)
+        deferred = request['source_result']['budget_deferred_ranges']
+        self.assertTrue(deferred)
+        key = lambda ref: (ref['event_id'],ref['start'],ref['end'])
+        self.assertEqual({key(r) for r in [*reader.view,*deferred]}, {key(r) for r in larger.view})
+        # A deferred hit remains readable; its definition is never clipped away.
+        target = next(r for r in deferred if r['event_id']=='e106')
+        reader.advance({'read': {'event_id':target['event_id'],'start':target['start']}, 'retain':[]})
+        record = next(e for e in reader.request()['prefix'] if e['id']==target['event_id'])
+        original = next(e for e in run['events'] if e['id']==target['event_id'])
+        self.assertEqual(record['tool_contract'], original['tool_contract'])
+        self.assertLessEqual(len(dumps(reader.request()).encode('utf8')), 16000)
 
     def test_caller_changes_do_not_rewrite_a_reading_in_progress(self):
         run = fixture(); reader = Reader(run, 'e3'); before = deepcopy(run)
@@ -95,6 +178,74 @@ class DispatchReaderTests(unittest.TestCase):
         request = reader.request()
         self.assertEqual(request['source_hash'], digest(before))
         self.assertEqual(next(e['text'] for e in request['prefix'] if e['id'] == 'e1'), before['events'][0]['text'])
+
+    def test_real_page_budget_failure_preserves_evidence_and_accepts_a_smaller_working_set(self):
+        fixtures = Path(__file__).parent/'fixtures'
+        case = json.loads((fixtures/'dispatch_reader_budget_case.json').read_text(encoding='utf8'))
+        run = normalize(json.loads((fixtures/case['source']['path']).read_text(encoding='utf8')))[0]
+        reader = Reader(run, case['event_id'], **case['settings'])
+        turns = [*case['turns'], *case['page_budget_recovery']['turns']]
+        for turn in turns[:-1]:
+            self.assertEqual(digest(reader.request()), turn['request_hash'])
+            reader.consume(turn['response'])
+        failed = turns[-1]['response']; before = reader.request(); progress = reader.progress()
+        self.assertEqual(digest(before), turns[-1]['request_hash'])
+        with self.assertRaisesRegex(InputError, 'no room for a source page'):
+            reader.advance(failed)
+        reader.consume(failed, validate_only=True)
+        self.assertEqual(reader.request(), before)
+        self.assertEqual(reader.progress(), progress)
+        reader.consume(failed)
+        feedback = reader.request()
+        self.assertEqual(digest(feedback), case['page_budget_recovery']['feedback_request_hash'])
+        self.assertEqual(feedback['source_result']['operation_error']['arguments'], failed['read'])
+        self.assertEqual(feedback['retained_quotes'], before['retained_quotes'])
+        self.assertEqual(reader.round, len(turns))
+        # Only the previously supplied page counts as read; the failed page does not.
+        ranges = reader.progress()['source_ranges_presented']['e136']
+        self.assertLessEqual(max(r['end'] for r in ranges), failed['read']['start'])
+        reader.consume({'read': failed['read'], 'retain': failed['retain'][:1]})
+        recovered = reader.request()
+        self.assertNotIn('operation_error', recovered['source_result'])
+        self.assertEqual(recovered['source_result']['start'], failed['read']['start'])
+        self.assertGreater(recovered['source_result']['end'], failed['read']['start'])
+        self.assertLessEqual(len(dumps(recovered).encode('utf8')), case['settings']['max_bytes'])
+        source = next(e for e in run['events'] if e['id']=='e136')['text']
+        record = next(e for e in recovered['prefix'] if e['id']=='e136')
+        for r in record['source_text_ranges']:
+            self.assertEqual(record['text'][r['view_start']:r['view_end']], source[r['source_start']:r['source_end']])
+
+    def test_budget_feedback_obeys_worker_round_limit_and_replays_without_new_calls(self):
+        fixtures = Path(__file__).parent/'fixtures'
+        case = json.loads((fixtures/'dispatch_reader_budget_case.json').read_text(encoding='utf8'))
+        run = normalize(json.loads((fixtures/case['source']['path']).read_text(encoding='utf8')))[0]
+        turns = [*case['turns'], *case['page_budget_recovery']['turns']]
+        responses = [turn['response'] for turn in turns]
+        responses.append({'read': responses[-1]['read'], 'retain': responses[-1]['retain'][:1]})
+        script = '''import json,sys
+from pathlib import Path
+request=json.load(sys.stdin)['request']
+responses=json.loads(Path(sys.argv[1]).read_text(encoding='utf8'))
+print(json.dumps(responses[request['round']]))
+'''
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary); worker = root/'worker.py'; worker.write_text(script, encoding='utf8')
+            proposals = root/'responses.json'; proposals.write_text(dumps(responses), encoding='utf8')
+            provider = CommandCandidates(root/'provider', [sys.executable, str(worker), str(proposals)], 'scripted budget replay/1')
+            settings = {**case['settings'], 'provider':provider}
+            limited = collect(run, case['event_id'], root/'reading', max_rounds=6, **settings)
+            self.assertEqual(limited['status'], 'round_limit')
+            self.assertIn('operation_error', limited['request']['source_result'])
+            self.assertEqual(provider.generation_calls, 6)
+            self.assertEqual(collect(run, case['event_id'], root/'reading', max_rounds=6, **settings), limited)
+            self.assertEqual(provider.generation_calls, 6)
+            resumed = collect(run, case['event_id'], root/'reading', max_rounds=7, **settings)
+            self.assertEqual(resumed['coverage']['rounds'], 7)
+            self.assertNotIn('operation_error', resumed['request']['source_result'])
+            self.assertEqual(resumed['request']['source_result']['start'], responses[-1]['read']['start'])
+            self.assertEqual(provider.generation_calls, 7)
+            self.assertEqual(collect(run, case['event_id'], root/'recovered', max_rounds=7, **settings), resumed)
+            self.assertEqual(provider.generation_calls, 7)
 
     def test_no_future_hidden_reset_or_coissued_feedback_enters_prior_search(self):
         run = fixture(); run['events'][-1]['index'] = 2.5
@@ -187,6 +338,8 @@ print(json.dumps(result))
             final = collect(run, 'e3', root/'reading', max_rounds=2, **kwargs)
             self.assertEqual(final['status'], 'ready_for_review'); self.assertEqual(provider.generation_calls, 2)
             self.assertEqual(final['requests'][0]['model'], 'local/decision')
+            self.assertEqual(final['requests'][0]['state']['harness'], 'criterion-dispatch-review/2')
+            self.assertEqual(final['requests'][0]['state']['source_context']['records'][0]['id'], 'e1')
             self.assertEqual(collect(run, 'e3', root/'reading', max_rounds=20, **kwargs), final)
             self.assertEqual(provider.generation_calls, 2)
             # A new runner can recover worker responses saved before its own
@@ -199,12 +352,36 @@ print(json.dumps(result))
     def test_failed_worker_attempt_is_not_automatically_repeated_on_resume(self):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
-            provider = CommandCandidates(root/'provider', [sys.executable, '-c', 'print("{}")'], 'invalid selector/1')
+            provider = CommandCandidates(root/'provider', [sys.executable, '-c', 'import sys; sys.stdin.read(); print("{}")'], 'invalid selector/1')
             with self.assertRaisesRegex(InputError, 'exactly one'):
                 collect(fixture(), 'e3', root/'reading', provider=provider)
             with self.assertRaisesRegex(InputError, 'prior provider attempt'):
                 collect(fixture(), 'e3', root/'reading', provider=provider)
             self.assertEqual(provider.generation_calls, 1)
+
+    def test_existing_quote_only_sessions_resume_under_their_original_protocol(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary); run = fixture()
+            first = collect(run, 'e3', root, record_context=False, protocol=VERSION)
+            resumed = collect(run, 'e3', root)
+            self.assertEqual(first, resumed)
+            with self.assertRaisesRegex(InputError, 'changed'):
+                collect(run, 'e3', root, record_context=True)
+            collect(run, 'e3', root/'new')
+            self.assertEqual(json.loads((root/'new/dispatch-reader.json').read_text(encoding='utf8'))['record_context'],
+                             'criterion-dispatch-review/2')
+
+    def test_smaller_decision_model_budget_is_respected_independently_of_reader_budget(self):
+        run = fixture(); run['events'][0]['text'] = 'Inspect both sources. ' + 'Extra policy detail. '*1800
+        reader = Reader(run, 'e3', max_bytes=12000, review_max_bytes=8000, page_chars=256)
+        reader.advance({'read': {'event_id': 'e1', 'start': 0}})
+        self.assertEqual(reader.request()['limits']['review_request_bytes'], 8000)
+        reader.advance({'finish': {'selections': [{'criterion': {'event_id': 'e1', 'quote': 'Inspect both sources.'},
+                                                  'context': []}]}})
+        final = reader.result['requests'][0]
+        self.assertLessEqual(len(dumps(final).encode('utf8')), 8000)
+        self.assertEqual(final['state']['criterion']['text'], 'Inspect both sources.')
+        self.assertEqual(final['state']['source_context']['not_included'][0]['event_id'], 'e1')
 
     def test_workspace_file_queue_obeys_scope_and_accepts_exact_external_response(self):
         with TemporaryDirectory() as temporary:
