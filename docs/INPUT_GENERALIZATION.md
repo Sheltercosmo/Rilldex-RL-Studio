@@ -192,6 +192,8 @@ are reused; reviewer choices remain in place when a model reading is refreshed.
 context, with method changes, matching calls and task-relationship markers.
 Select a tile to open its evidence. **Read next** resumes pending model readings;
 coverage updates as each action is saved. Unread actions remain visible.
+**Combined purposes** keeps a dispatch with several requested purposes together;
+it is separate from unknown purpose and does not invent an internal sequence.
 Saved returns to earlier work appear here too, including reasoning-only traces.
 Select a return to open its evidence in **Work path**; missing evidence stays visible.
 **Across training** opens the same task in Behavior. Compare **Action purpose** or
@@ -221,6 +223,7 @@ Live development checks use `jev-1.13.0` and retain exact requests/responses:
 | Custom requirement checks | 15/15 controlled outcomes, including partial traces, unverified completion claims and five cases with fresh requirement extraction |
 | Response to feedback in long results | 0/18 → 18/18 across six authored scenarios in three formats |
 | Routine progression versus revision | 9/18 → 18/18 across six additional controls; two selected public follow-ups improved from 0/2 to 2/2 |
+| Combined-purpose dispatches | 26/26 controls and 2/2 missing-context cases with distinct combined/unknown categories; the eight independently authored cases improved from 6/8 to 8/8 |
 
 These are development controls and selected public examples, not a deployment
 accuracy estimate. Paired serializations are not independent samples. Repeat the
@@ -241,6 +244,13 @@ The final trial matches all 38 response references, but purpose still differs on
 six parser cases (apply versus verify). The formats repeat 12 authored scenarios;
 the two public actions come from one trace. Historical evaluation replays use
 their saved requests; live evaluation uses current readers and preserves references.
+
+Purpose trials retain the broad rewrite's clarification regression and the
+original parser disagreements in `tests/fixtures/action_purpose_evidence.json`.
+An independent model review found the two underlying parser references ambiguous;
+their original labels remain. The final definition preserves all 38 feedback
+references. Replay with `python -m unittest discover -s tests -p test_action_purpose_evidence.py`.
+The independent controls were used during refinement, not held out from the final choice.
 
 The remaining target disagreement concerns a fallback booking: one customer
 request versus two concrete reservation attempts. An independent review found

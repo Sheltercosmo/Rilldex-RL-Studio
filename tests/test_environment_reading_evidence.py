@@ -14,10 +14,11 @@ def comparable(request):
     result=deepcopy(request)
     # SQLite's version is provenance; the selected passages must still match.
     result.get('state',{}).get('context_retrieval',{}).get('retrieval',{}).pop('sqlite_version',None)
-    # Compare unchanged source evidence and purpose; feedback instructions now
-    # have their own exact-request live replay in test_feedback_reading_evidence.
+    # Compare unchanged source evidence and other questions. Current purpose
+    # and feedback definitions have separate exact-request live receipt tests.
     result.get('state',{}).pop('feedback_reading_scope',None)
     result.get('questions',{}).pop('feedback_response',None)
+    result.get('questions',{}).pop('mode',None)
     return result
 
 

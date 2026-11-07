@@ -315,7 +315,7 @@ window.trackerDetails = (() => {
     container.append(node('p', result.ordered_by_training_step
       ? `Ordered by recorded policy step. Reference: ${result.reference_checkpoint}.`
       : `Checkpoint order is alphabetical because distinct policy steps are unavailable. Reference: ${result.reference_checkpoint}; this is not a training timeline.`, 'compare-details'));
-    const names = {explore:'Explore', apply:'Apply approach', verify:'Verify', coordinate:'Coordinate', report:'Report',
+    const names = {explore:'Explore', apply:'Apply approach', verify:'Verify', coordinate:'Coordinate', report:'Report', mixed:'Combined purposes',
       unresolved:'Unresolved', connected:'Task connected', outside:'Outside task', conflicting:'Conflicting',
       repeat_rate:'Exact repeat rate', action_count:'Actions per rollout', goal_assignment_rate:'Goal assignment coverage'};
     for (const pair of result.paired_deltas || []) {

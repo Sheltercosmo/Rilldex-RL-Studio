@@ -14,9 +14,9 @@ from .capabilities import links, recorded_scope, feedback_support, withheld, ins
 from .work_order import Evidence as OrderEvidence
 
 HARNESS_VERSION = "macro/0.12.0+" + JEV_HARNESS
-MODES = ("explore", "apply", "verify", "coordinate", "report", "unresolved")
+MODES = ("explore", "apply", "verify", "coordinate", "report", "mixed", "unresolved")
 MODE_LABELS = {"explore": "Explore", "apply": "Apply approach", "verify": "Verify",
-               "coordinate": "Coordinate", "report": "Report", "unresolved": "Unresolved"}
+               "coordinate": "Coordinate", "report": "Report", "mixed": "Combined purposes", "unresolved": "Unresolved"}
 
 
 def goal_scope(semantic):

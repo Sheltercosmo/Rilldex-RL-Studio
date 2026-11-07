@@ -25,7 +25,7 @@ class ActionReadingTests(unittest.TestCase):
         self.store.add([self.run])
         self.action = [e for e in self.run['events'] if e['kind'] == 'action'][-1]['id']
         evidence = json.loads((Path(__file__).parent / 'fixtures/feedback_reading_evidence.json').read_text(encoding='utf8'))
-        row = next(r for r in evidence['phases']['response-boundary-v2']['results']
+        row = next(r for r in evidence['phases']['purpose-combined']['results']
                    if r['id'] == self.case['id'] and r['format'] == self.case['format'])
         self.receipt = evidence['receipts'][row['request_hash']]
         self.calls = 0

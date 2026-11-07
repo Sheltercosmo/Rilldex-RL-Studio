@@ -20,11 +20,11 @@ LENSES = {
 FIELDS = {'action_purpose':'mode', 'task_connection':'goal_relation'}
 CATEGORIES = {
     'action_purpose': [('explore','Gather information'),('apply','Apply approach'),('verify','Check results'),
-                       ('coordinate','Coordinate'),('report','Report'),('unknown','Unknown purpose')],
+                       ('coordinate','Coordinate'),('report','Report'),('mixed','Combined purposes'),('unknown','Unknown purpose')],
     'task_connection': [('direct','Direct task work'),('supporting','Supporting work'),('outside','Outside recorded task'),
                         ('conflicting','Conflicts with a requirement'),('unknown','Task connection unknown')],
 }
-COLORS = {'action_purpose':['#536eb9','#238f84','#648850','#9165a5','#617082','#b9bdc8'],
+COLORS = {'action_purpose':['#536eb9','#238f84','#648850','#9165a5','#617082','#986a3b','#b9bdc8'],
           'task_connection':['#238f84','#536eb9','#b88751','#b35668','#b9bdc8']}
 
 

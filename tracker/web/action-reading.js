@@ -1,6 +1,6 @@
 (function(root){
  'use strict';
- const labels={explore:'Gather information',apply:'Apply approach',verify:'Check an expected result',coordinate:'Coordinate',report:'Report',repeat:'Repeat operation',parameter_change:'Adjust settings or inputs',method_change:'Change method',gather_information:'Gather more information',continue:'Continue approach',not_applicable:'No earlier feedback',unresolved:'Unresolved'};
+ const labels={explore:'Gather information',apply:'Apply approach',verify:'Check an expected result',coordinate:'Coordinate',report:'Report',mixed:'Combined purposes',repeat:'Repeat operation',parameter_change:'Adjust settings or inputs',method_change:'Change method',gather_information:'Gather more information',continue:'Continue approach',not_applicable:'No earlier feedback',unresolved:'Unresolved'};
  function display(field){return field?.status==='decided'?labels[field.value]||field.value.replaceAll('_',' '):field?.status==='not_applicable'?'No earlier feedback':'Unresolved';}
  function el(tag,text,cls){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;}
  async function api(run,event,read=false){const url='/api/action-reading',r=await fetch(read?url:url+'?'+new URLSearchParams({run,event}),read?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({run,event})}:undefined),value=await r.json();if(!r.ok)throw Error(value.error||'Action reading unavailable');return value;}

@@ -1,6 +1,6 @@
 'use strict';
 const $ = selector => document.querySelector(selector);
-const labels = {explore:'Explore',apply:'Apply approach',verify:'Verify',coordinate:'Coordinate',report:'Report',unresolved:'Unresolved'};
+const labels = {explore:'Explore',apply:'Apply approach',verify:'Verify',coordinate:'Coordinate',report:'Report',mixed:'Combined purposes',unresolved:'Unresolved'};
 const scopeLabels = {connected:'Task connected',outside:'Outside task',conflicting:'Conflicting',unresolved:'Unresolved'};
 const state = {runs:[],current:null,selected:null,selection:null,limit:30,config:null,jobs:[]};
 function el(tag, text, cls) { const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e; }

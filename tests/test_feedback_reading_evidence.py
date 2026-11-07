@@ -45,7 +45,7 @@ class FeedbackReadingEvidenceTests(unittest.TestCase):
 
     def test_current_requests_and_source_hashes_match_the_final_live_trial(self):
         current = {(row['id'], row['format']): row for row in requests(('production',))}
-        saved = self.evidence['phases']['response-boundary-v2']['results']
+        saved = self.evidence['phases']['purpose-combined']['results']
         self.assertEqual(len(current), 38)
         for row in saved:
             generated = current[(row['id'], row['format'])]
@@ -56,7 +56,7 @@ class FeedbackReadingEvidenceTests(unittest.TestCase):
 
     def test_live_receipt_replay_survives_storage_refresh_and_reopening(self):
         sources = {(row['id'], row['format']): row for row in cases()}
-        saved = self.evidence['phases']['response-boundary-v2']['results']
+        saved = self.evidence['phases']['purpose-combined']['results']
         with tempfile.TemporaryDirectory() as directory, patch('urllib.request.urlopen',
                 side_effect=AssertionError('Saved response replay must stay offline')):
             store = Store(Path(directory) / 'replay.sqlite')

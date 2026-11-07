@@ -66,7 +66,7 @@ def flow(store, run_id, *, client=None, profile=None, limit=100, graph=None, rec
         fields = {k: v for k, v in action['semantic'].items() if not k.startswith('_')}
         status = _status(observed.get(eid, {}), fields, bool(by_event[eid]))
         mode = fields.get('mode', {})
-        purpose = mode.get('value') if mode.get('status') == 'decided' and mode.get('value') in {'explore','apply','verify','coordinate','report'} else 'unresolved'
+        purpose = mode.get('value') if mode.get('status') == 'decided' and mode.get('value') in {'explore','apply','verify','coordinate','report','mixed'} else 'unresolved'
         reusable = any(_matches(client, row, run, eid) for row in by_event[eid])
         coverage[status] += 1
         coverage['pending'] += not reusable

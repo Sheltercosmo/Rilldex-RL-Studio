@@ -79,12 +79,13 @@ def inspect(run, actions):
         if unordered: last_check = None
         after = [a["event_id"] for a in rows if a["mode"]=="apply" and (not last_check or a["index"]>last_check["index"])]
         if unordered: after = []
-        uncertain = [a["event_id"] for a in rows if a["mode"] == "unresolved" or a['event_id'] in unordered]
+        combined = [a['event_id'] for a in rows if a['mode'] == 'mixed']
+        uncertain = [a["event_id"] for a in rows if a["mode"] in {"unresolved", "mixed"} or a['event_id'] in unordered]
         tails.append({"trajectory_id":actor,"context_id":context,"last_check":last_check["event_id"] if last_check else None,
                       "application_after_check":after,
                       "status":"unresolved" if uncertain else "no_check_observed" if not last_check else "application_after_check" if after else "no_later_application_observed",
-                      "unresolved_event_ids": uncertain, "unordered_event_ids":unordered, "scope": "recorded action sequence",
-                      "limitation":"Unknown purposes or order prevent closure classification. All observed checks remain listed separately. This recorded sequence does not establish a complete trajectory, verification freshness or premature stopping."})
+                      "unresolved_event_ids": uncertain, "combined_purpose_event_ids":combined, "unordered_event_ids":unordered, "scope": "recorded action sequence",
+                      "limitation":"Unknown purposes, combined dispatches or unknown order prevent closure classification. A combined purpose does not establish its internal order or that it includes a check. All observed standalone checks remain listed separately. This recorded sequence does not establish a complete trajectory, verification freshness or premature stopping."})
     claims = [{"event_id":e["id"],"trajectory_id":e["trajectory_id"],"source_pointer":e["source_pointer"],
                "claim":"producer-recorded task_complete=true","support":"not established"}
               for e in run["events"] if e.get("completion_claim") is True and not e["copied_context"]]

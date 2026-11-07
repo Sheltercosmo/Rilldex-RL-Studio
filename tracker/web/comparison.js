@@ -2,9 +2,9 @@
 
 window.trackerComparison = (() => {
   const $ = selector => document.querySelector(selector);
-  const modes = ['explore','apply','verify','coordinate','report','unresolved'];
-  const labels = {explore:'Explore',apply:'Apply approach',verify:'Verify',coordinate:'Coordinate',report:'Report',unresolved:'Unresolved'};
-  const short = {explore:'Explore',apply:'Apply',verify:'Verify',coordinate:'Coord.',report:'Report',unresolved:'Unres.'};
+  const modes = ['explore','apply','verify','coordinate','report','mixed','unresolved'];
+  const labels = {explore:'Explore',apply:'Apply approach',verify:'Verify',coordinate:'Coordinate',report:'Report',mixed:'Combined purposes',unresolved:'Unresolved'};
+  const short = {explore:'Explore',apply:'Apply',verify:'Verify',coordinate:'Coord.',report:'Report',mixed:'Combined',unresolved:'Unres.'};
   const selectors = {experiment:'#compare-experiment',environment:'#compare-environment',environment_version:'#compare-environment-version',
     split:'#compare-split',inspector_signature:'#compare-inspector',sampling_hash:'#compare-sampling'};
   let runs=[], query=new URLSearchParams(), renderGeneration=0, evidenceGeneration=0;
@@ -80,7 +80,7 @@ window.trackerComparison = (() => {
         const row=node('div',undefined,'comparison-row'),label=node('div',undefined,'comparison-label');
         label.append(node('b',cp.checkpoint),node('span',`${cp.task_count} tasks · ${cp.rollout_count} rollouts`));
         const stack=node('div',undefined,'stack');
-        for(const mode of modes){const segment=node('span');segment.style.width=(cp.modes[mode]*100)+'%';segment.style.background=`var(--${mode})`;segment.title=`${labels[mode]}: ${format(cp.modes[mode])}`;segment.setAttribute('aria-label',segment.title);stack.append(segment);}
+        for(const mode of modes.filter(m=>Object.hasOwn(cp.modes,m))){const segment=node('span');segment.style.width=(cp.modes[mode]*100)+'%';segment.style.background=`var(--${mode})`;segment.title=`${labels[mode]}: ${format(cp.modes[mode])}`;segment.setAttribute('aria-label',segment.title);stack.append(segment);}
         row.append(label,stack,node('p',modes.filter(m=>cp.modes[m]>0).map(m=>`${labels[m]} ${format(cp.modes[m])}`).join(' · '),'compare-details'),
           node('p',`Exact repeat rate ${format(cp.repeat_rate)} · Mean actions ${cp.action_count.toFixed(1)}`,'compare-details'));div.append(row);
       }
@@ -93,17 +93,18 @@ window.trackerComparison = (() => {
     section.append(node('h3','How the work sequence changed'));
     const data=pair.sequence;
     if(!data?.task_ids.length){section.append(node('p','No paired tasks have observable adjacent actions at both checkpoints. Reindex older imports if sequence coverage is absent.','compare-details'));panel.append(section);return;}
-    section.append(node('p',`Same six purposes, measured in order. ${data.task_ids.length} paired tasks; ${data.excluded_task_ids.length} excluded because at least one checkpoint has no observable sequence.`,'compare-details'));
+    const flowModes=modes.filter(m=>Object.hasOwn(pair.metrics,'transition.'+m+'.'+m));
+    section.append(node('p',`Recorded purposes, measured in order. ${data.task_ids.length} paired tasks; ${data.excluded_task_ids.length} excluded because at least one checkpoint has no observable sequence.`,'compare-details'));
     const label=node('label','Transition view '),view=node('select');view.setAttribute('aria-label',`Transition view for ${pair.checkpoint}`);
     for(const [value,text] of [['delta','Change (percentage points)'],['before',`${pair.reference} share (%)`],['after',`${pair.checkpoint} share (%)`]])view.add(new Option(text,value));
     label.append(view);section.append(label,node('p','Rows: previous purpose. Columns: next purpose. Click a cell to inspect contributing tasks.','matrix-instructions'));
-    const matrix=node('div',undefined,'transition-matrix');matrix.setAttribute('role','group');matrix.setAttribute('aria-label',`Purpose transitions: ${pair.checkpoint} compared with ${pair.reference}`);
+    const matrix=node('div',undefined,'transition-matrix');matrix.style.setProperty('--purpose-count',flowModes.length);matrix.setAttribute('role','group');matrix.setAttribute('aria-label',`Purpose transitions: ${pair.checkpoint} compared with ${pair.reference}`);
     const render=()=>{
       matrix.replaceChildren(node('span','From ↓ / To →','matrix-axis'));
-      for(const mode of modes){const h=node('span',short[mode],'matrix-label');h.title=labels[mode];matrix.append(h);}
-      for(const source of modes){
+      for(const mode of flowModes){const h=node('span',short[mode],'matrix-label');h.title=labels[mode];matrix.append(h);}
+      for(const source of flowModes){
         const h=node('strong',short[source],'matrix-label');h.title=labels[source];matrix.append(h);
-        for(const target of modes){
+        for(const target of flowModes){
           const key=source+'.'+target,metric=pair.metrics['transition.'+key],value=view.value==='delta'?metric.delta:data[view.value][key];
           const cell=node('button',(value>0&&view.value==='delta'?'+':'')+(value*100).toFixed(1),'transition-cell');
           cell.type='button';cell.dataset.transition=key;
